@@ -1,0 +1,75 @@
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.core.security import CurrentUser
+from app.db import get_db
+from app.models import ManagerDashboard, OwnerDashboard
+
+router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+DB = Annotated[Any, Depends(get_db)]
+
+OPEN_STAGES = [
+    "Reported",
+    "Estimate Received",
+    "Owner Approval",
+    "In Progress",
+    "Inspection",
+]
+APPROVAL_STAGES = ["Estimate Received", "Owner Approval"]
+
+
+async def _reserve_balance(db: Any, community_id: str) -> float:
+    entries = await db.reserve_fund.find({"community_id": community_id}).to_list(
+        length=100
+    )
+    return entries[-1]["balance"] if entries else 0.0
+
+
+async def _month_expenses(db: Any, community_id: str) -> float:
+    docs = await db.expenses.find({"community_id": community_id}).to_list(length=1000)
+    return sum(d["amount"] for d in docs)
+
+
+@router.get("/owner", response_model=OwnerDashboard)
+async def owner_dashboard(db: DB, user: CurrentUser) -> OwnerDashboard:
+    if not user.apartment_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="User has no apartment assigned"
+        )
+    invoices = await db.invoices.find(
+        {"community_id": user.community_id, "apartment_id": user.apartment_id}
+    ).to_list(length=1000)
+    open_wos = await db.work_orders.count_documents(
+        {"community_id": user.community_id, "stage": {"$in": OPEN_STAGES}}
+    )
+    return OwnerDashboard(
+        outstanding_balance=sum(i["amount"] - i["paid_amount"] for i in invoices),
+        open_work_orders=open_wos,
+        month_expenses=await _month_expenses(db, user.community_id),
+        reserve_fund_balance=await _reserve_balance(db, user.community_id),
+    )
+
+
+@router.get("/manager", response_model=ManagerDashboard)
+async def manager_dashboard(db: DB, user: CurrentUser) -> ManagerDashboard:
+    if user.role not in ("property_manager", "community_admin", "auditor", "super_admin"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Managers only")
+    cid = user.community_id
+    invoices = await db.invoices.find({"community_id": cid}).to_list(length=10000)
+    return ManagerDashboard(
+        outstanding_collections=sum(i["amount"] - i["paid_amount"] for i in invoices),
+        payments_received=sum(i["paid_amount"] for i in invoices),
+        month_expenses=await _month_expenses(db, cid),
+        reserve_fund_balance=await _reserve_balance(db, cid),
+        open_work_orders=await db.work_orders.count_documents(
+            {"community_id": cid, "stage": {"$in": OPEN_STAGES}}
+        ),
+        pending_approvals=await db.work_orders.count_documents(
+            {"community_id": cid, "stage": {"$in": APPROVAL_STAGES}}
+        ),
+        overdue_invoices=await db.invoices.count_documents(
+            {"community_id": cid, "status": "overdue"}
+        ),
+    )

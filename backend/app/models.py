@@ -1,0 +1,267 @@
+"""Pydantic schemas.
+
+These mirror frontend/src/lib/types.ts 1:1. Fields are snake_case in Python
+and MongoDB, but serialize to camelCase on the wire (alias generator), so the
+frontend types work unchanged against this API.
+"""
+
+import uuid
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic.alias_generators import to_camel
+
+
+def new_id(prefix: str) -> str:
+    return f"{prefix}-{uuid.uuid4().hex[:10]}"
+
+
+class APIModel(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+Role = Literal[
+    "super_admin",
+    "property_manager",
+    "community_admin",
+    "owner",
+    "tenant",
+    "vendor",
+    "auditor",
+]
+
+WRITE_ROLES: tuple[str, ...] = ("super_admin", "property_manager", "community_admin")
+
+
+# ---------- Community / Apartment / User ----------
+
+
+class Community(APIModel):
+    id: str = Field(default_factory=lambda: new_id("com"))
+    name: str
+    address: str = ""
+    apartment_count: int = 0
+
+
+class CommunityCreate(APIModel):
+    name: str
+    address: str = ""
+
+
+class Apartment(APIModel):
+    id: str = Field(default_factory=lambda: new_id("apt"))
+    community_id: str
+    number: str
+    floor: int = 0
+    owner_ids: list[str] = []
+
+
+class ApartmentCreate(APIModel):
+    number: str
+    floor: int = 0
+    owner_ids: list[str] = []
+
+
+class ApartmentUpdate(APIModel):
+    number: str | None = None
+    floor: int | None = None
+    owner_ids: list[str] | None = None
+
+
+class User(APIModel):
+    id: str = Field(default_factory=lambda: new_id("u"))
+    community_id: str
+    name: str
+    email: EmailStr
+    role: Role
+    apartment_id: str | None = None
+    phone: str | None = None
+
+
+class UserCreate(APIModel):
+    """Adding a user = whitelisting their Google account email."""
+
+    name: str
+    email: EmailStr
+    role: Role = "owner"
+    apartment_id: str | None = None
+    phone: str | None = None
+
+
+class UserUpdate(APIModel):
+    name: str | None = None
+    role: Role | None = None
+    apartment_id: str | None = None
+    phone: str | None = None
+
+
+# ---------- Auth ----------
+
+
+class GoogleLoginRequest(APIModel):
+    id_token: str
+
+
+class DevLoginRequest(APIModel):
+    email: EmailStr
+
+
+class TokenResponse(APIModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: User
+
+
+# ---------- Finance ----------
+
+InvoiceStatus = Literal["paid", "due", "overdue", "partial"]
+
+
+class Invoice(APIModel):
+    id: str = Field(default_factory=lambda: new_id("inv"))
+    community_id: str
+    apartment_id: str
+    period: str
+    description: str
+    amount: float
+    paid_amount: float = 0
+    due_date: str
+    status: InvoiceStatus = "due"
+
+
+class Payment(APIModel):
+    id: str = Field(default_factory=lambda: new_id("pay"))
+    community_id: str
+    invoice_id: str
+    apartment_id: str
+    amount: float
+    date: str
+    method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
+    reference: str = ""
+
+
+class Expense(APIModel):
+    id: str = Field(default_factory=lambda: new_id("exp"))
+    community_id: str
+    category: str
+    description: str
+    vendor_id: str | None = None
+    amount: float
+    paid_date: str
+    has_receipt: bool = False
+
+
+class ReserveFundEntry(APIModel):
+    month: str
+    contributions: float
+    expenses: float
+    balance: float
+
+
+class MonthlyFinance(APIModel):
+    month: str
+    income: float
+    expenses: float
+    collection_rate: float
+
+
+class Vendor(APIModel):
+    id: str = Field(default_factory=lambda: new_id("v"))
+    community_id: str
+    name: str
+    service: str
+    phone: str
+    gst: str | None = None
+    amc_expiry: str | None = None
+    rating: float = 0
+    active_contracts: int = 0
+
+
+# ---------- Work orders ----------
+
+WorkOrderStage = Literal[
+    "Reported",
+    "Estimate Received",
+    "Owner Approval",
+    "In Progress",
+    "Inspection",
+    "Completed",
+    "Closed",
+]
+
+
+class WorkOrderEvent(APIModel):
+    stage: WorkOrderStage
+    date: str
+    note: str = ""
+
+
+class WorkOrderComment(APIModel):
+    author_id: str
+    date: str
+    text: str
+
+
+class WorkOrder(APIModel):
+    id: str = Field(default_factory=lambda: new_id("wo"))
+    community_id: str
+    title: str
+    description: str = ""
+    priority: Literal["Low", "Medium", "High", "Urgent"] = "Medium"
+    stage: WorkOrderStage = "Reported"
+    vendor_id: str | None = None
+    assigned_to: str | None = None
+    estimate: float | None = None
+    final_cost: float | None = None
+    reported_date: str
+    photo_count: int = 0
+    timeline: list[WorkOrderEvent] = []
+    comments: list[WorkOrderComment] = []
+
+
+# ---------- Dashboard ----------
+
+
+class OwnerDashboard(APIModel):
+    outstanding_balance: float
+    open_work_orders: int
+    month_expenses: float
+    reserve_fund_balance: float
+
+
+class CommunitySummary(APIModel):
+    """HOA-page financial summary — visible to every member (PRD)."""
+
+    month_income: float
+    month_expenses: float
+    outstanding_dues: float
+    reserve_fund_balance: float
+
+
+class ManagerDashboard(APIModel):
+    outstanding_collections: float
+    payments_received: float
+    month_expenses: float
+    reserve_fund_balance: float
+    open_work_orders: int
+    pending_approvals: int
+    overdue_invoices: int
+
+
+# ---------- Audit ----------
+
+
+class AuditEntry(APIModel):
+    id: str = Field(default_factory=lambda: new_id("aud"))
+    community_id: str
+    user_id: str
+    user_name: str
+    action: str  # create | update | delete
+    entity: str  # collection name
+    entity_id: str
+    timestamp: str
+    details: dict = {}

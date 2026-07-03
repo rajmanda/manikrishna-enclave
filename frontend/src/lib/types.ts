@@ -1,0 +1,244 @@
+// Core domain types — mirrors the planned MongoDB schema so the FastAPI
+// backend can adopt these shapes 1:1 (API-first design).
+
+export type Role =
+  | "super_admin"
+  | "property_manager"
+  | "community_admin"
+  | "owner"
+  | "tenant"
+  | "vendor"
+  | "auditor";
+
+export interface Community {
+  id: string;
+  name: string;
+  address: string;
+  apartmentCount: number;
+}
+
+export interface Apartment {
+  id: string;
+  communityId: string;
+  number: string;
+  floor: number;
+  ownerIds: string[];
+}
+
+export interface User {
+  id: string;
+  communityId: string;
+  name: string;
+  email: string;
+  role: Role;
+  apartmentId?: string;
+  phone?: string;
+}
+
+export type InvoiceStatus = "paid" | "due" | "overdue" | "partial";
+
+export interface Invoice {
+  id: string;
+  communityId: string;
+  apartmentId: string;
+  period: string;
+  description: string;
+  amount: number;
+  paidAmount: number;
+  dueDate: string;
+  status: InvoiceStatus;
+}
+
+export interface Payment {
+  id: string;
+  invoiceId: string;
+  apartmentId: string;
+  amount: number;
+  date: string;
+  method: "UPI" | "Bank Transfer" | "Cash" | "Cheque";
+  reference: string;
+}
+
+export type ExpenseCategory =
+  | "Electricity"
+  | "Water"
+  | "Watchman"
+  | "Lift"
+  | "Generator"
+  | "Repairs"
+  | "Garden"
+  | "Cleaning"
+  | "Miscellaneous";
+
+export interface Expense {
+  id: string;
+  communityId: string;
+  category: ExpenseCategory;
+  description: string;
+  vendorId?: string;
+  amount: number;
+  paidDate: string;
+  hasReceipt: boolean;
+}
+
+export type WorkOrderStage =
+  | "Reported"
+  | "Estimate Received"
+  | "Owner Approval"
+  | "In Progress"
+  | "Inspection"
+  | "Completed"
+  | "Closed";
+
+export type Priority = "Low" | "Medium" | "High" | "Urgent";
+
+export interface WorkOrderEvent {
+  stage: WorkOrderStage;
+  date: string;
+  note: string;
+}
+
+export interface WorkOrderComment {
+  authorId: string;
+  date: string;
+  text: string;
+}
+
+export interface WorkOrder {
+  id: string;
+  communityId: string;
+  title: string;
+  description: string;
+  priority: Priority;
+  stage: WorkOrderStage;
+  vendorId?: string;
+  assignedTo?: string;
+  estimate?: number;
+  finalCost?: number;
+  reportedDate: string;
+  photoCount: number;
+  timeline: WorkOrderEvent[];
+  comments: WorkOrderComment[];
+}
+
+export interface MaintenanceRequest {
+  id: string;
+  communityId: string;
+  title: string;
+  description: string;
+  visibility: "private" | "community";
+  status: "Open" | "In Progress" | "Resolved";
+  createdBy: string;
+  createdDate: string;
+}
+
+export interface FeedPost {
+  id: string;
+  communityId: string;
+  authorId: string;
+  type: "announcement" | "question" | "suggestion" | "photo";
+  text: string;
+  date: string;
+  pinned: boolean;
+  reactions: { like: number; heart: number; thanks: number };
+  comments: { authorId: string; text: string; date: string }[];
+  attachmentCount: number;
+}
+
+export interface PollOption {
+  label: string;
+  votes: number;
+}
+
+export interface Poll {
+  id: string;
+  communityId: string;
+  question: string;
+  description: string;
+  openDate: string;
+  closeDate: string;
+  status: "open" | "closed";
+  options: PollOption[];
+  totalEligible: number;
+}
+
+export interface Vendor {
+  id: string;
+  communityId: string;
+  name: string;
+  service: string;
+  phone: string;
+  gst?: string;
+  amcExpiry?: string;
+  rating: number;
+  activeContracts: number;
+}
+
+export interface CommunityDocument {
+  id: string;
+  communityId: string;
+  title: string;
+  category: string;
+  uploadedDate: string;
+  version: number;
+  sizeKb: number;
+  fileType: "pdf" | "image" | "sheet";
+}
+
+export interface Meeting {
+  id: string;
+  communityId: string;
+  title: string;
+  date: string;
+  attendance: number;
+  agenda: string[];
+  resolutions: string[];
+  hasPdf: boolean;
+  hasAudio: boolean;
+}
+
+export interface ReserveFundEntry {
+  month: string;
+  contributions: number;
+  expenses: number;
+  balance: number;
+}
+
+export interface MonthlyFinance {
+  month: string;
+  income: number;
+  expenses: number;
+  collectionRate: number;
+}
+
+export interface OwnerDashboardData {
+  outstandingBalance: number;
+  openWorkOrders: number;
+  monthExpenses: number;
+  reserveFundBalance: number;
+}
+
+export interface ManagerDashboardData {
+  outstandingCollections: number;
+  paymentsReceived: number;
+  monthExpenses: number;
+  reserveFundBalance: number;
+  openWorkOrders: number;
+  pendingApprovals: number;
+  overdueInvoices: number;
+}
+
+export interface CommunitySummary {
+  monthIncome: number;
+  monthExpenses: number;
+  outstandingDues: number;
+  reserveFundBalance: number;
+}
+
+export interface Notification {
+  id: string;
+  text: string;
+  date: string;
+  read: boolean;
+  type: "invoice" | "work_order" | "poll" | "announcement" | "meeting";
+}

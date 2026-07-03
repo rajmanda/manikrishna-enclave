@@ -1,0 +1,88 @@
+name: Deploy
+
+# Manual for now (M1). Once we're comfortable, add `push: branches: [main]`
+# for auto-deploy to staging. Authenticates to GCP via Workload Identity
+# Federation — no service-account keys stored in GitHub.
+
+on:
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: mm-owners-5b8611
+  REGION: asia-south1
+  AR_REPO: asia-south1-docker.pkg.dev/mm-owners-5b8611/communityhub
+  API_SERVICE: communityhub-api
+  FRONTEND_SERVICE: communityhub-frontend
+  # Same-origin via the load balancer: /api/* routes to the API service.
+  API_URL: https://community.rajmanda.com/api/v1
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    name: Tests before deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r backend/requirements-dev.txt
+      - run: cd backend && python -m pytest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cd frontend && npm ci && npm run build
+
+  deploy:
+    name: Build, push, deploy
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1048909334838/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: github-deployer@mm-owners-5b8611.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build & push API image
+        run: |
+          docker build -t $AR_REPO/api:${{ github.sha }} backend
+          docker push $AR_REPO/api:${{ github.sha }}
+
+      - name: Build & push frontend image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=$API_URL \
+            --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }} \
+            --build-arg NEXT_PUBLIC_ENABLE_DEV_LOGIN=false \
+            -t $AR_REPO/frontend:${{ github.sha }} frontend
+          docker push $AR_REPO/frontend:${{ github.sha }}
+
+      - name: Deploy API
+        run: |
+          gcloud run deploy $API_SERVICE \
+            --project $PROJECT_ID --region $REGION \
+            --image $AR_REPO/api:${{ github.sha }}
+
+      - name: Deploy frontend
+        run: |
+          gcloud run deploy $FRONTEND_SERVICE \
+            --project $PROJECT_ID --region $REGION \
+            --image $AR_REPO/frontend:${{ github.sha }}
+
+      - name: Health checks
+        run: |
+          sleep 10
+          curl -sf https://communityhub-api-ht4p2vwsjq-el.a.run.app/healthz
+          curl -sf -o /dev/null https://communityhub-frontend-ht4p2vwsjq-el.a.run.app/
+          echo "Health checks passed"

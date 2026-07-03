@@ -1,0 +1,10 @@
+fastapi>=0.115
+uvicorn[standard]>=0.34
+motor>=3.7
+pydantic>=2.10
+email-validator>=2.2
+pydantic-settings>=2.7
+google-auth>=2.38
+requests>=2.32
+PyJWT>=2.10
+python-multipart>=0.0.20

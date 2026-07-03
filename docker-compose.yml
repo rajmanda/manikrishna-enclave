@@ -1,0 +1,25 @@
+# Local development stack. The database is ALWAYS MongoDB Atlas (see
+# docs/DECISIONS.md D-004) — configure backend/.env with the Atlas URI first.
+# Usage: docker compose up --build
+# Frontend: http://localhost:3000 · API docs: http://localhost:8000/docs
+
+services:
+  api:
+    build: ./backend
+    ports:
+      - "8000:8080"
+    env_file:
+      - ./backend/.env
+    environment:
+      CORS_ORIGINS: http://localhost:3000
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+        NEXT_PUBLIC_ENABLE_DEV_LOGIN: "true"
+    ports:
+      - "3000:8080"
+    depends_on:
+      - api
