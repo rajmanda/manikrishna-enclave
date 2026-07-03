@@ -34,12 +34,16 @@ resource "google_compute_region_network_endpoint_group" "frontend_neg" {
 }
 
 resource "google_compute_region_network_endpoint_group" "api_neg" {
-  name                  = "communityhub-api-neg"
+  name                  = "communityhub-backend-neg"
   region                = var.region
   network_endpoint_type = "SERVERLESS"
 
   cloud_run {
     service = google_cloud_run_v2_service.api.name
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -77,7 +81,7 @@ resource "google_compute_url_map" "communityhub" {
     default_service = google_compute_backend_service.frontend.id
 
     path_rule {
-      paths   = ["/api/*", "/healthz", "/docs", "/openapi.json"]
+      paths   = ["/api/*", "/health", "/healthz", "/docs", "/openapi.json"]
       service = google_compute_backend_service.api.id
     }
   }

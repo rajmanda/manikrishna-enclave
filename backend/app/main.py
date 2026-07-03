@@ -66,6 +66,9 @@ app.include_router(work_orders.router, prefix=API_PREFIX)
 app.include_router(vendors.router, prefix=API_PREFIX)
 
 
+# Note: GFE intercepts /healthz on *.run.app domains and returns its own 404,
+# so /health is the canonical probe path; /healthz kept for LB/custom-domain use.
+@app.get("/health", tags=["health"])
 @app.get("/healthz", tags=["health"])
 async def healthz() -> dict[str, str]:
     return {"status": "ok", "environment": settings.environment}

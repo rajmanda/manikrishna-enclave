@@ -11,7 +11,7 @@ env:
   PROJECT_ID: mm-owners-5b8611
   REGION: asia-south1
   AR_REPO: asia-south1-docker.pkg.dev/mm-owners-5b8611/communityhub
-  API_SERVICE: communityhub-api
+  API_SERVICE: communityhub-backend
   FRONTEND_SERVICE: communityhub-frontend
   # Same-origin via the load balancer: /api/* routes to the API service.
   API_URL: https://community.rajmanda.com/api/v1
@@ -83,6 +83,6 @@ jobs:
       - name: Health checks
         run: |
           sleep 10
-          curl -sf https://communityhub-api-ht4p2vwsjq-el.a.run.app/healthz
+          curl -sf https://communityhub-backend-ht4p2vwsjq-el.a.run.app/health
           curl -sf -o /dev/null https://communityhub-frontend-ht4p2vwsjq-el.a.run.app/
           echo "Health checks passed"

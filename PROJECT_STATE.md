@@ -19,7 +19,7 @@ Last updated: 2026-07-03
 ## Live URLs
 
 - Frontend: https://communityhub-frontend-ht4p2vwsjq-el.a.run.app
-- API: https://communityhub-api-ht4p2vwsjq-el.a.run.app (`/healthz`, `/docs`)
+- API: https://communityhub-backend-ht4p2vwsjq-el.a.run.app (`/health`, `/docs`)
 - community.rajmanda.com → LB IP 34.120.210.248 (awaiting DNS record)
 
 ## Owner action items (blockers for M1 close-out)

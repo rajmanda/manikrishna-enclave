@@ -73,7 +73,7 @@ cross-tenant, 409 conflict).
 
 | Method | Path | Access |
 |---|---|---|
-| GET | `/healthz` | public (no `/api/v1` prefix) |
+| GET | `/health` (alias `/healthz`) | public (no `/api/v1` prefix) — use `/health` on *.run.app; GFE intercepts `/healthz` there |
 
 ## Planned (Phase 2+)
 

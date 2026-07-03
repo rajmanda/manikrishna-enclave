@@ -7,7 +7,7 @@ locals {
 }
 
 resource "google_cloud_run_v2_service" "api" {
-  name                = "communityhub-api"
+  name                = "communityhub-backend"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_ALL"
   deletion_protection = false

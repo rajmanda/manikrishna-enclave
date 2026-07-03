@@ -9,10 +9,10 @@ repo github.com/rajmanda/manikrishna-enclave (public).
 | Component | Where | Notes |
 |---|---|---|
 | Frontend | Cloud Run `communityhub-frontend` | Next.js standalone, port 8080 |
-| Backend | Cloud Run `communityhub-api` | uvicorn, port 8080, `/healthz` |
+| Backend | Cloud Run `communityhub-backend` | uvicorn, port 8080, `/health` |
 | Domain | community.rajmanda.com → **global HTTPS LB** (IP 34.120.210.248) | Domain mappings unsupported in asia-south1, so LB + managed cert + serverless NEGs |
-| API routing | Same origin: LB routes `/api/*`, `/healthz`, `/docs`, `/openapi.json` → API; everything else → frontend | `NEXT_PUBLIC_API_URL=https://community.rajmanda.com/api/v1` |
-| Direct URLs | api: communityhub-api-ht4p2vwsjq-el.a.run.app · frontend: communityhub-frontend-ht4p2vwsjq-el.a.run.app | Useful before DNS cutover |
+| API routing | Same origin: LB routes `/api/*`, `/health(z)`, `/docs`, `/openapi.json` → API; everything else → frontend | `NEXT_PUBLIC_API_URL=https://community.rajmanda.com/api/v1` |
+| Direct URLs | api: communityhub-backend-ht4p2vwsjq-el.a.run.app · frontend: communityhub-frontend-ht4p2vwsjq-el.a.run.app | Useful before DNS cutover |
 | Database | MongoDB Atlas cluster0.sod5j | `DB_NAME=manikrishna_enclave` |
 | Images | Artifact Registry `asia-south1-docker.pkg.dev/mm-owners-5b8611/communityhub` | `api:<sha>`, `frontend:<sha>` |
 | Secrets | Secret Manager (`communityhub-*` prefix — shared project) | mongodb-uri, jwt-secret, google-client-id |
