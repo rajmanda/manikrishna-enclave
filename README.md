@@ -8,7 +8,8 @@ Seed customer: **Mani Krishna Enclave**. Target: community.rajmanda.com.
 |---|---|
 | Frontend | Next.js 15 · TypeScript · Tailwind — [frontend/](frontend/) |
 | Backend | FastAPI · MongoDB Atlas — [backend/](backend/) |
-| Status | Phase 1 complete locally; not yet deployed — see [PROJECT_STATE.md](PROJECT_STATE.md) |
+| Infra | Terraform → Cloud Run (asia-south1), GitHub Actions CI/CD — [infra/terraform/](infra/terraform/) |
+| Status | v0.1.0 deployed to Cloud Run — see [PROJECT_STATE.md](PROJECT_STATE.md) |
 
 ## Start here
 

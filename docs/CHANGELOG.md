@@ -3,6 +3,23 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.1.0] — 2026-07-03 · M1 Foundation
+
+- Git repository initialized and pushed to github.com/rajmanda/manikrishna-enclave.
+- GitHub Actions: ci.yml (backend pytest + frontend build, green) and
+  deploy.yml (WIF auth, docker build/push to Artifact Registry, Cloud Run
+  deploy, health checks; manual dispatch).
+- Terraform (`infra/terraform`, state in GCS): Cloud Run ×2, Artifact
+  Registry, Secret Manager (communityhub-* — project is shared), runtime +
+  deployer service accounts, GitHub OIDC Workload Identity Federation,
+  global HTTPS load balancer for community.rajmanda.com with same-origin
+  /api/* routing (domain mappings unsupported in asia-south1). 33 resources.
+- First production deploy to Cloud Run (asia-south1).
+- Atlas e2e verified locally (login, dashboards, scoping, whitelist 403).
+- docker-compose reworked: Atlas-only (local mongo container removed);
+  frontend Dockerfile accepts NEXT_PUBLIC_* build args.
+- Docs: DEPLOYMENT/TERRAFORM rewritten as-built; ADRs D-008..D-010.
+
 ## [Unreleased]
 
 ### 2026-07-03

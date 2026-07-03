@@ -1,21 +1,19 @@
 # ROADMAP.md
 
-Last updated: 2026-07-03. Milestones proposed 2026-07-03 — pending owner
-approval (see PROJECT_STATE.md).
+Last updated: 2026-07-03. M1 approved and executed 2026-07-03.
 
 ## Done
 
 - **M0 — Phase 1 application (2026-07-02):** mobile-first frontend (17
   routes), FastAPI backend (auth/whitelist/RBAC/tenant isolation/audit/
   dashboards + read APIs), frontend↔backend wiring, 28 tests, Dockerfiles.
+- **M1 — Foundation & first deploy (2026-07-03):** git + GitHub (public),
+  CI green, Terraform-provisioned infra (Cloud Run ×2, Artifact Registry,
+  secrets, WIF, HTTPS LB for community.rajmanda.com), first Cloud Run
+  deploy, Atlas e2e. **Remaining owner steps:** DNS A record, Atlas network
+  access for Cloud Run, Google OAuth client (see PROJECT_STATE.md).
 
-## Proposed milestones
-
-### M1 — Foundation & first deploy
-Git repo + GitHub, CI (lint/test/build), Terraform (Artifact Registry, Cloud
-Run ×2, Secret Manager, GCS, IAM, domain mapping), deploy to
-community.rajmanda.com, real Google OAuth client, Atlas e2e, real owner
-emails, kill dev-mode paths in prod config.
+## Upcoming milestones
 
 ### M2 — Financial module (PRD Phase 2)
 Write APIs + UI: invoice CRUD, bulk/recurring generation, payment recording,

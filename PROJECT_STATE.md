@@ -1,55 +1,70 @@
 # PROJECT_STATE.md
 
-Last updated: 2026-07-02
+Last updated: 2026-07-03
 
 | Field | Value |
 |---|---|
-| Current version | 0.1.0 (pre-release) |
-| Current milestone | M0 complete (Phase 1 app) → next: M1 Foundation (git, CI/CD, Terraform) |
-| Current sprint | Documentation bootstrap |
-| Current branch | n/a — **git not initialized yet** |
-| Last completed feature | Frontend wired to backend API (auth session, live data on 8 screens) |
-| Current feature | Documentation bootstrap per BOOTSTRAP.md |
-| Next priority | Awaiting owner approval of roadmap (proposed: M1 Foundation) |
-| Deployment status | Not deployed — local only |
-| Database version | Schema v1 (13 collections, seed idempotent); no migrations framework |
-| Infrastructure version | None — Terraform not written |
-| Last deployment | Never |
+| Current version | 0.1.0 |
+| Current milestone | **M1 Foundation — deployed**; next: M1 close-out (owner DNS/OAuth steps) → M2 Financial module |
+| Current sprint | M1 |
+| Current branch | main (github.com/rajmanda/manikrishna-enclave, public) |
+| Last completed feature | First cloud deployment: Terraform infra + GitHub Actions deploy to Cloud Run |
+| Current feature | — |
+| Next priority | Owner manual steps below, then M2 (invoice/payment/expense write APIs) |
+| Deployment status | **Live on Cloud Run** (asia-south1); custom domain pending DNS |
+| Database version | Schema v1; Atlas `cluster0.sod5j`, DB `manikrishna_enclave` (seeded) |
+| Infrastructure version | Terraform applied — 33 resources, state in gs://mm-owners-5b8611-tfstate |
+| Last deployment | 2026-07-03 via deploy.yml (manual dispatch) |
+
+## Live URLs
+
+- Frontend: https://communityhub-frontend-ht4p2vwsjq-el.a.run.app
+- API: https://communityhub-api-ht4p2vwsjq-el.a.run.app (`/healthz`, `/docs`)
+- community.rajmanda.com → LB IP 34.120.210.248 (awaiting DNS record)
+
+## Owner action items (blockers for M1 close-out)
+
+1. **DNS:** A record `community` → `34.120.210.248` at rajmanda.com's DNS
+   host (managed TLS cert provisions itself 15–60 min after).
+2. **Atlas Network Access:** allow `0.0.0.0/0` so Cloud Run can connect
+   (its egress IPs are dynamic). Until then the deployed API can't reach the DB.
+3. **Google OAuth client:** create a Web client in GCP Console → Credentials
+   (authorized origin `https://community.rajmanda.com`), then
+   `gcloud secrets versions add communityhub-google-client-id --data-file=-`
+   with the client ID, set GitHub repo variable `GOOGLE_CLIENT_ID` to the
+   same value, and re-run Deploy.
+4. **Recommended:** rotate the Atlas password (it was shared in a chat
+   session) and update the `communityhub-mongodb-uri` secret + local .env.
+5. Replace placeholder owner emails with real Google accounts
+   (`PATCH /api/v1/users/{id}`).
 
 ## Completed so far
 
-- **Frontend (17 routes):** login, role-aware dashboards, community/HOA page,
-  work orders (list + 7-stage detail), maintenance, feed, polls, invoices,
-  payments, meetings, documents, vendors, reserve fund, reports, global
-  search. Mobile-first, production build clean.
-- **Backend (Phase 1 + read APIs):** Google OAuth + whitelist + JWT, RBAC,
-  tenant isolation, audit log, CRUD for communities/apartments/users,
-  dashboards, read endpoints for invoices/payments/expenses/reserve fund/
-  monthly finance/work orders/vendors. 28 pytest tests passing.
-- **Integration:** frontend authenticates against backend; dashboard,
-  community, work orders, invoices, payments, vendors, reserve fund and
-  reports fetch live data with owner-scoping enforced server-side.
-- Dockerfiles for both services (Cloud Run-ready), root docker-compose.yml.
+- Phase 1 app: mobile-first frontend (17 routes) + FastAPI backend (OAuth
+  whitelist, RBAC, tenant isolation, audit log, dashboards, read APIs),
+  frontend↔API integration, 28 tests. Atlas e2e verified locally.
+- M1: git repo + GitHub (public), CI (backend tests + frontend build, green),
+  Terraform (Cloud Run ×2, Artifact Registry, communityhub-* secrets, WIF,
+  global HTTPS LB with same-origin /api/* routing), deploy workflow via WIF,
+  first production deploy with health checks, full docs/ set.
 
-## Still on seed data (frontend `src/lib/data.ts`)
+## Still on seed data (frontend)
 
-Feed, polls, maintenance requests, documents, meetings, notifications,
-global search — their backend modules are Phase 3/4.
+Feed, polls, maintenance, documents, meetings, notifications, global search
+(backends land M3/M4).
 
 ## Known issues
 
-1. Not a git repository; no CI/CD, no Terraform, never deployed.
-2. E2E against Atlas not yet run — `backend/.env` needs the owner's Atlas URI.
-3. Google OAuth client ID not yet created (dev-login used meanwhile).
-4. Seed owner emails are placeholders (`ownerNNN@example.com`).
-5. docker-compose.yml contains a local mongo service that contradicts the
-   Atlas-only decision (docs/DECISIONS.md D-004) — to be removed/reworked.
-6. In-app "notifications" are static seed data; no email/push delivery.
-7. No pagination on list endpoints (fine at 10 apartments; revisit for scale).
+1. Dev and prod currently share DB `manikrishna_enclave` — consider a
+   separate dev DB name after M1 close-out.
+2. Atlas invoice `inv-2606-502` shows ₹5,500 vs seed's ₹3,500 — DB predates/
+   was edited outside the seed; treat Atlas as source of truth.
+3. No staging environment yet (deliberate — add when M2 warrants).
+4. Terraform runs locally, not in CI (deliberate for now).
+5. No rate limiting on /auth/*; JWT in localStorage (D-006) — M2 window.
+6. In-app notifications static; no pagination on list endpoints.
 
 ## Open decisions
 
-- Staging strategy: same Atlas cluster with `communityhub_staging` DB vs
-  separate cluster.
-- Payment gateway choice for Phase 2 online payments (or record-only at first).
-- Monorepo GitHub repo name and visibility.
+- Payment gateway for M2 (or record-only first).
+- Staging topology when needed.

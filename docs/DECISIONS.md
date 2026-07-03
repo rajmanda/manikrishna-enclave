@@ -48,3 +48,23 @@ their write phases so the UI runs on live data; writes land in M2/M3.
 **Why:** end-to-end integration early, real RBAC scoping in the UI, no
 throwaway frontend code. **Trade-off:** some UI actions (Pay, comment,
 vote) are visibly inert until their phase.
+
+## D-008 · 2026-07-03 · Global HTTPS LB instead of Cloud Run domain mapping
+**Decision:** community.rajmanda.com terminates at a global external ALB
+(managed cert, serverless NEGs) with `/api/*` routed to the API service.
+**Why:** domain mappings are unsupported in asia-south1 (Mumbai, chosen for
+user latency), and same-origin app+API eliminates CORS and enables cookie
+auth later. **Trade-off:** ~US$18/month forwarding-rule cost.
+
+## D-009 · 2026-07-03 · Namespace everything `communityhub-` in shared GCP project
+**Decision:** `mm-owners-5b8611` hosts other apps (estatio-*); all our
+resources are named/prefixed communityhub-*. **Why:** first apply collided
+with a pre-existing `google-client-id` secret. Never modify resources we
+didn't create.
+
+## D-010 · 2026-07-03 · CI owns releases, Terraform owns shape
+**Decision:** Cloud Run services ignore image changes in Terraform; GitHub
+Actions (WIF, manual dispatch for now) builds/pushes/deploys images tagged
+with the git SHA. **Why:** clean separation — infra changes are rare and
+reviewed, releases are frequent. **Follow-up:** auto-deploy on main once
+trusted.
