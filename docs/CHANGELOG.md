@@ -3,6 +3,24 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.3.0] — 2026-07-04 · M3 Operations module
+
+- Work orders: create (notifies members), update, stage transitions with
+  timeline events + optional final cost (notifies members per PRD), owner
+  comments, photo upload to GCS + streaming fetch.
+- Maintenance requests: full backend (private/community visibility rules),
+  creation notifies managers, status changes notify the creator.
+- Vendors: CRUD with open-work-order delete guard.
+- Community feed backend: posts, per-user reactions with toggle, comments,
+  pin/unpin, author-or-manager delete; announcements notify members.
+- In-app notifications: per-user collection, list/read/read-all endpoints;
+  live bell in the shell with unread badge and mark-all-read.
+- Migration 002 backfills feed/maintenance seed data into pre-M3 databases.
+- Frontend: feed/maintenance/work-orders/vendors pages fully wired (dialogs,
+  comment forms, stage updates, photo upload/display); seed data now used
+  only by polls/documents/meetings/search (M4).
+- Tests 40 → 54.
+
 ## [0.2.0] — 2026-07-04 · M2 Financial module
 
 - Invoice writes: create, bulk generation per period (idempotent, defaults to

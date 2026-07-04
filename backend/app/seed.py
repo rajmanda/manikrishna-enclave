@@ -197,6 +197,53 @@ RESERVE_FUND = [
 ]
 
 
+MAINTENANCE_REQUESTS = [
+    ("mr-1", "Street light not working near gate", "The light at the main gate has been off for 3 days. Safety concern at night.", "community", "In Progress", "u-202", "2026-06-28"),
+    ("mr-2", "Lift making noise between floors 2-3", "Grinding noise when the lift passes the 2nd floor.", "community", "Open", "u-301", "2026-06-30"),
+    ("mr-3", "Parking spot marking faded", "Please repaint the parking numbers, causing confusion with visitors.", "community", "Open", "u-401", "2026-07-01"),
+    ("mr-4", "Kitchen sink drainage issue", "Slow drainage in my kitchen sink, may need the common drain line checked.", "private", "Open", "u-502", "2026-07-01"),
+]
+
+FEED_POSTS = [
+    ("post-1", "u-vishnu", "announcement", "Lift will be under repair this Friday 9am-1pm. Please plan accordingly.", "2026-07-01", True, {"u-301": "like", "u-102": "thanks", "u-501": "like"}),
+    ("post-2", "u-501", "photo", "The garden is looking beautiful after the new plants were added. Great work by the gardening team!", "2026-06-29", False, {"u-202": "heart", "u-302": "like", "u-vishnu": "like"}),
+    ("post-3", "u-402", "suggestion", "Suggestion: Can we install a small notice board near the lift for physical notices? Some of our elders don't check the app often.", "2026-06-27", False, {"u-101": "like"}),
+    ("post-4", "u-201", "question", "Does anyone have the contact of a good AC service person? Mine stopped cooling.", "2026-06-25", False, {}),
+]
+
+FEED_COMMENTS = {
+    "post-1": [{"author_id": "u-301", "text": "Thanks for the update Vishnu!", "date": "2026-07-01"}],
+    "post-2": [{"author_id": "u-202", "text": "Lovely! The kids enjoy the space now.", "date": "2026-06-29"}],
+    "post-4": [{"author_id": "u-302", "text": "Try CoolCare on JNTU road, they serviced ours last month.", "date": "2026-06-25"}],
+}
+
+
+async def seed_m3(db: Any) -> bool:
+    """Seed M3 collections if empty. Safe to call repeatedly; also used by
+    migration 002 to backfill databases seeded before M3 existed."""
+    if await db.communities.find_one({"id": CID}) is None:
+        return False
+    changed = False
+    if await db.maintenance_requests.find_one({"community_id": CID}) is None:
+        for mid, title, desc, vis, mstatus, creator, created in MAINTENANCE_REQUESTS:
+            await db.maintenance_requests.insert_one(
+                {"id": mid, "community_id": CID, "title": title, "description": desc,
+                 "visibility": vis, "status": mstatus, "created_by": creator,
+                 "created_date": created}
+            )
+        changed = True
+    if await db.feed_posts.find_one({"community_id": CID}) is None:
+        for pid, author, ptype, text, pdate, pinned, reactions in FEED_POSTS:
+            await db.feed_posts.insert_one(
+                {"id": pid, "community_id": CID, "author_id": author, "type": ptype,
+                 "text": text, "date": pdate, "pinned": pinned,
+                 "reactions_by": reactions, "comments": FEED_COMMENTS.get(pid, []),
+                 "attachment_count": 0}
+            )
+        changed = True
+    return changed
+
+
 async def seed(db: Any) -> bool:
     """Insert the Mani Krishna Enclave dataset. Returns False if it exists."""
     if await db.communities.find_one({"id": CID}):
@@ -332,6 +379,7 @@ async def seed(db: Any) -> bool:
             }
         )
 
+    await seed_m3(db)
     return True
 
 

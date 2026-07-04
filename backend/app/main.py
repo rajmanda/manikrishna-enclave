@@ -12,8 +12,11 @@ from app.routers import (
     auth,
     communities,
     dashboard,
+    feed,
     finance,
     invoices,
+    maintenance,
+    notifications,
     statements,
     users,
     vendors,
@@ -68,6 +71,9 @@ app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(finance.router, prefix=API_PREFIX)
 app.include_router(invoices.router, prefix=API_PREFIX)
 app.include_router(statements.router, prefix=API_PREFIX)
+app.include_router(maintenance.router, prefix=API_PREFIX)
+app.include_router(feed.router, prefix=API_PREFIX)
+app.include_router(notifications.router, prefix=API_PREFIX)
 app.include_router(work_orders.router, prefix=API_PREFIX)
 app.include_router(vendors.router, prefix=API_PREFIX)
 

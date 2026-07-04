@@ -86,3 +86,16 @@ grows (work-order videos in M3 may need them).
 **Why:** no native dependencies (weasyprint needs system libs in the
 container); statements are simple tables. **Trade-off:** limited layout/Unicode
 (₹ rendered as "Rs" with core fonts); revisit if design needs grow.
+
+## D-014 · 2026-07-04 · Per-user reaction storage on feed posts
+**Decision:** reactions stored as `reactions_by: {user_id: kind}`; the API
+returns aggregate counts plus the caller's `myReaction`.
+**Why:** correct toggling and one-reaction-per-user without a separate
+collection. **Trade-off:** document grows with community size — fine at
+apartment scale.
+
+## D-015 · 2026-07-04 · Notification fan-out is synchronous inserts
+**Decision:** status changes insert one notification document per recipient
+inline with the request. **Why:** ~10 recipients per community; no queue
+infrastructure warranted. **Follow-up:** revisit with Cloud Tasks + email in
+M4 if fan-out grows.

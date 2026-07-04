@@ -242,6 +242,110 @@ class Vendor(APIModel):
     active_contracts: int = 0
 
 
+class VendorCreate(APIModel):
+    name: str
+    service: str
+    phone: str
+    gst: str | None = None
+    amc_expiry: str | None = None
+    rating: float = 0
+    active_contracts: int = 0
+
+
+class VendorUpdate(APIModel):
+    name: str | None = None
+    service: str | None = None
+    phone: str | None = None
+    gst: str | None = None
+    amc_expiry: str | None = None
+    rating: float | None = None
+    active_contracts: int | None = None
+
+
+# ---------- Maintenance / Feed / Notifications (M3) ----------
+
+
+class MaintenanceRequest(APIModel):
+    id: str = Field(default_factory=lambda: new_id("mr"))
+    community_id: str
+    title: str
+    description: str = ""
+    visibility: Literal["private", "community"] = "community"
+    status: Literal["Open", "In Progress", "Resolved"] = "Open"
+    created_by: str
+    created_date: str
+
+
+class MaintenanceCreate(APIModel):
+    title: str
+    description: str = ""
+    visibility: Literal["private", "community"] = "community"
+
+
+class MaintenanceStatusUpdate(APIModel):
+    status: Literal["Open", "In Progress", "Resolved"]
+
+
+class FeedReactions(APIModel):
+    like: int = 0
+    heart: int = 0
+    thanks: int = 0
+
+
+class FeedComment(APIModel):
+    author_id: str
+    text: str
+    date: str
+
+
+class FeedPost(APIModel):
+    # Stored shape - reactions kept per-user so toggling works.
+    id: str = Field(default_factory=lambda: new_id("post"))
+    community_id: str
+    author_id: str
+    type: Literal["announcement", "question", "suggestion", "photo"] = "announcement"
+    text: str
+    date: str
+    pinned: bool = False
+    reactions_by: dict[str, str] = {}  # user_id -> like|heart|thanks
+    comments: list[FeedComment] = []
+    attachment_count: int = 0
+
+
+class FeedPostOut(APIModel):
+    # Wire shape - matches frontend types plus the caller's own reaction.
+    id: str
+    community_id: str
+    author_id: str
+    type: str
+    text: str
+    date: str
+    pinned: bool
+    reactions: FeedReactions
+    comments: list[FeedComment]
+    attachment_count: int
+    my_reaction: str | None = None
+
+
+class FeedPostCreate(APIModel):
+    type: Literal["announcement", "question", "suggestion", "photo"] = "announcement"
+    text: str
+
+
+class ReactRequest(APIModel):
+    kind: Literal["like", "heart", "thanks", "none"]
+
+
+class Notification(APIModel):
+    id: str = Field(default_factory=lambda: new_id("n"))
+    community_id: str
+    user_id: str
+    text: str
+    date: str
+    read: bool = False
+    type: str = "announcement"
+
+
 # ---------- Work orders ----------
 
 WorkOrderStage = Literal[
@@ -280,8 +384,37 @@ class WorkOrder(APIModel):
     final_cost: float | None = None
     reported_date: str
     photo_count: int = 0
+    photos: list[str] = []  # GCS object paths
     timeline: list[WorkOrderEvent] = []
     comments: list[WorkOrderComment] = []
+
+
+class WorkOrderCreate(APIModel):
+    title: str
+    description: str = ""
+    priority: Literal["Low", "Medium", "High", "Urgent"] = "Medium"
+    vendor_id: str | None = None
+    estimate: float | None = None
+
+
+class WorkOrderUpdate(APIModel):
+    title: str | None = None
+    description: str | None = None
+    priority: Literal["Low", "Medium", "High", "Urgent"] | None = None
+    vendor_id: str | None = None
+    assigned_to: str | None = None
+    estimate: float | None = None
+    final_cost: float | None = None
+
+
+class StageUpdate(APIModel):
+    stage: WorkOrderStage
+    note: str = ""
+    final_cost: float | None = None
+
+
+class CommentCreate(APIModel):
+    text: str
 
 
 # ---------- Dashboard ----------

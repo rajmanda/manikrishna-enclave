@@ -1,96 +1,131 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, Lock, Plus, X } from "lucide-react";
+import { Globe, Lock, Plus } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
-import { maintenanceRequests, userById } from "@/lib/data";
+import { useApi } from "@/hooks/useApi";
+import { api, ApiError } from "@/lib/api";
+import type { MaintenanceRequest, User } from "@/lib/types";
 import { formatDate } from "@/lib/format";
-import { Badge, Card, PageTitle } from "@/components/ui";
+import { userName } from "@/lib/lookup";
+import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
+import {
+  Badge,
+  Card,
+  ErrorNote,
+  PageLoading,
+  PageTitle,
+} from "@/components/ui";
 
-function NewRequestSheet({ onClose }: { onClose: () => void }) {
+const WRITER_ROLES = ["property_manager", "community_admin", "super_admin"];
+const STATUSES = ["Open", "In Progress", "Resolved"] as const;
+
+function NewRequestDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<"private" | "community">("community");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/maintenance-requests", {
+        method: "POST",
+        body: JSON.stringify({ title, description, visibility }),
+      });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to submit");
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      <button className="absolute inset-0 bg-slate-900/40" aria-label="Close" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-t-3xl bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-3xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold">Report an Issue</h2>
-          <button onClick={onClose} aria-label="Close">
-            <X className="h-5 w-5 text-slate-400" />
-          </button>
+    <Modal title="Report an Issue" onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <div>
+          <label className={labelCls}>Title</label>
+          <input
+            className={inputCls}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Street light not working"
+            required
+          />
         </div>
-        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); onClose(); }}>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-600">Title</label>
-            <input
-              placeholder="e.g. Street light not working"
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
-            />
+        <div>
+          <label className={labelCls}>Description</label>
+          <textarea
+            rows={3}
+            className={inputCls}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Describe the issue…"
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Visibility</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setVisibility("community")}
+              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium ${
+                visibility === "community"
+                  ? "border-brand-500 bg-brand-50 text-brand-700"
+                  : "border-slate-200 text-slate-600"
+              }`}
+            >
+              <Globe className="h-4 w-4" /> Community
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibility("private")}
+              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium ${
+                visibility === "private"
+                  ? "border-brand-500 bg-brand-50 text-brand-700"
+                  : "border-slate-200 text-slate-600"
+              }`}
+            >
+              <Lock className="h-4 w-4" /> Private
+            </button>
           </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-600">Description</label>
-            <textarea
-              rows={3}
-              placeholder="Describe the issue…"
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-600">Visibility</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setVisibility("community")}
-                className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium ${
-                  visibility === "community"
-                    ? "border-brand-500 bg-brand-50 text-brand-700"
-                    : "border-slate-200 text-slate-600"
-                }`}
-              >
-                <Globe className="h-4 w-4" /> Community
-              </button>
-              <button
-                type="button"
-                onClick={() => setVisibility("private")}
-                className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium ${
-                  visibility === "private"
-                    ? "border-brand-500 bg-brand-50 text-brand-700"
-                    : "border-slate-200 text-slate-600"
-                }`}
-              >
-                <Lock className="h-4 w-4" /> Private
-              </button>
-            </div>
-            <p className="mt-1.5 text-xs text-slate-400">
-              {visibility === "private"
-                ? "Only you and the property manager can see this."
-                : "Visible to all community members."}
-            </p>
-          </div>
-          <button
-            type="submit"
-            className="w-full rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white hover:bg-brand-700"
-          >
-            Submit Request
-          </button>
-        </form>
-      </div>
-    </div>
+          <p className="mt-1.5 text-xs text-slate-400">
+            {visibility === "private"
+              ? "Only you and the property manager can see this."
+              : "Visible to all community members."}
+          </p>
+        </div>
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button type="submit" disabled={busy || !title.trim()} className={primaryBtnCls}>
+          {busy ? "Submitting…" : "Submit Request"}
+        </button>
+      </form>
+    </Modal>
   );
 }
 
 export default function MaintenancePage() {
-  const { role, user } = useSessionUser();
+  const { role } = useSessionUser();
+  const canManage = WRITER_ROLES.includes(role);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const requests = useApi<MaintenanceRequest[]>("/maintenance-requests");
+  const users = useApi<User[]>("/users");
 
-  // Private requests are visible only to their creator and the manager/auditor.
-  const visible = maintenanceRequests.filter(
-    (r) =>
-      r.visibility === "community" ||
-      r.createdBy === user.id ||
-      role === "property_manager" ||
-      role === "auditor"
-  );
+  if (requests.error)
+    return <ErrorNote message={requests.error} onRetry={requests.reload} />;
+  if (requests.loading || !requests.data) return <PageLoading />;
+
+  async function setStatus(id: string, status: string) {
+    await api(`/maintenance-requests/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+    requests.reload();
+  }
 
   return (
     <div className="space-y-4">
@@ -110,42 +145,54 @@ export default function MaintenancePage() {
       />
 
       <div className="space-y-3">
-        {visible.map((r) => (
+        {requests.data.map((r) => (
           <Card key={r.id} className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={r.visibility === "private" ? "violet" : "blue"}>
-                    {r.visibility === "private" ? (
-                      <>
-                        <Lock className="mr-1 h-3 w-3" /> Private
-                      </>
-                    ) : (
-                      <>
-                        <Globe className="mr-1 h-3 w-3" /> Community
-                      </>
-                    )}
-                  </Badge>
-                  <Badge
-                    tone={
-                      r.status === "Open" ? "amber" : r.status === "Resolved" ? "green" : "blue"
-                    }
-                  >
-                    {r.status}
-                  </Badge>
-                </div>
-                <p className="mt-2 text-sm font-semibold">{r.title}</p>
-                <p className="mt-1 text-xs text-slate-500">{r.description}</p>
-                <p className="mt-2 text-xs text-slate-400">
-                  {userById(r.createdBy)?.name} · {formatDate(r.createdDate)}
-                </p>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={r.visibility === "private" ? "violet" : "blue"}>
+                {r.visibility === "private" ? (
+                  <>
+                    <Lock className="mr-1 h-3 w-3" /> Private
+                  </>
+                ) : (
+                  <>
+                    <Globe className="mr-1 h-3 w-3" /> Community
+                  </>
+                )}
+              </Badge>
+              <Badge
+                tone={r.status === "Open" ? "amber" : r.status === "Resolved" ? "green" : "blue"}
+              >
+                {r.status}
+              </Badge>
             </div>
+            <p className="mt-2 text-sm font-semibold">{r.title}</p>
+            <p className="mt-1 text-xs text-slate-500">{r.description}</p>
+            <p className="mt-2 text-xs text-slate-400">
+              {userName(users.data, r.createdBy)} · {formatDate(r.createdDate)}
+            </p>
+            {canManage && (
+              <div className="mt-3 flex gap-1.5 border-t border-slate-100 pt-3">
+                {STATUSES.filter((s) => s !== r.status).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setStatus(r.id, s)}
+                    className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+                  >
+                    Mark {s}
+                  </button>
+                ))}
+              </div>
+            )}
           </Card>
         ))}
+        {requests.data.length === 0 && (
+          <p className="py-8 text-center text-sm text-slate-400">No requests yet.</p>
+        )}
       </div>
 
-      {sheetOpen && <NewRequestSheet onClose={() => setSheetOpen(false)} />}
+      {sheetOpen && (
+        <NewRequestDialog onClose={() => setSheetOpen(false)} onDone={requests.reload} />
+      )}
     </div>
   );
 }

@@ -87,6 +87,25 @@ cross-tenant, 409 conflict).
 | GET | `/statements/{apartmentId}.pdf` | own apartment (owners) / any (managers) | Server-side PDF statement |
 | GET | `/invoices/export.csv` | any (role-scoped rows) | CSV export |
 
+## Operations (M3)
+
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| POST | `/work-orders` | manager/admin | Creates at Reported with initial timeline; notifies members |
+| PATCH | `/work-orders/{id}` | manager/admin | title/desc/priority/vendor/assignee/costs |
+| POST | `/work-orders/{id}/stage` | manager/admin | Appends timeline event, optional finalCost; **notifies all members (PRD)** |
+| POST | `/work-orders/{id}/comments` | any member (not auditor/vendor) | Owner comments |
+| POST | `/work-orders/{id}/photos` | manager/admin | Multipart → GCS; GET `/photos/{index}` streams (any member) |
+| GET/POST | `/maintenance-requests` | members | Private requests visible only to creator + managers; creation notifies managers |
+| PATCH | `/maintenance-requests/{id}/status` | manager/admin | Notifies the creator |
+| POST/PATCH/DELETE | `/vendors[/{id}]` | manager/admin | Delete blocked while vendor has open work orders (409) |
+| GET/POST | `/feed` | members | List: pinned first; posts return reaction counts + `myReaction`; announcements notify members |
+| POST | `/feed/{id}/comments` · `/feed/{id}/react` | members | react kind: like/heart/thanks/none (toggle) |
+| POST | `/feed/{id}/pin` | manager/admin | Toggle |
+| DELETE | `/feed/{id}` | author or manager/admin | |
+| GET | `/notifications` | own | Latest 50 |
+| POST | `/notifications/read-all` · `/notifications/{id}/read` | own | |
+
 ## Health
 
 | Method | Path | Access |

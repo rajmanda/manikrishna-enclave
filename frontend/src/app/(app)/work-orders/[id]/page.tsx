@@ -1,13 +1,16 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Camera, Check, Phone, Send } from "lucide-react";
+import { ArrowLeft, ArrowRight, Camera, Check, Phone, Send, Upload } from "lucide-react";
+import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
+import { api, apiBlob, ApiError, apiUpload } from "@/lib/api";
 import type { User, Vendor, WorkOrder, WorkOrderStage } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { userName, vendorFor } from "@/lib/lookup";
 import { priorityTone, stageTone } from "@/lib/tones";
+import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import {
   Avatar,
   Badge,
@@ -15,6 +18,111 @@ import {
   ErrorNote,
   PageLoading,
 } from "@/components/ui";
+
+const WRITER_ROLES = ["property_manager", "community_admin", "super_admin"];
+
+function StageDialog({
+  wo,
+  onClose,
+  onDone,
+}: {
+  wo: WorkOrder;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const allStages: WorkOrderStage[] = [
+    "Reported", "Estimate Received", "Owner Approval",
+    "In Progress", "Inspection", "Completed", "Closed",
+  ];
+  const currentIdx = allStages.indexOf(wo.stage);
+  const [stage, setStage] = useState<WorkOrderStage>(
+    allStages[Math.min(currentIdx + 1, allStages.length - 1)]
+  );
+  const [note, setNote] = useState("");
+  const [finalCost, setFinalCost] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/work-orders/${wo.id}/stage`, {
+        method: "POST",
+        body: JSON.stringify({
+          stage,
+          note,
+          ...(finalCost ? { finalCost: Number(finalCost) } : {}),
+        }),
+      });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update stage");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Update Stage" onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <p className="text-sm text-slate-500">
+          Current: <b>{wo.stage}</b>. Owners are notified of the change.
+        </p>
+        <div>
+          <label className={labelCls}>New stage</label>
+          <select className={inputCls} value={stage} onChange={(e) => setStage(e.target.value as WorkOrderStage)}>
+            {allStages.map((st) => <option key={st}>{st}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Note</label>
+          <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What happened?" />
+        </div>
+        {(stage === "Completed" || stage === "Closed") && (
+          <div>
+            <label className={labelCls}>Final cost (optional)</label>
+            <input type="number" min="0" className={inputCls} value={finalCost} onChange={(e) => setFinalCost(e.target.value)} />
+          </div>
+        )}
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button type="submit" disabled={busy} className={primaryBtnCls}>
+          {busy ? "Updating…" : `Move to ${stage}`}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function WorkOrderPhoto({ workOrderId, index }: { workOrderId: string; index: number }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let url: string | null = null;
+    apiBlob(`/work-orders/${workOrderId}/photos/${index}`)
+      .then((blob) => {
+        url = URL.createObjectURL(blob);
+        setSrc(url);
+      })
+      .catch(() => setSrc(null));
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [workOrderId, index]);
+
+  if (!src)
+    return (
+      <span className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+        <Camera className="h-5 w-5" />
+      </span>
+    );
+  return (
+    <a href={src} target="_blank" rel="noreferrer">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={`Photo ${index + 1}`} className="h-16 w-16 rounded-xl object-cover" />
+    </a>
+  );
+}
 
 const allStages: WorkOrderStage[] = [
   "Reported",
@@ -32,9 +140,44 @@ export default function WorkOrderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { role } = useSessionUser();
+  const canWrite = WRITER_ROLES.includes(role);
   const workOrder = useApi<WorkOrder>(`/work-orders/${id}`);
   const vendors = useApi<Vendor[]>("/vendors");
   const users = useApi<User[]>("/users");
+  const [stageOpen, setStageOpen] = useState(false);
+  const [comment, setComment] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+
+  async function submitComment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!comment.trim()) return;
+    setCommentBusy(true);
+    try {
+      await api(`/work-orders/${id}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ text: comment }),
+      });
+      setComment("");
+      workOrder.reload();
+    } finally {
+      setCommentBusy(false);
+    }
+  }
+
+  async function uploadPhoto(file: File) {
+    setPhotoBusy(true);
+    try {
+      await apiUpload(`/work-orders/${id}/photos`, file);
+      workOrder.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Upload failed");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   if (workOrder.error)
     return <ErrorNote message={workOrder.error} onRetry={workOrder.reload} />;
@@ -61,6 +204,14 @@ export default function WorkOrderDetailPage({
         </div>
         <h1 className="mt-2 text-xl font-bold sm:text-2xl">{wo.title}</h1>
         <p className="mt-1.5 text-sm text-slate-600">{wo.description}</p>
+        {canWrite && wo.stage !== "Closed" && (
+          <button
+            onClick={() => setStageOpen(true)}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+          >
+            <ArrowRight className="h-4 w-4" /> Update stage
+          </button>
+        )}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
@@ -136,22 +287,24 @@ export default function WorkOrderDetailPage({
                 <p className="text-sm text-slate-400">No comments yet.</p>
               )}
             </ul>
-            <form
-              className="mt-4 flex gap-2"
-              onSubmit={(e) => e.preventDefault()}
-            >
-              <input
-                placeholder="Add a comment…"
-                className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
-              />
-              <button
-                type="submit"
-                aria-label="Send comment"
-                className="rounded-xl bg-brand-600 px-3.5 text-white hover:bg-brand-700"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </form>
+            {role !== "auditor" && (
+              <form className="mt-4 flex gap-2" onSubmit={submitComment}>
+                <input
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Add a comment…"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={commentBusy || !comment.trim()}
+                  aria-label="Send comment"
+                  className="rounded-xl bg-brand-600 px-3.5 text-white hover:bg-brand-700 disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </form>
+            )}
           </Card>
         </div>
 
@@ -205,24 +358,45 @@ export default function WorkOrderDetailPage({
               <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                 Attachments
               </p>
-              {wo.photoCount > 0 ? (
-                <div className="mt-2 flex gap-2">
-                  {Array.from({ length: Math.min(wo.photoCount, 4) }).map((_, i) => (
-                    <span
-                      key={i}
-                      className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-slate-400"
-                    >
-                      <Camera className="h-5 w-5" />
-                    </span>
+              {(wo.photos?.length ?? 0) > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(wo.photos ?? []).map((_, i) => (
+                    <WorkOrderPhoto key={i} workOrderId={wo.id} index={i} />
                   ))}
                 </div>
               ) : (
-                <p className="mt-1.5 text-sm text-slate-400">No photos</p>
+                <p className="mt-1.5 text-sm text-slate-400">
+                  {wo.photoCount > 0
+                    ? `${wo.photoCount} photo(s) recorded before uploads were enabled`
+                    : "No photos"}
+                </p>
+              )}
+              {canWrite && (
+                <>
+                  <input
+                    ref={photoRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])}
+                  />
+                  <button
+                    onClick={() => photoRef.current?.click()}
+                    disabled={photoBusy}
+                    className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    {photoBusy ? "Uploading…" : "Add photo"}
+                  </button>
+                </>
               )}
             </div>
           </Card>
         </div>
       </div>
+      {stageOpen && (
+        <StageDialog wo={wo} onClose={() => setStageOpen(false)} onDone={workOrder.reload} />
+      )}
     </div>
   );
 }

@@ -13,9 +13,10 @@ import {
   X,
 } from "lucide-react";
 import { useAuth, useSessionUser } from "@/context/AuthContext";
-import { DEV_LOGIN_ENABLED } from "@/lib/api";
-import { community, notifications } from "@/lib/data";
-import type { Role } from "@/lib/types";
+import { api, DEV_LOGIN_ENABLED } from "@/lib/api";
+import { useApi } from "@/hooks/useApi";
+import { community } from "@/lib/data";
+import type { Notification, Role } from "@/lib/types";
 import { Avatar, Badge } from "@/components/ui";
 import { mobilePrimary, visibleNavItems } from "./nav";
 import { GlobalSearch } from "./GlobalSearch";
@@ -73,27 +74,50 @@ function DevAccountSwitcher() {
   );
 }
 
-function NotificationsPanel({ onClose }: { onClose: () => void }) {
+function NotificationsPanel({
+  items,
+  onClose,
+  onReadAll,
+}: {
+  items: Notification[];
+  onClose: () => void;
+  onReadAll: () => void;
+}) {
   return (
     <div className="absolute right-0 top-12 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
       <div className="flex items-center justify-between px-2 py-1.5">
         <p className="text-sm font-semibold">Notifications</p>
-        <button onClick={onClose} aria-label="Close notifications">
-          <X className="h-4 w-4 text-slate-400" />
-        </button>
+        <span className="flex items-center gap-3">
+          {items.some((n) => !n.read) && (
+            <button
+              onClick={onReadAll}
+              className="text-xs font-medium text-brand-600 hover:text-brand-700"
+            >
+              Mark all read
+            </button>
+          )}
+          <button onClick={onClose} aria-label="Close notifications">
+            <X className="h-4 w-4 text-slate-400" />
+          </button>
+        </span>
       </div>
       <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
-        {notifications.map((n) => (
+        {items.map((n) => (
           <li key={n.id} className="flex gap-2 px-2 py-2.5">
             <span
               className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? "bg-slate-200" : "bg-brand-500"}`}
             />
             <div>
               <p className="text-sm text-slate-700">{n.text}</p>
-              <p className="mt-0.5 text-xs text-slate-400">{n.date}</p>
+              <p className="mt-0.5 text-xs text-slate-400">{n.date.slice(0, 10)}</p>
             </div>
           </li>
         ))}
+        {items.length === 0 && (
+          <li className="px-2 py-6 text-center text-sm text-slate-400">
+            Nothing yet — you&apos;ll see work-order updates and announcements here.
+          </li>
+        )}
       </ul>
     </div>
   );
@@ -111,7 +135,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const items = visibleNavItems(role);
   const primary = items.filter((i) => mobilePrimary.includes(i.href));
   const secondary = items.filter((i) => !mobilePrimary.includes(i.href));
-  const unread = notifications.filter((n) => !n.read).length;
+  const notifications = useApi<Notification[]>("/notifications");
+  const unread = (notifications.data ?? []).filter((n) => !n.read).length;
+
+  async function markAllRead() {
+    await api("/notifications/read-all", { method: "POST" });
+    notifications.reload();
+  }
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
@@ -218,7 +248,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </span>
                 )}
               </button>
-              {notifOpen && <NotificationsPanel onClose={() => setNotifOpen(false)} />}
+              {notifOpen && (
+                <NotificationsPanel
+                  items={notifications.data ?? []}
+                  onClose={() => setNotifOpen(false)}
+                  onReadAll={markAllRead}
+                />
+              )}
             </div>
           </div>
           {/* Mobile role row */}

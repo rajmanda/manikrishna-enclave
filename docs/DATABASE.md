@@ -27,9 +27,15 @@ scoped by it (see `scoped_community_id` in `backend/app/core/security.py`).
 | `monthly_finance` | Income/expense series | community_id, month, income, expenses, collection_rate |
 | `audit_log` | Every modification | id, community_id, user_id, user_name, action, entity, entity_id, timestamp (ISO), details |
 
-Planned (Phase 3/4): `maintenance_requests`, `feed_posts`, `polls`,
-`documents`, `meetings`, `notifications` — Pydantic shapes already exist in
-`frontend/src/lib/types.ts`; add matching backend models when implemented.
+M3 additions: `maintenance_requests` (id, community_id, title, description,
+visibility private/community, status, created_by, created_date), `feed_posts`
+(id, community_id, author_id, type, text, date, pinned, reactions_by
+{user_id→kind}, comments[], attachment_count), `notifications` (id,
+community_id, user_id, text, date ISO, read, type). `work_orders` gained
+`photos[]` (GCS paths).
+
+Planned (Phase 4): `polls`, `documents`, `meetings` — shapes exist in
+`frontend/src/lib/types.ts`.
 
 ## Indexes (`app/db.py::ensure_indexes`, created at startup)
 
@@ -63,7 +69,8 @@ startup; current version in `meta` ({"id": "schema", "version": N}).
 | # | Migration |
 |---|---|
 | 001 | `communities.monthly_maintenance` default 3500 |
+| 002 | Backfill M3 collections (feed, maintenance) into pre-M3 databases |
 
-Schema version: **1**.
+Schema version: **2**.
 
 **Policy:** update this file in the same change as any schema modification.

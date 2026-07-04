@@ -20,16 +20,16 @@ Status legend: ✅ live end-to-end · 🟡 UI on seed data (backend pending) ·
 | Invoices (full: generate/bulk/late fees/CRUD) | ✅ | M2 |
 | Payments (record/reverse, credits) | ✅ | M2; owner online payment still 📋 (gateway TBD) |
 | Expenses (CRUD + GCS receipts), reserve fund entries | ✅ | M2; community-transparent |
-| Work orders (view, 7-stage timeline) | ✅ | Mutations/comments/photos 📋 (M3) |
-| Vendors (view, GST/AMC/ratings) | ✅ | CRUD 📋 (M3) |
+| Work orders (full lifecycle: create/stage/comments/photos) | ✅ | M3; members notified on stage changes |
+| Vendors (full CRUD, delete guard) | ✅ | M3 |
 | Statements PDF + invoices CSV | ✅ | M2; full report catalog PDFs 📋 M4 |
-| Community feed | 🟡 | Posts/reactions/comments UI; backend M3 |
+| Community feed (posts/reactions/comments/pin) | ✅ | M3 |
 | Polls & voting | 🟡 | Vote UI local-only; backend M4 |
-| Maintenance requests (private/community) | 🟡 | Backend M3 |
+| Maintenance requests (private/community, status flow) | ✅ | M3 |
 | Documents (search, versions) | 🟡 | GCS backend M4 |
 | Meeting minutes | 🟡 | Backend M4 |
-| Notifications | 🟡 | Static bell panel; email/push M4 |
+| In-app notifications (live bell, read state) | ✅ | M3; email/push 📋 M4 |
 | Global search | 🟡 | Client-side over seed; endpoint M4 |
-| Work-order photo / document uploads | 📋 | M3/M4 (receipts done in M2) |
+| Document uploads (society records) | 📋 | M4 (receipts + WO photos done) |
 | CI/CD, Terraform, deployment, custom domain | ✅ | M1 |
 | AI features, mobile app, WhatsApp | 📋 | M5 |

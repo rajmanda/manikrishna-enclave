@@ -19,12 +19,12 @@ Last updated: 2026-07-03. M1 approved and executed 2026-07-03.
   Deferred to later: online payment gateway (open decision), scheduled
   auto-generation (Cloud Scheduler — endpoint is ready and idempotent).
 
-## Upcoming milestones
+- **M3 — Operations module (2026-07-04):** work-order lifecycle (create,
+  stage transitions with member notifications, comments, GCS photos),
+  maintenance requests with visibility rules, vendor CRUD, community feed
+  (reactions/comments/pins), in-app notifications with live bell.
 
-### M3 — Operations module (PRD Phase 3)
-Work-order lifecycle mutations (stage transitions, comments, photo upload),
-maintenance requests, vendor CRUD + ratings, community feed backend.
-In-app notifications on status changes.
+## Upcoming milestones
 
 ### M4 — Governance module (PRD Phase 4)
 Polls/voting backend, documents with versioning (GCS), meeting minutes,
@@ -39,7 +39,6 @@ WhatsApp integration, React Native app, push notifications.
 | | Goal | Key deliverables | Effort | Depends on | Main risks |
 |---|---|---|---|---|---|
 | M1 | Production pipeline | git+CI+Terraform+deployed app+real OAuth | 2–3 sessions | GCP project access, Atlas URI, GitHub repo | GCP IAM/domain-mapping friction; OAuth consent setup |
-| M3 | Ops without WhatsApp | WO mutations, maintenance, vendors, feed | 3–4 sessions | M2 patterns (uploads, migrations) | media upload UX on mobile |
 | M4 | Governance & records | polls, documents, minutes, reports, email | 3–4 sessions | M3 | email deliverability; search relevance |
 | M5 | AI & mobile | AI features, RN app, WhatsApp | open-ended | M1–M4 APIs | external API dependencies |
 

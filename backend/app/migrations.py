@@ -19,8 +19,17 @@ async def _m001_community_monthly_maintenance(db: Any) -> None:
     )
 
 
+async def _m002_backfill_m3_collections(db: Any) -> None:
+    # Databases seeded before M3 lack feed/maintenance data; seed_m3 is
+    # idempotent (no-op unless those collections are empty).
+    from app.seed import seed_m3
+
+    await seed_m3(db)
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], Awaitable[None]]]] = [
     (1, _m001_community_monthly_maintenance),
+    (2, _m002_backfill_m3_collections),
 ]
 
 

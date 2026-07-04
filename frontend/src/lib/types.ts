@@ -117,6 +117,7 @@ export interface WorkOrder {
   finalCost?: number;
   reportedDate: string;
   photoCount: number;
+  photos?: string[];
   timeline: WorkOrderEvent[];
   comments: WorkOrderComment[];
 }
@@ -143,6 +144,7 @@ export interface FeedPost {
   reactions: { like: number; heart: number; thanks: number };
   comments: { authorId: string; text: string; date: string }[];
   attachmentCount: number;
+  myReaction?: "like" | "heart" | "thanks" | null;
 }
 
 export interface PollOption {
