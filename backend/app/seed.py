@@ -17,6 +17,7 @@ COMMUNITY = {
     "name": "Mani Krishna Enclave",
     "address": "Hyderabad, Telangana",
     "apartment_count": 10,
+    "monthly_maintenance": 3500,
 }
 
 OWNERS = [

@@ -1,9 +1,13 @@
 "use client";
 
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { useState } from "react";
+import { ArrowDownRight, ArrowUpRight, PlusCircle } from "lucide-react";
+import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
+import { api, ApiError } from "@/lib/api";
 import type { ReserveFundEntry } from "@/lib/types";
 import { formatINR } from "@/lib/format";
+import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import {
   Card,
   ErrorNote,
@@ -13,7 +17,69 @@ import {
 } from "@/components/ui";
 import { ReserveFundChart } from "@/components/charts";
 
+const WRITER_ROLES = ["property_manager", "community_admin", "super_admin"];
+
+function AddEntryDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [month, setMonth] = useState("");
+  const [contributions, setContributions] = useState("5000");
+  const [expensesAmt, setExpensesAmt] = useState("0");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/reserve-fund", {
+        method: "POST",
+        body: JSON.stringify({
+          month,
+          contributions: Number(contributions),
+          expenses: Number(expensesAmt),
+        }),
+      });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to add entry");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Add Monthly Entry" onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <div>
+          <label className={labelCls}>Month (e.g. Jul)</label>
+          <input className={inputCls} value={month} onChange={(e) => setMonth(e.target.value)} required />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Contributions</label>
+            <input type="number" min="0" className={inputCls} value={contributions} onChange={(e) => setContributions(e.target.value)} required />
+          </div>
+          <div>
+            <label className={labelCls}>Withdrawals</label>
+            <input type="number" min="0" className={inputCls} value={expensesAmt} onChange={(e) => setExpensesAmt(e.target.value)} />
+          </div>
+        </div>
+        <p className="text-xs text-slate-400">
+          The balance is computed automatically from the previous month.
+        </p>
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button type="submit" disabled={busy} className={primaryBtnCls}>
+          {busy ? "Saving…" : "Add entry"}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
 export default function ReserveFundPage() {
+  const { role } = useSessionUser();
+  const canWrite = WRITER_ROLES.includes(role);
+  const [addOpen, setAddOpen] = useState(false);
   const reserve = useApi<ReserveFundEntry[]>("/reserve-fund");
 
   if (reserve.error)
@@ -34,7 +100,21 @@ export default function ReserveFundPage() {
       <PageTitle
         title="Reserve Fund"
         subtitle="Community savings for major repairs and emergencies"
+        actions={
+          canWrite ? (
+            <button
+              onClick={() => setAddOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+            >
+              <PlusCircle className="h-4 w-4" /> Add entry
+            </button>
+          ) : undefined
+        }
       />
+
+      {addOpen && (
+        <AddEntryDialog onClose={() => setAddOpen(false)} onDone={reserve.reload} />
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Current Balance" value={formatINR(latest.balance)} tone="positive" />

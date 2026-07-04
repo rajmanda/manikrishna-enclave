@@ -33,6 +33,9 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000,https://community.rajmanda.com"
 
+    # GCS bucket for receipts/documents (empty = uploads disabled).
+    gcs_bucket: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

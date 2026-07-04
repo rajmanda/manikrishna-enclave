@@ -6,12 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import db as database
 from app.core.config import get_settings
+from app.migrations import run_migrations
 from app.routers import (
     apartments,
     auth,
     communities,
     dashboard,
     finance,
+    invoices,
+    statements,
     users,
     vendors,
     work_orders,
@@ -27,6 +30,7 @@ async def lifespan(app: FastAPI):
     db = database.connect()
     try:
         await database.ensure_indexes(db)
+        await run_migrations(db)
         if settings.seed_on_start:
             from app.seed import seed
 
@@ -62,6 +66,8 @@ app.include_router(apartments.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(finance.router, prefix=API_PREFIX)
+app.include_router(invoices.router, prefix=API_PREFIX)
+app.include_router(statements.router, prefix=API_PREFIX)
 app.include_router(work_orders.router, prefix=API_PREFIX)
 app.include_router(vendors.router, prefix=API_PREFIX)
 

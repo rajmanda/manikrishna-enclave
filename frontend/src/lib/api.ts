@@ -92,3 +92,46 @@ export async function loginDev(email: string): Promise<TokenResponse> {
 export async function fetchMe(): Promise<User> {
   return api<User>("/auth/me");
 }
+
+export async function apiBlob(path: string): Promise<Blob> {
+  const token = getToken();
+  const resp = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!resp.ok) throw new ApiError(resp.status, resp.statusText);
+  return resp.blob();
+}
+
+/** Fetch an authenticated file and trigger a browser download. */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const blob = await apiBlob(path);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Multipart upload (no JSON content-type — the browser sets the boundary). */
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  const token = getToken();
+  const form = new FormData();
+  form.append("file", file);
+  const resp = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!resp.ok) {
+    let detail = resp.statusText;
+    try {
+      const body = await resp.json();
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      // non-JSON error body
+    }
+    throw new ApiError(resp.status, detail);
+  }
+  return (await resp.json()) as T;
+}

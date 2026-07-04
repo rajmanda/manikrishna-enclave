@@ -44,6 +44,10 @@ resource "google_cloud_run_v2_service" "api" {
         value = "https://${var.domain}"
       }
       env {
+        name  = "GCS_BUCKET"
+        value = google_storage_bucket.media.name
+      }
+      env {
         name = "MONGODB_URI"
         value_source {
           secret_key_ref {

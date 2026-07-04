@@ -15,12 +15,12 @@ scoped by it (see `scoped_community_id` in `backend/app/core/security.py`).
 
 | Collection | Purpose | Key fields |
 |---|---|---|
-| `communities` | Tenants | id, name, address, apartment_count |
+| `communities` | Tenants | id, name, address, apartment_count, monthly_maintenance |
 | `users` | Members **and the login whitelist** | id, community_id, name, email (unique), role, apartment_id?, phone? |
 | `apartments` | Units | id, community_id, number (unique per community), floor, owner_ids[] |
-| `invoices` | Charges per apartment | id, community_id, apartment_id, period, description, amount, paid_amount, due_date, status (paid/due/overdue/partial) |
-| `payments` | Receipts | id, community_id, invoice_id, apartment_id, amount, date, method, reference |
-| `expenses` | Community spend | id, community_id, category, description, vendor_id?, amount, paid_date, has_receipt |
+| `invoices` | Charges per apartment | id, community_id, apartment_id, period, description, amount, paid_amount, due_date, status (paid/due/overdue/partial), parent_invoice_id (late fees) |
+| `payments` | Receipts | id, community_id, invoice_id, apartment_id, amount, date, method (incl. "Credit" for waivers), reference |
+| `expenses` | Community spend | id, community_id, category, description, vendor_id?, amount, paid_date, has_receipt, receipt_path (GCS) |
 | `work_orders` | Common-area jobs | id, community_id, title, description, priority, stage, vendor_id?, assigned_to?, estimate?, final_cost?, reported_date, photo_count, timeline[], comments[] |
 | `vendors` | Service providers | id, community_id, name, service, phone, gst?, amc_expiry?, rating, active_contracts |
 | `reserve_fund` | Monthly fund entries | community_id, month, contributions, expenses, balance |
@@ -57,8 +57,13 @@ Google emails via `PATCH /users/{id}`.
 
 ## Migrations
 
-None yet. Before Phase 2 write-APIs land, adopt a lightweight versioned
-migration convention (e.g. `backend/app/migrations/NNN_*.py` applied at
-startup, version stored in a `meta` collection). Track schema version here.
+`backend/app/migrations.py` — append-only (version, coroutine) list applied at
+startup; current version in `meta` ({"id": "schema", "version": N}).
+
+| # | Migration |
+|---|---|
+| 001 | `communities.monthly_maintenance` default 3500 |
+
+Schema version: **1**.
 
 **Policy:** update this file in the same change as any schema modification.

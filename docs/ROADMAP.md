@@ -13,12 +13,13 @@ Last updated: 2026-07-03. M1 approved and executed 2026-07-03.
   deploy, Atlas e2e. **Remaining owner steps:** DNS A record, Atlas network
   access for Cloud Run, Google OAuth client (see PROJECT_STATE.md).
 
-## Upcoming milestones
+- **M2 — Financial module (2026-07-04):** invoice/payment/expense write
+  APIs (bulk generation, late fees, credits, reversals), GCS receipts, PDF
+  statements + CSV, reserve-fund entries, migrations convention, manager UI.
+  Deferred to later: online payment gateway (open decision), scheduled
+  auto-generation (Cloud Scheduler — endpoint is ready and idempotent).
 
-### M2 — Financial module (PRD Phase 2)
-Write APIs + UI: invoice CRUD, bulk/recurring generation, payment recording,
-credits & late fees, statements (server-side PDF) and CSV export, expense
-CRUD with receipt upload (GCS), reserve fund entries. Migrations convention.
+## Upcoming milestones
 
 ### M3 — Operations module (PRD Phase 3)
 Work-order lifecycle mutations (stage transitions, comments, photo upload),
@@ -38,7 +39,6 @@ WhatsApp integration, React Native app, push notifications.
 | | Goal | Key deliverables | Effort | Depends on | Main risks |
 |---|---|---|---|---|---|
 | M1 | Production pipeline | git+CI+Terraform+deployed app+real OAuth | 2–3 sessions | GCP project access, Atlas URI, GitHub repo | GCP IAM/domain-mapping friction; OAuth consent setup |
-| M2 | Money flows digitally | invoice/payment/expense writes, PDFs, GCS receipts | 3–4 sessions | M1 (deploy target), migrations | PDF layout scope creep; correctness of balances |
 | M3 | Ops without WhatsApp | WO mutations, maintenance, vendors, feed | 3–4 sessions | M2 patterns (uploads, migrations) | media upload UX on mobile |
 | M4 | Governance & records | polls, documents, minutes, reports, email | 3–4 sessions | M3 | email deliverability; search relevance |
 | M5 | AI & mobile | AI features, RN app, WhatsApp | open-ended | M1–M4 APIs | external API dependencies |

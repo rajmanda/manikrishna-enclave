@@ -17,12 +17,12 @@ Status legend: ✅ live end-to-end · 🟡 UI on seed data (backend pending) ·
 | Community/HOA page | ✅ | Summary, expense breakdown + ledger, directory with dues |
 | Apartments & owners CRUD | ✅ | API complete; admin UI screens 📋 |
 | Whitelist management API | ✅ | Admin UI screen 📋 |
-| Invoices (view) | ✅ | Owner-scoped; Pay button decorative until M2 |
-| Payments (view) | ✅ | Manager/auditor |
-| Expenses, reserve fund, monthly finance (view) | ✅ | Community-transparent |
+| Invoices (full: generate/bulk/late fees/CRUD) | ✅ | M2 |
+| Payments (record/reverse, credits) | ✅ | M2; owner online payment still 📋 (gateway TBD) |
+| Expenses (CRUD + GCS receipts), reserve fund entries | ✅ | M2; community-transparent |
 | Work orders (view, 7-stage timeline) | ✅ | Mutations/comments/photos 📋 (M3) |
 | Vendors (view, GST/AMC/ratings) | ✅ | CRUD 📋 (M3) |
-| Reports catalog + live cash-flow chart | 🟡 | Downloads decorative until M2/M4 PDFs |
+| Statements PDF + invoices CSV | ✅ | M2; full report catalog PDFs 📋 M4 |
 | Community feed | 🟡 | Posts/reactions/comments UI; backend M3 |
 | Polls & voting | 🟡 | Vote UI local-only; backend M4 |
 | Maintenance requests (private/community) | 🟡 | Backend M3 |
@@ -30,7 +30,6 @@ Status legend: ✅ live end-to-end · 🟡 UI on seed data (backend pending) ·
 | Meeting minutes | 🟡 | Backend M4 |
 | Notifications | 🟡 | Static bell panel; email/push M4 |
 | Global search | 🟡 | Client-side over seed; endpoint M4 |
-| Invoice generation, statements, late fees | 📋 | M2 |
-| Receipt/photo/document uploads (GCS) | 📋 | M2/M3 |
-| CI/CD, Terraform, deployment | 📋 | M1 |
+| Work-order photo / document uploads | 📋 | M3/M4 (receipts done in M2) |
+| CI/CD, Terraform, deployment, custom domain | ✅ | M1 |
 | AI features, mobile app, WhatsApp | 📋 | M5 |

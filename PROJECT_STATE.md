@@ -4,16 +4,16 @@ Last updated: 2026-07-03
 
 | Field | Value |
 |---|---|
-| Current version | 0.1.0 |
-| Current milestone | **M1 Foundation — deployed**; next: M1 close-out (owner DNS/OAuth steps) → M2 Financial module |
-| Current sprint | M1 |
+| Current version | 0.2.0 |
+| Current milestone | **M2 Financial module — complete**; next: M3 Operations (work orders, maintenance, vendors, feed) |
+| Current sprint | M2 complete |
 | Current branch | main (github.com/rajmanda/manikrishna-enclave, public) |
-| Last completed feature | First cloud deployment: Terraform infra + GitHub Actions deploy to Cloud Run |
+| Last completed feature | M2: invoice/payment/expense writes, GCS receipts, PDF statements, migrations |
 | Current feature | — |
-| Next priority | Owner manual steps below, then M2 (invoice/payment/expense write APIs) |
+| Next priority | M3 Operations module |
 | Deployment status | **Live at https://community.rajmanda.com** (Cloud Run, asia-south1) |
-| Database version | Schema v1; Atlas `cluster0.sod5j`, DB `manikrishna_enclave` (seeded) |
-| Infrastructure version | Terraform applied — 33 resources, state in gs://mm-owners-5b8611-tfstate |
+| Database version | Schema v1 + migration 001; Atlas `cluster0.sod5j`, DB `manikrishna_enclave` |
+| Infrastructure version | Terraform applied — 35 resources (incl. GCS media bucket), state in gs://mm-owners-5b8611-tfstate |
 | Last deployment | 2026-07-03 via deploy.yml (manual dispatch) |
 
 ## Live URLs

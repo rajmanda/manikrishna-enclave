@@ -3,6 +3,25 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.2.0] — 2026-07-04 · M2 Financial module
+
+- Invoice writes: create, bulk generation per period (idempotent, defaults to
+  community.monthlyMaintenance), late fees (linked via parentInvoiceId),
+  update with status recompute, delete (blocked if payments exist).
+- Payments: record (UPI/bank/cash/cheque/Credit-waiver) with automatic
+  invoice status recomputation and overpayment rejection; reversal endpoint.
+- Expenses: CRUD + receipt upload/download via private GCS bucket
+  (proxied, pdf/jpeg/png/webp ≤10 MB); receipts community-readable.
+- Reserve fund: monthly entry endpoint with auto-computed balance.
+- Statements: server-side PDF per apartment (fpdf2) + invoices CSV export,
+  both RBAC-scoped.
+- Migrations convention (app/migrations.py, meta.version); migration 001.
+- Frontend: Generate/Record-payment/Late-fee dialogs, expense add/delete +
+  receipt attach/view, reserve entry form, working Statement PDF and CSV
+  downloads.
+- Terraform: private versioned GCS media bucket + API service access.
+- Tests 28 → 40.
+
 ## [0.1.0] — 2026-07-03 · M1 Foundation
 
 - Git repository initialized and pushed to github.com/rajmanda/manikrishna-enclave.

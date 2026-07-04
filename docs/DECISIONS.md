@@ -68,3 +68,21 @@ Actions (WIF, manual dispatch for now) builds/pushes/deploys images tagged
 with the git SHA. **Why:** clean separation — infra changes are rare and
 reviewed, releases are frequent. **Follow-up:** auto-deploy on main once
 trusted.
+
+## D-011 · 2026-07-04 · Credits are payments with method "Credit"
+**Decision:** waivers/adjustments are recorded as payments (`method: "Credit"`)
+counting toward paid_amount, not as a separate credit ledger.
+**Why:** one code path for balance math, visible in payment history and
+statements. **Trade-off:** cash reports must exclude method=Credit.
+
+## D-012 · 2026-07-04 · Receipts proxied through the API, not signed URLs
+**Decision:** uploads/downloads stream through FastAPI to a private GCS bucket.
+**Why:** RBAC stays in one place; no signBlob IAM; receipts are small (≤10 MB).
+**Trade-off:** file bytes transit the API; revisit with signed URLs if media
+grows (work-order videos in M3 may need them).
+
+## D-013 · 2026-07-04 · fpdf2 for server-side PDFs
+**Decision:** statements are generated with fpdf2 (pure-Python).
+**Why:** no native dependencies (weasyprint needs system libs in the
+container); statements are simple tables. **Trade-off:** limited layout/Unicode
+(₹ rendered as "Rs" with core fonts); revisit if design needs grow.

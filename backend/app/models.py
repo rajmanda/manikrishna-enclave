@@ -45,6 +45,7 @@ class Community(APIModel):
     name: str
     address: str = ""
     apartment_count: int = 0
+    monthly_maintenance: float = 3500
 
 
 class CommunityCreate(APIModel):
@@ -131,6 +132,34 @@ class Invoice(APIModel):
     paid_amount: float = 0
     due_date: str
     status: InvoiceStatus = "due"
+    parent_invoice_id: str | None = None  # set on late-fee invoices
+
+
+class InvoiceCreate(APIModel):
+    apartment_id: str
+    period: str
+    description: str
+    amount: float
+    due_date: str
+
+
+class InvoiceUpdate(APIModel):
+    description: str | None = None
+    amount: float | None = None
+    due_date: str | None = None
+
+
+class GenerateInvoicesRequest(APIModel):
+    period: str  # e.g. "Jul 2026"
+    due_date: str
+    amount: float | None = None  # defaults to community.monthly_maintenance
+    description: str = "Monthly Maintenance"
+
+
+class ApplyLateFeesRequest(APIModel):
+    period: str
+    amount: float
+    due_date: str
 
 
 class Payment(APIModel):
@@ -140,7 +169,16 @@ class Payment(APIModel):
     apartment_id: str
     amount: float
     date: str
-    method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
+    # "Credit" records an adjustment (waiver/advance) — counts toward paid.
+    method: Literal["UPI", "Bank Transfer", "Cash", "Cheque", "Credit"]
+    reference: str = ""
+
+
+class PaymentCreate(APIModel):
+    invoice_id: str
+    amount: float
+    date: str
+    method: Literal["UPI", "Bank Transfer", "Cash", "Cheque", "Credit"]
     reference: str = ""
 
 
@@ -153,6 +191,23 @@ class Expense(APIModel):
     amount: float
     paid_date: str
     has_receipt: bool = False
+    receipt_path: str | None = None
+
+
+class ExpenseCreate(APIModel):
+    category: str
+    description: str
+    vendor_id: str | None = None
+    amount: float
+    paid_date: str
+
+
+class ExpenseUpdate(APIModel):
+    category: str | None = None
+    description: str | None = None
+    vendor_id: str | None = None
+    amount: float | None = None
+    paid_date: str | None = None
 
 
 class ReserveFundEntry(APIModel):
@@ -160,6 +215,12 @@ class ReserveFundEntry(APIModel):
     contributions: float
     expenses: float
     balance: float
+
+
+class ReserveEntryCreate(APIModel):
+    month: str
+    contributions: float
+    expenses: float = 0
 
 
 class MonthlyFinance(APIModel):

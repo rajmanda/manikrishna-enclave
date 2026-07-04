@@ -4,6 +4,7 @@ from mongomock_motor import AsyncMongoMockClient
 
 from app.db import get_db
 from app.main import app
+from app.migrations import run_migrations
 from app.seed import seed
 
 
@@ -12,6 +13,7 @@ async def db():
     client = AsyncMongoMockClient()
     database = client["communityhub_test"]
     await seed(database)
+    await run_migrations(database)
     # A second community to prove tenant isolation.
     await database.communities.insert_one(
         {"id": "other", "name": "Other Towers", "address": "", "apartment_count": 1}
