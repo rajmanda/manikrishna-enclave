@@ -41,6 +41,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let resp: Response;
   try {
     resp = await fetch(`${API_URL}${path}`, {
+      cache: "no-store",
       ...init,
       headers: {
         "Content-Type": "application/json",
@@ -96,6 +97,7 @@ export async function fetchMe(): Promise<User> {
 export async function apiBlob(path: string): Promise<Blob> {
   const token = getToken();
   const resp = await fetch(`${API_URL}${path}`, {
+    cache: "no-store",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!resp.ok) throw new ApiError(resp.status, resp.statusText);

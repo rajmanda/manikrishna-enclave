@@ -95,10 +95,20 @@ function GenerateDialog({
     <Modal title="Generate Monthly Invoices" onClose={onClose}>
       {result ? (
         <div className="space-y-4 text-center">
-          <p className="text-sm text-slate-700">
-            Created <b>{result.created}</b> invoice{result.created === 1 ? "" : "s"}
-            {result.skipped > 0 && ` · ${result.skipped} already existed`}
-          </p>
+          {result.created === 0 ? (
+            <p className="text-sm text-slate-700">
+              No new invoices — all {result.skipped} selected apartment
+              {result.skipped === 1 ? " already has" : "s already have"} an
+              invoice for this period. To bill again, use a different period
+              or description.
+            </p>
+          ) : (
+            <p className="text-sm text-slate-700">
+              Created <b>{result.created}</b> invoice{result.created === 1 ? "" : "s"}
+              {result.skipped > 0 && ` · ${result.skipped} already existed`} —
+              they&apos;re at the top of the list.
+            </p>
+          )}
           <button className={primaryBtnCls} onClick={onClose}>Done</button>
         </div>
       ) : (
