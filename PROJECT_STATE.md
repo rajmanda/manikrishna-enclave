@@ -11,7 +11,7 @@ Last updated: 2026-07-03
 | Last completed feature | First cloud deployment: Terraform infra + GitHub Actions deploy to Cloud Run |
 | Current feature | — |
 | Next priority | Owner manual steps below, then M2 (invoice/payment/expense write APIs) |
-| Deployment status | **Live on Cloud Run** (asia-south1); custom domain pending DNS |
+| Deployment status | **Live at https://community.rajmanda.com** (Cloud Run, asia-south1) |
 | Database version | Schema v1; Atlas `cluster0.sod5j`, DB `manikrishna_enclave` (seeded) |
 | Infrastructure version | Terraform applied — 33 resources, state in gs://mm-owners-5b8611-tfstate |
 | Last deployment | 2026-07-03 via deploy.yml (manual dispatch) |
@@ -20,14 +20,13 @@ Last updated: 2026-07-03
 
 - Frontend: https://communityhub-frontend-ht4p2vwsjq-el.a.run.app
 - API: https://communityhub-backend-ht4p2vwsjq-el.a.run.app (`/health`, `/docs`)
-- community.rajmanda.com → LB IP 34.120.210.248 (awaiting DNS record)
+- https://community.rajmanda.com — live (LB 34.120.210.248, cert ACTIVE)
 
 ## Owner action items (blockers for M1 close-out)
 
-1. **DNS:** A record `community` → `34.120.210.248` at rajmanda.com's DNS
-   host (managed TLS cert provisions itself 15–60 min after).
-2. **Atlas Network Access:** allow `0.0.0.0/0` so Cloud Run can connect
-   (its egress IPs are dynamic). Until then the deployed API can't reach the DB.
+1. ~~DNS~~ ✅ done 2026-07-04 — cert ACTIVE, https://community.rajmanda.com live.
+2. ~~Atlas Network Access~~ ✅ already allowed (cluster shared with other Cloud
+   Run apps); verified via clean API startup logs.
 3. **Google OAuth client:** create a Web client in GCP Console → Credentials
    (authorized origin `https://community.rajmanda.com`), then
    `gcloud secrets versions add communityhub-google-client-id --data-file=-`
