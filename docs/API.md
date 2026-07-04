@@ -48,6 +48,7 @@ cross-tenant, 409 conflict).
 | Method | Path | Access | Returns |
 |---|---|---|---|
 | GET | `/dashboard/owner` | owner/tenant with apartment | outstandingBalance, openWorkOrders, monthExpenses, reserveFundBalance |
+| GET | `/dashboard/badges` | any authenticated | Live nav-badge counts: openInvoices (role-scoped), pendingPaymentConfirmations |
 | GET | `/dashboard/manager` | manager/admin/auditor | outstandingCollections, paymentsReceived, monthExpenses, reserveFundBalance, openWorkOrders, pendingApprovals, overdueInvoices |
 
 ## Finance (read-only in Phase 1)
@@ -58,8 +59,8 @@ cross-tenant, 409 conflict).
 | GET | `/payments` | any member | owners/tenants: own apartment only |
 | GET | `/expenses` | any member | community-wide (transparency) |
 | GET | `/reserve-fund` | any member | community-wide |
-| GET | `/finance/monthly` | any member | income/expenses/collectionRate series |
-| GET | `/finance/summary` | any member | HOA-page summary (monthIncome, monthExpenses, outstandingDues, reserveFundBalance) |
+| GET | `/finance/monthly` | any member | Computed from real payments/expenses/invoices, last 6 months (confirmed payments only) |
+| GET | `/finance/summary` | any member | Computed for the current calendar month from real records |
 
 ## Work orders & vendors (read-only in Phase 1)
 
@@ -80,6 +81,9 @@ cross-tenant, 409 conflict).
 | DELETE | `/invoices/{id}` | manager/admin | 409 if payments exist |
 | POST | `/payments` | manager/admin | Records payment (or `method: "Credit"` for waivers); recomputes invoice paid/status; rejects overpayment |
 | DELETE | `/payments/{id}` | manager/admin | Reversal; recomputes invoice |
+| POST | `/payments/report` | owner/tenant (own apartment) | Claims an offline payment → **pending** (not counted); notifies managers; one open report per invoice |
+| POST | `/payments/{id}/confirm` | manager/admin | Pending → confirmed; recomputes invoice; notifies reporter |
+| POST | `/payments/{id}/reject` | manager/admin | Removes pending claim; notifies reporter |
 | POST/PATCH/DELETE | `/expenses[/{id}]` | manager/admin | Expense CRUD |
 | POST | `/expenses/{id}/receipt` | manager/admin | Multipart upload → GCS (pdf/jpeg/png/webp, ≤10 MB) |
 | GET | `/expenses/{id}/receipt` | any member | Streams the receipt (community-transparent) |

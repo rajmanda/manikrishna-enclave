@@ -65,7 +65,8 @@ async def create_work_order(
     await db.work_orders.insert_one(wo.model_dump())
     await record_audit(db, user, "create", "work_orders", wo.id)
     await notify_members(
-        db, user.community_id, f"New work order: {wo.title}", "work_order", user.id
+        db, user.community_id, f"New work order: {wo.title}", "work_order", user.id,
+        href=f"/work-orders/{wo.id}",
     )
     return wo
 
@@ -116,6 +117,7 @@ async def change_stage(
         f"Work order '{wo['title']}' moved to {body.stage}",
         "work_order",
         user.id,
+        href=f"/work-orders/{work_order_id}",
     )
     return WorkOrder.model_validate(result)
 

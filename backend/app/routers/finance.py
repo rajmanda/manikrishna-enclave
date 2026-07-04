@@ -7,6 +7,7 @@ Scoping rules:
   visible to every member (PRD transparency requirement).
 """
 
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
@@ -72,24 +73,69 @@ async def reserve_fund(db: DB, user: CurrentUser) -> list[ReserveFundEntry]:
     return [ReserveFundEntry.model_validate(d) for d in docs]
 
 
+def _last_month_prefixes(count: int = 6) -> list[str]:
+    """YYYY-MM prefixes for the last `count` months, oldest first."""
+    today = date.today()
+    year, month = today.year, today.month
+    prefixes: list[str] = []
+    for _ in range(count):
+        prefixes.append(f"{year:04d}-{month:02d}")
+        month -= 1
+        if month == 0:
+            year, month = year - 1, 12
+    return list(reversed(prefixes))
+
+
+MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
 @router.get("/finance/monthly", response_model=list[MonthlyFinance])
 async def monthly_finance(db: DB, user: CurrentUser) -> list[MonthlyFinance]:
-    docs = await db.monthly_finance.find({"community_id": user.community_id}).to_list(
-        length=1000
-    )
-    return [MonthlyFinance.model_validate(d) for d in docs]
+    """Computed from real payments/expenses/invoices, last 6 months.
+    Collection rate = paid/billed for invoices due in that month."""
+    cid = user.community_id
+    payments = await db.payments.find({"community_id": cid}).to_list(10000)
+    expenses = await db.expenses.find({"community_id": cid}).to_list(10000)
+    invoices = await db.invoices.find({"community_id": cid}).to_list(10000)
+    out = []
+    for prefix in _last_month_prefixes():
+        income = sum(
+            p["amount"] for p in payments
+            if p["date"].startswith(prefix)
+            and p.get("status", "confirmed") == "confirmed"
+        )
+        spent = sum(e["amount"] for e in expenses if e["paid_date"].startswith(prefix))
+        billed = sum(i["amount"] for i in invoices if i["due_date"].startswith(prefix))
+        paid = sum(i["paid_amount"] for i in invoices if i["due_date"].startswith(prefix))
+        rate = round(100 * paid / billed) if billed else 0
+        out.append(MonthlyFinance(
+            month=MONTH_LABELS[int(prefix[5:7]) - 1],
+            income=income,
+            expenses=spent,
+            collection_rate=rate,
+        ))
+    return out
 
 
 @router.get("/finance/summary", response_model=CommunitySummary)
 async def community_summary(db: DB, user: CurrentUser) -> CommunitySummary:
+    """Computed from real data — current calendar month."""
     cid = user.community_id
-    monthly = await db.monthly_finance.find({"community_id": cid}).to_list(length=1000)
-    current = monthly[-1] if monthly else {"income": 0, "expenses": 0}
+    prefix = date.today().isoformat()[:7]
+    payments = await db.payments.find({"community_id": cid}).to_list(10000)
+    expenses = await db.expenses.find({"community_id": cid}).to_list(10000)
     invoices = await db.invoices.find({"community_id": cid}).to_list(length=10000)
     reserve = await db.reserve_fund.find({"community_id": cid}).to_list(length=1000)
     return CommunitySummary(
-        month_income=current["income"],
-        month_expenses=current["expenses"],
+        month_income=sum(
+            p["amount"] for p in payments
+            if p["date"].startswith(prefix)
+            and p.get("status", "confirmed") == "confirmed"
+        ),
+        month_expenses=sum(
+            e["amount"] for e in expenses if e["paid_date"].startswith(prefix)
+        ),
         outstanding_dues=sum(i["amount"] - i["paid_amount"] for i in invoices),
         reserve_fund_balance=reserve[-1]["balance"] if reserve else 0,
     )

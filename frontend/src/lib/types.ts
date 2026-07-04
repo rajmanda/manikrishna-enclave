@@ -55,8 +55,10 @@ export interface Payment {
   apartmentId: string;
   amount: number;
   date: string;
-  method: "UPI" | "Bank Transfer" | "Cash" | "Cheque";
+  method: "UPI" | "Bank Transfer" | "Cash" | "Cheque" | "Credit";
   reference: string;
+  status?: "pending" | "confirmed";
+  reportedBy?: string | null;
 }
 
 export type ExpenseCategory =
@@ -231,6 +233,7 @@ export interface ManagerDashboardData {
   openWorkOrders: number;
   pendingApprovals: number;
   overdueInvoices: number;
+  pendingPaymentConfirmations: number;
 }
 
 export interface CommunitySummary {
@@ -259,10 +262,16 @@ export interface AuditEntry {
   details: Record<string, unknown>;
 }
 
+export interface NavBadges {
+  openInvoices: number;
+  pendingPaymentConfirmations: number;
+}
+
 export interface Notification {
   id: string;
   text: string;
   date: string;
   read: boolean;
   type: "invoice" | "work_order" | "poll" | "announcement" | "meeting";
+  href?: string | null;
 }

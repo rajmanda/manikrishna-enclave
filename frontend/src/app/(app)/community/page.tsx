@@ -243,7 +243,7 @@ export default function CommunityPage() {
         {/* Expense ledger */}
         <section className="lg:col-span-3">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-slate-900">Expenses This Month</h2>
+            <h2 className="text-base font-semibold text-slate-900">Expense Ledger</h2>
             {canWrite && (
               <button
                 onClick={() => setAddOpen(true)}

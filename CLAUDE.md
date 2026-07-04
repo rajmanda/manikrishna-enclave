@@ -31,6 +31,12 @@ affected docs/ file with every meaningful change.
 
 ## Hard rules
 
+- **Deploy workflow (owner rule):** test every change locally first (pytest,
+  build, and exercise the flow against Atlas where possible). Present the
+  result and **wait for Raj's explicit confirmation before committing or
+  pushing** — pushes trigger CI/deploy builds. Batch doc-only changes with
+  the next confirmed push.
+
 - **Multi-tenant:** every document carries `community_id`; non-super-admin
   queries are always scoped server-side. Never hardcode Mani Krishna Enclave
   outside `backend/app/seed.py` / `frontend/src/lib/data.ts`.

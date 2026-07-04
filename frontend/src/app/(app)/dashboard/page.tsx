@@ -3,6 +3,8 @@
 import Link from "next/link";
 import {
   AlertTriangle,
+  ArrowRight,
+  BadgeCheck,
   CalendarDays,
   CreditCard,
   Download,
@@ -163,7 +165,9 @@ function OwnerDashboard() {
                     {formatDate(p.date)} · {p.method} · {p.reference}
                   </p>
                 </div>
-                <Badge tone="green">received</Badge>
+                <Badge tone={p.status === "pending" ? "amber" : "green"}>
+                  {p.status === "pending" ? "pending" : "received"}
+                </Badge>
               </div>
             ))}
             {payments.data?.length === 0 && (
@@ -264,6 +268,30 @@ function ManagerDashboard() {
         <h1 className="text-xl font-bold sm:text-2xl">Manager Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500">Live overview from the API</p>
       </div>
+
+      {s.pendingPaymentConfirmations > 0 && (
+        <Link
+          href="/payments"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm transition hover:border-amber-300"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+              <BadgeCheck className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                {s.pendingPaymentConfirmations} payment
+                {s.pendingPaymentConfirmations === 1 ? "" : "s"} awaiting your
+                confirmation
+              </p>
+              <p className="text-xs text-amber-700">
+                Owners have reported paying — review and confirm receipt
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="h-5 w-5 shrink-0 text-amber-600" />
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat

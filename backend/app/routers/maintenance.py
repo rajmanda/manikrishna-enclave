@@ -59,6 +59,7 @@ async def create_request(
             await notify_user(
                 db, user.community_id, m["id"],
                 f"New maintenance request: {request.title}", "work_order",
+                href="/maintenance",
             )
     return request
 
@@ -83,5 +84,6 @@ async def update_status(
         await notify_user(
             db, user.community_id, result["created_by"],
             f"Your request '{result['title']}' is now {body.status}", "work_order",
+            href="/maintenance",
         )
     return MaintenanceRequest.model_validate(result)

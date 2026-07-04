@@ -18,6 +18,7 @@ async def notify_members(
     text: str,
     type_: str,
     exclude_user_id: str | None = None,
+    href: str | None = None,
 ) -> None:
     """Notify every resident/manager in the community (not the actor)."""
     users = await db.users.find(
@@ -30,6 +31,7 @@ async def notify_members(
             text=text,
             date=_now(),
             type=type_,
+            href=href,
         ).model_dump()
         for u in users
         if u["id"] != exclude_user_id
@@ -39,7 +41,8 @@ async def notify_members(
 
 
 async def notify_user(
-    db: Any, community_id: str, user_id: str, text: str, type_: str
+    db: Any, community_id: str, user_id: str, text: str, type_: str,
+    href: str | None = None,
 ) -> None:
     await db.notifications.insert_one(
         Notification(
@@ -48,5 +51,6 @@ async def notify_user(
             text=text,
             date=_now(),
             type=type_,
+            href=href,
         ).model_dump()
     )

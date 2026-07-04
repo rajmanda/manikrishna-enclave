@@ -32,6 +32,7 @@ async def create_meeting(body: MeetingCreate, db: DB, user: CurrentUser) -> Meet
     await notify_members(
         db, user.community_id,
         f"Meeting scheduled: {meeting.title} on {meeting.date}", "meeting", user.id,
+        href="/meetings",
     )
     return meeting
 

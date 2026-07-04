@@ -5,7 +5,7 @@ import { AlarmClock, Banknote, Download, FileDown, PlusCircle } from "lucide-rea
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError, downloadFile } from "@/lib/api";
-import type { Apartment, Invoice, User } from "@/lib/types";
+import type { Apartment, Invoice, Payment, User } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
 import { invoiceTone } from "@/lib/tones";
@@ -21,6 +21,83 @@ import {
 
 const WRITER_ROLES = ["property_manager", "community_admin", "super_admin"];
 const METHODS = ["UPI", "Bank Transfer", "Cash", "Cheque", "Credit"] as const;
+const OWNER_METHODS = ["UPI", "Bank Transfer", "Cash", "Cheque"] as const;
+
+function ReportPaymentDialog({
+  invoice,
+  onClose,
+  onDone,
+}: {
+  invoice: Invoice;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const outstanding = invoice.amount - invoice.paidAmount;
+  const [amount, setAmount] = useState(String(outstanding));
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [method, setMethod] = useState<(typeof OWNER_METHODS)[number]>("UPI");
+  const [reference, setReference] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/payments/report", {
+        method: "POST",
+        body: JSON.stringify({
+          invoiceId: invoice.id,
+          amount: Number(amount),
+          date,
+          method,
+          reference,
+        }),
+      });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to report payment");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`I've paid — ${invoice.description}, ${invoice.period}`} onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <p className="text-sm text-slate-500">
+          Report the payment you made to the property manager. It shows as
+          pending until they confirm receipt.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Amount paid</label>
+            <input type="number" min="1" max={outstanding} className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          </div>
+          <div>
+            <label className={labelCls}>Date</label>
+            <input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} required />
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Method</label>
+          <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value as (typeof OWNER_METHODS)[number])}>
+            {OWNER_METHODS.map((m) => <option key={m}>{m}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Reference (UPI/NEFT id — helps quick confirmation)</label>
+          <input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. UPI-4821" />
+        </div>
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button type="submit" disabled={busy} className={primaryBtnCls}>
+          {busy ? "Submitting…" : `Report ${formatINR(Number(amount) || 0)} paid`}
+        </button>
+      </form>
+    </Modal>
+  );
+}
 
 function nextMonthLabel(): string {
   const d = new Date();
@@ -333,10 +410,16 @@ export default function InvoicesPage() {
   const mine = role === "owner" || role === "tenant";
   const canWrite = WRITER_ROLES.includes(role);
   const invoices = useApi<Invoice[]>("/invoices");
+  const payments = useApi<Payment[]>("/payments");
   const apartments = useApi<Apartment[]>(mine ? null : "/apartments");
   const users = useApi<User[]>(mine ? null : "/users");
   const [dialog, setDialog] = useState<"generate" | "latefee" | null>(null);
   const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
+  const [reportInvoice, setReportInvoice] = useState<Invoice | null>(null);
+
+  const pendingInvoiceIds = new Set(
+    (payments.data ?? []).filter((p) => p.status === "pending").map((p) => p.invoiceId)
+  );
 
   if (invoices.error)
     return <ErrorNote message={invoices.error} onRetry={invoices.reload} />;
@@ -439,10 +522,19 @@ export default function InvoicesPage() {
                 </button>
               )}
               {mine && balance > 0 && (
-                <p className="mt-2 text-xs text-slate-400">
-                  {formatINR(balance)} due — pay Vishnu via UPI/bank and he&apos;ll
-                  record it here. Online payment coming soon.
-                </p>
+                pendingInvoiceIds.has(inv.id) ? (
+                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+                    Payment reported — awaiting confirmation from the manager
+                  </p>
+                ) : (
+                  <button
+                    onClick={() => setReportInvoice(inv)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700"
+                  >
+                    <Banknote className="h-3.5 w-3.5" />
+                    I&apos;ve paid this — report payment
+                  </button>
+                )
               )}
             </div>
           );
@@ -467,7 +559,20 @@ export default function InvoicesPage() {
         <PaymentDialog
           invoice={payInvoice}
           onClose={() => setPayInvoice(null)}
-          onDone={invoices.reload}
+          onDone={() => {
+            invoices.reload();
+            payments.reload();
+          }}
+        />
+      )}
+      {reportInvoice && (
+        <ReportPaymentDialog
+          invoice={reportInvoice}
+          onClose={() => setReportInvoice(null)}
+          onDone={() => {
+            invoices.reload();
+            payments.reload();
+          }}
         />
       )}
     </div>

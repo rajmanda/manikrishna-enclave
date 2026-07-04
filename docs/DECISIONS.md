@@ -112,3 +112,12 @@ matches how societies actually run.
 **Why:** tens-to-hundreds of documents per community — an Atlas Search index
 is premature. **Follow-up:** swap to Atlas Search when a community exceeds
 ~10k documents.
+
+## D-018 · 2026-07-04 · Owners report payments; managers confirm
+**Decision:** owners cannot mark invoices paid directly — they submit a
+pending payment claim (amount/method/reference) that a manager confirms or
+rejects. Pending claims never count toward balances/income/statements.
+**Why:** the ledger is the community's collections record; payment truth must
+come from the money recipient. Owner-side agency preserved via the claim flow
+(replacing WhatsApp payment screenshots). A future payment gateway records
+directly as confirmed.

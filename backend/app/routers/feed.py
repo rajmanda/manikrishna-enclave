@@ -77,7 +77,7 @@ async def create_post(body: FeedPostCreate, db: DB, user: CurrentUser) -> FeedPo
         await notify_members(
             db, user.community_id,
             f"New announcement: {text[:60]}{'…' if len(text) > 60 else ''}",
-            "announcement", user.id,
+            "announcement", user.id, href="/feed",
         )
     return _to_out(post.model_dump(), user.id)
 

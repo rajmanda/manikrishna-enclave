@@ -82,15 +82,6 @@ PAYMENTS = [
     ("501", 3500, "2026-06-09", "Bank Transfer", "NEFT-1245"),
 ]
 
-MONTHLY_FINANCE = [
-    ("Jan", 35000, 31200, 100),
-    ("Feb", 33250, 36400, 95),
-    ("Mar", 35000, 29800, 100),
-    ("Apr", 35000, 38900, 100),
-    ("May", 31500, 30500, 90),
-    ("Jun", 25500, 44830, 73),
-]
-
 WORK_ORDERS = [
     {
         "id": "wo-1",
@@ -417,17 +408,6 @@ async def seed(db: Any) -> bool:
                 "date": date,
                 "method": method,
                 "reference": reference,
-            }
-        )
-
-    for month, income, expenses_amt, rate in MONTHLY_FINANCE:
-        await db.monthly_finance.insert_one(
-            {
-                "community_id": CID,
-                "month": month,
-                "income": income,
-                "expenses": expenses_amt,
-                "collection_rate": rate,
             }
         )
 

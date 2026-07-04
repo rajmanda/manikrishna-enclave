@@ -76,7 +76,8 @@ async def create_poll(body: PollCreate, db: DB, user: CurrentUser) -> PollOut:
     await db.polls.insert_one(poll.model_dump())
     await record_audit(db, user, "create", "polls", poll.id)
     await notify_members(
-        db, user.community_id, f"Poll open: {body.question}", "poll", user.id
+        db, user.community_id, f"Poll open: {body.question}", "poll", user.id,
+        href="/polls",
     )
     return await _to_out(db, poll.model_dump(), user.apartment_id)
 

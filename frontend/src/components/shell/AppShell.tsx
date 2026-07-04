@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -15,7 +15,7 @@ import {
 import { useAuth, useSessionUser } from "@/context/AuthContext";
 import { api, DEV_LOGIN_ENABLED } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
-import type { Community, Notification, Role } from "@/lib/types";
+import type { Community, NavBadges, Notification, Role } from "@/lib/types";
 import { Avatar, Badge } from "@/components/ui";
 import { mobilePrimary, visibleNavItems } from "./nav";
 import { GlobalSearch } from "./GlobalSearch";
@@ -73,6 +73,38 @@ function DevAccountSwitcher() {
   );
 }
 
+function NotificationItem({
+  n,
+  onClose,
+}: {
+  n: Notification;
+  onClose: () => void;
+}) {
+  const body = (
+    <>
+      <span
+        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? "bg-slate-200" : "bg-brand-500"}`}
+      />
+      <div>
+        <p className="text-sm text-slate-700">{n.text}</p>
+        <p className="mt-0.5 text-xs text-slate-400">{n.date.slice(0, 10)}</p>
+      </div>
+    </>
+  );
+  if (n.href) {
+    return (
+      <Link
+        href={n.href}
+        onClick={onClose}
+        className="flex gap-2 rounded-xl px-2 py-2.5 hover:bg-slate-50"
+      >
+        {body}
+      </Link>
+    );
+  }
+  return <div className="flex gap-2 px-2 py-2.5">{body}</div>;
+}
+
 function NotificationsPanel({
   items,
   onClose,
@@ -102,14 +134,8 @@ function NotificationsPanel({
       </div>
       <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
         {items.map((n) => (
-          <li key={n.id} className="flex gap-2 px-2 py-2.5">
-            <span
-              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? "bg-slate-200" : "bg-brand-500"}`}
-            />
-            <div>
-              <p className="text-sm text-slate-700">{n.text}</p>
-              <p className="mt-0.5 text-xs text-slate-400">{n.date.slice(0, 10)}</p>
-            </div>
+          <li key={n.id}>
+            <NotificationItem n={n} onClose={onClose} />
           </li>
         ))}
         {items.length === 0 && (
@@ -119,6 +145,15 @@ function NotificationsPanel({
         )}
       </ul>
     </div>
+  );
+}
+
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+      {count > 99 ? "99+" : count}
+    </span>
   );
 }
 
@@ -136,13 +171,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const secondary = items.filter((i) => !mobilePrimary.includes(i.href));
   const notifications = useApi<Notification[]>("/notifications");
   const communities = useApi<Community[]>("/communities");
+  const badges = useApi<NavBadges>("/dashboard/badges");
   const communityName = communities.data?.[0]?.name ?? "CommunityHub";
+
+  // Live counts per nav item — state-driven, so they clear themselves.
+  const badgeFor = (href: string): number => {
+    if (!badges.data) return 0;
+    if (href === "/invoices") return badges.data.openInvoices;
+    if (href === "/payments") return badges.data.pendingPaymentConfirmations;
+    return 0;
+  };
   const unread = (notifications.data ?? []).filter((n) => !n.read).length;
 
   async function markAllRead() {
     await api("/notifications/read-all", { method: "POST" });
     notifications.reload();
   }
+
+  const lastPath = useRef(pathname);
+  useEffect(() => {
+    if (lastPath.current !== pathname) {
+      lastPath.current = pathname;
+      badges.reload();
+      notifications.reload();
+    }
+  });
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
@@ -178,6 +231,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <Icon className="h-[18px] w-[18px]" />
               {label}
+              <NavBadge count={badgeFor(href)} />
             </Link>
           ))}
         </nav>
@@ -277,11 +331,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium ${
+              className={`relative flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium ${
                 isActive(href) ? "text-brand-600" : "text-slate-500"
               }`}
             >
-              <Icon className="h-5 w-5" />
+              <span className="relative">
+                <Icon className="h-5 w-5" />
+                {badgeFor(href) > 0 && (
+                  <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                    {badgeFor(href) > 99 ? "99+" : badgeFor(href)}
+                  </span>
+                )}
+              </span>
               {label}
             </Link>
           ))}
@@ -289,7 +350,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => setMoreOpen(true)}
             className="flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium text-slate-500"
           >
-            <Menu className="h-5 w-5" />
+            <span className="relative">
+              <Menu className="h-5 w-5" />
+              {secondary.some((i) => badgeFor(i.href) > 0) && (
+                <span className="absolute -right-1 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500" />
+              )}
+            </span>
             More
           </button>
         </div>
@@ -311,13 +377,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={href}
                   href={href}
                   onClick={() => setMoreOpen(false)}
-                  className={`flex flex-col items-center gap-1.5 rounded-2xl p-3 text-xs font-medium ${
+                  className={`relative flex flex-col items-center gap-1.5 rounded-2xl p-3 text-xs font-medium ${
                     isActive(href)
                       ? "bg-brand-50 text-brand-700"
                       : "text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  <Icon className="h-5 w-5" />
+                  <span className="relative">
+                    <Icon className="h-5 w-5" />
+                    {badgeFor(href) > 0 && (
+                      <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                        {badgeFor(href) > 99 ? "99+" : badgeFor(href)}
+                      </span>
+                    )}
+                  </span>
                   {label}
                 </Link>
               ))}

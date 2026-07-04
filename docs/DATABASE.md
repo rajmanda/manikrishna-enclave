@@ -19,12 +19,12 @@ scoped by it (see `scoped_community_id` in `backend/app/core/security.py`).
 | `users` | Members **and the login whitelist** | id, community_id, name, email (unique), role, apartment_id?, phone? |
 | `apartments` | Units | id, community_id, number (unique per community), floor, owner_ids[] |
 | `invoices` | Charges per apartment | id, community_id, apartment_id, period, description, amount, paid_amount, due_date, status (paid/due/overdue/partial), parent_invoice_id (late fees) |
-| `payments` | Receipts | id, community_id, invoice_id, apartment_id, amount, date, method (incl. "Credit" for waivers), reference |
+| `payments` | Receipts | id, community_id, invoice_id, apartment_id, amount, date, method (incl. "Credit"), reference, status (pending/confirmed — owner-reported start pending), reported_by? |
 | `expenses` | Community spend | id, community_id, category, description, vendor_id?, amount, paid_date, has_receipt, receipt_path (GCS) |
 | `work_orders` | Common-area jobs | id, community_id, title, description, priority, stage, vendor_id?, assigned_to?, estimate?, final_cost?, reported_date, photo_count, timeline[], comments[] |
 | `vendors` | Service providers | id, community_id, name, service, phone, gst?, amc_expiry?, rating, active_contracts |
 | `reserve_fund` | Monthly fund entries | community_id, month, contributions, expenses, balance |
-| `monthly_finance` | Income/expense series | community_id, month, income, expenses, collection_rate |
+| ~~`monthly_finance`~~ | Deprecated — the monthly series is computed from payments/expenses/invoices since 0.4.x | (unused) |
 | `audit_log` | Every modification | id, community_id, user_id, user_name, action, entity, entity_id, timestamp (ISO), details |
 
 M3 additions: `maintenance_requests` (id, community_id, title, description,

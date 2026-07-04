@@ -36,6 +36,14 @@ the session entrypoint; this file is the working standard.
 | an architectural choice | docs/DECISIONS.md (append a D-nnn) |
 | scope/plan | docs/ROADMAP.md + docs/FEATURES.md |
 
+## Deploy workflow (owner rule — binding)
+
+Never commit or push unverified work. Sequence: implement → verify locally
+(backend pytest, frontend build, run the flow end-to-end locally against the
+real database when feasible) → show Raj the evidence → **wait for his
+confirmation** → then commit, push, and dispatch deploy. Doc-only changes are
+batched with the next confirmed push, never pushed alone.
+
 ## Testing requirements
 
 New endpoint ⇒ happy path + RBAC denial + tenant isolation (+ audit assert

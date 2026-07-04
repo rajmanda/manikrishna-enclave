@@ -173,6 +173,19 @@ class Payment(APIModel):
     # "Credit" records an adjustment (waiver/advance) — counts toward paid.
     method: Literal["UPI", "Bank Transfer", "Cash", "Cheque", "Credit"]
     reference: str = ""
+    # Owner-reported payments start pending; only confirmed ones count.
+    status: Literal["pending", "confirmed"] = "confirmed"
+    reported_by: str | None = None
+
+
+class PaymentReport(APIModel):
+    """Owner-submitted claim that they paid an invoice offline."""
+
+    invoice_id: str
+    amount: float
+    date: str
+    method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
+    reference: str = ""
 
 
 class PaymentCreate(APIModel):
@@ -345,6 +358,7 @@ class Notification(APIModel):
     date: str
     read: bool = False
     type: str = "announcement"
+    href: str | None = None  # in-app deep link
 
 
 # ---------- Work orders ----------
@@ -437,6 +451,13 @@ class CommunitySummary(APIModel):
     reserve_fund_balance: float
 
 
+class NavBadges(APIModel):
+    """Live counts for navigation badges — state-driven, role-scoped."""
+
+    open_invoices: int = 0
+    pending_payment_confirmations: int = 0
+
+
 class ManagerDashboard(APIModel):
     outstanding_collections: float
     payments_received: float
@@ -445,6 +466,7 @@ class ManagerDashboard(APIModel):
     open_work_orders: int
     pending_approvals: int
     overdue_invoices: int
+    pending_payment_confirmations: int = 0
 
 
 # ---------- Audit ----------

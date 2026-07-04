@@ -1,10 +1,11 @@
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.security import CurrentUser
 from app.db import get_db
-from app.models import ManagerDashboard, OwnerDashboard
+from app.models import ManagerDashboard, NavBadges, OwnerDashboard
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -28,8 +29,24 @@ async def _reserve_balance(db: Any, community_id: str) -> float:
 
 
 async def _month_expenses(db: Any, community_id: str) -> float:
+    prefix = date.today().isoformat()[:7]
     docs = await db.expenses.find({"community_id": community_id}).to_list(length=1000)
-    return sum(d["amount"] for d in docs)
+    return sum(d["amount"] for d in docs if d["paid_date"].startswith(prefix))
+
+
+@router.get("/badges", response_model=NavBadges)
+async def nav_badges(db: DB, user: CurrentUser) -> NavBadges:
+    """Counts behind nav badges. Invoice count is role-scoped (owners see
+    their own apartment); pending confirmations are manager-relevant."""
+    invoice_query: dict = {"community_id": user.community_id, "status": {"$ne": "paid"}}
+    if user.role in ("owner", "tenant") and user.apartment_id:
+        invoice_query["apartment_id"] = user.apartment_id
+    return NavBadges(
+        open_invoices=await db.invoices.count_documents(invoice_query),
+        pending_payment_confirmations=await db.payments.count_documents(
+            {"community_id": user.community_id, "status": "pending"}
+        ),
+    )
 
 
 @router.get("/owner", response_model=OwnerDashboard)
@@ -71,5 +88,8 @@ async def manager_dashboard(db: DB, user: CurrentUser) -> ManagerDashboard:
         ),
         overdue_invoices=await db.invoices.count_documents(
             {"community_id": cid, "status": "overdue"}
+        ),
+        pending_payment_confirmations=await db.payments.count_documents(
+            {"community_id": cid, "status": "pending"}
         ),
     )

@@ -41,9 +41,12 @@ async def _statement_data(db: Any, community_id: str, apartment_id: str) -> dict
     invoices = await db.invoices.find(
         {"community_id": community_id, "apartment_id": apartment_id}
     ).to_list(1000)
-    payments = await db.payments.find(
-        {"community_id": community_id, "apartment_id": apartment_id}
-    ).to_list(1000)
+    payments = [
+        p for p in await db.payments.find(
+            {"community_id": community_id, "apartment_id": apartment_id}
+        ).to_list(1000)
+        if p.get("status", "confirmed") == "confirmed"
+    ]
     invoices.sort(key=lambda i: i["due_date"])
     payments.sort(key=lambda p: p["date"])
     return {

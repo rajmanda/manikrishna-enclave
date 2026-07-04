@@ -25,24 +25,50 @@ async def test_expenses_visible_to_owners(client, owner_headers):
     assert sum(e["amount"] for e in resp.json()) == 44830
 
 
-async def test_community_summary_for_owner(client, owner_headers):
-    resp = await client.get("/api/v1/finance/summary", headers=owner_headers)
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["monthIncome"] == 25500
-    assert body["monthExpenses"] == 44830
-    assert body["outstandingDues"] == 12000
-    assert body["reserveFundBalance"] == 121000
+async def test_community_summary_computed_from_real_data(client, owner_headers, manager_headers):
+    from datetime import date
+    today = date.today().isoformat()
+
+    before = (await client.get("/api/v1/finance/summary", headers=owner_headers)).json()
+    assert before["outstandingDues"] == 12000
+    assert before["reserveFundBalance"] == 121000
+
+    await client.post(
+        "/api/v1/expenses",
+        json={"category": "Water", "description": "Tanker today", "amount": 900,
+              "paidDate": today},
+        headers=manager_headers,
+    )
+    await client.post(
+        "/api/v1/payments",
+        json={"invoiceId": "inv-2606-502", "amount": 1000, "date": today,
+              "method": "UPI", "reference": "T1"},
+        headers=manager_headers,
+    )
+    after = (await client.get("/api/v1/finance/summary", headers=owner_headers)).json()
+    assert after["monthExpenses"] == before["monthExpenses"] + 900
+    assert after["monthIncome"] == before["monthIncome"] + 1000
+    assert after["outstandingDues"] == 11000
 
 
-async def test_reserve_fund_and_monthly_finance(client, owner_headers):
+async def test_reserve_fund_and_monthly_finance(client, owner_headers, manager_headers):
     reserve = await client.get("/api/v1/reserve-fund", headers=owner_headers)
     assert len(reserve.json()) == 6
     assert reserve.json()[-1]["balance"] == 121000
 
-    monthly = await client.get("/api/v1/finance/monthly", headers=owner_headers)
-    assert len(monthly.json()) == 6
-    assert monthly.json()[-1]["collectionRate"] == 73
+    # Monthly series is computed from live data: activity in the current
+    # month must land in the latest bucket.
+    from datetime import date
+    today = date.today().isoformat()
+    await client.post(
+        "/api/v1/expenses",
+        json={"category": "Repairs", "description": "Bucket test", "amount": 700,
+              "paidDate": today},
+        headers=manager_headers,
+    )
+    monthly = (await client.get("/api/v1/finance/monthly", headers=owner_headers)).json()
+    assert len(monthly) == 6
+    assert monthly[-1]["expenses"] >= 700
 
 
 async def test_work_orders_visible_to_all_members(client, owner_headers):

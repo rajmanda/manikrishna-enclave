@@ -3,9 +3,23 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
-## [Unreleased]
-
-### 2026-07-04
+## [0.4.1] — 2026-07-04
+- **Nav badges & actionable notifications:** state-driven red badges on the
+  left nav / mobile tab bar (Invoices = unpaid count, role-scoped; Payments =
+  pending confirmations for managers; "More" shows a dot when a hidden item
+  has a badge). Manager dashboard gains an amber "payments awaiting your
+  confirmation" card. All notifications now deep-link to the relevant page.
+- **Owner payment reporting:** owners tap "I've paid this" on an invoice
+  (amount/date/method/reference) → pending payment, managers notified;
+  manager Confirm applies it (recompute + owner notified), Reject removes it
+  with notification. Pending payments never count toward balances, income,
+  or statements. One open report per invoice.
+- **Financial figures computed from real data:** /finance/summary and
+  /finance/monthly now derive from payments/expenses/invoices (current
+  calendar month; 6-month series); dashboard "Monthly Expenses" is
+  current-month; demo `monthly_finance` seeding removed. Fixes Month
+  Expenses showing ₹0.
+- Community page ledger renamed "Expense Ledger".
 - Invoice generation supports a specific apartment subset (`apartmentIds`);
   the Generate dialog gained an All / Select-apartments picker with owner
   names and per-apartment checkboxes.
