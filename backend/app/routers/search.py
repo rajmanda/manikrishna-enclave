@@ -1,5 +1,6 @@
 """Global search (M4) — substring match across all modules, RBAC-scoped."""
 
+import asyncio
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
@@ -33,22 +34,35 @@ async def global_search(
                 SearchResult(category=category, title=title, subtitle=subtitle, href=href)
             )
 
-    for a in await db.apartments.find({"community_id": cid}).to_list(1000):
-        if _match(q, a["number"], f"apartment {a['number']}"):
-            add("Apartment", f"Apartment {a['number']}", f"Floor {a['floor']}", "/community")
-
-    for u in await db.users.find({"community_id": cid}).to_list(1000):
-        if _match(q, u["name"], u["email"]):
-            add("Member", u["name"], u["role"].replace("_", " "), "/community")
-
-    for v in await db.vendors.find({"community_id": cid}).to_list(1000):
-        if _match(q, v["name"], v["service"]):
-            add("Vendor", v["name"], v["service"], "/vendors")
-
     invoice_query: dict = {"community_id": cid}
     if user.role in ("owner", "tenant") and user.apartment_id:
         invoice_query["apartment_id"] = user.apartment_id
-    for i in await db.invoices.find(invoice_query).to_list(10000):
+    (apartments, users, vendors, invoices, work_orders, documents,
+     meetings, expenses, feed_posts) = await asyncio.gather(
+        db.apartments.find({"community_id": cid}).to_list(1000),
+        db.users.find({"community_id": cid}).to_list(1000),
+        db.vendors.find({"community_id": cid}).to_list(1000),
+        db.invoices.find(invoice_query).to_list(10000),
+        db.work_orders.find({"community_id": cid}).to_list(1000),
+        db.documents.find({"community_id": cid}).to_list(1000),
+        db.meetings.find({"community_id": cid}).to_list(1000),
+        db.expenses.find({"community_id": cid}).to_list(1000),
+        db.feed_posts.find({"community_id": cid}).to_list(1000),
+    )
+
+    for a in apartments:
+        if _match(q, a["number"], f"apartment {a['number']}"):
+            add("Apartment", f"Apartment {a['number']}", f"Floor {a['floor']}", "/community")
+
+    for u in users:
+        if _match(q, u["name"], u["email"]):
+            add("Member", u["name"], u["role"].replace("_", " "), "/community")
+
+    for v in vendors:
+        if _match(q, v["name"], v["service"]):
+            add("Vendor", v["name"], v["service"], "/vendors")
+
+    for i in invoices:
         if _match(q, i["description"], i["period"], i["status"]):
             add(
                 "Invoice",
@@ -57,23 +71,23 @@ async def global_search(
                 "/invoices",
             )
 
-    for w in await db.work_orders.find({"community_id": cid}).to_list(1000):
+    for w in work_orders:
         if _match(q, w["title"], w["description"], w["stage"]):
             add("Work Order", w["title"], w["stage"], f"/work-orders/{w['id']}")
 
-    for d in await db.documents.find({"community_id": cid}).to_list(1000):
+    for d in documents:
         if _match(q, d["title"], d["category"]):
             add("Document", d["title"], d["category"], "/documents")
 
-    for m in await db.meetings.find({"community_id": cid}).to_list(1000):
+    for m in meetings:
         if _match(q, m["title"], *m.get("agenda", []), *m.get("resolutions", [])):
             add("Minutes", m["title"], m["date"], "/meetings")
 
-    for e in await db.expenses.find({"community_id": cid}).to_list(1000):
+    for e in expenses:
         if _match(q, e["description"], e["category"]):
             add("Expense", e["description"], e["category"], "/community")
 
-    for p in await db.feed_posts.find({"community_id": cid}).to_list(1000):
+    for p in feed_posts:
         if _match(q, p["text"]):
             add("Feed", p["text"][:60], p["type"], "/feed")
 

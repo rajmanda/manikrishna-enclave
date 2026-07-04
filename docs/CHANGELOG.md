@@ -3,6 +3,18 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.5.1] — 2026-07-04 · Latency
+
+- **Database moved to Mumbai** (new Atlas cluster `hyderabad`, AWS ap-south-1,
+  beside the Cloud Run region): server-side latency dropped from 0.5–2.2s per
+  endpoint to ~100ms; app connects as least-privilege `rajmanda` user; all 17
+  collections migrated with verified counts; old cluster retained as frozen
+  fallback.
+- **Query parallelization** (`asyncio.gather`) in dashboards, badges, finance
+  summary/monthly, search and polls: a 7-query endpoint now costs the same as
+  a 1-query endpoint (2 round-trips total).
+- **min-instances = 1** on the API (Terraform) — no more cold starts.
+
 ## [0.5.0] — 2026-07-04
 
 - **Super-user support:** accounts can hold any number of switchable roles;

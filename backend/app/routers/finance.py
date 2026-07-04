@@ -7,6 +7,7 @@ Scoping rules:
   visible to every member (PRD transparency requirement).
 """
 
+import asyncio
 from datetime import date
 from typing import Annotated, Any
 
@@ -95,9 +96,11 @@ async def monthly_finance(db: DB, user: CurrentUser) -> list[MonthlyFinance]:
     """Computed from real payments/expenses/invoices, last 6 months.
     Collection rate = paid/billed for invoices due in that month."""
     cid = user.community_id
-    payments = await db.payments.find({"community_id": cid}).to_list(10000)
-    expenses = await db.expenses.find({"community_id": cid}).to_list(10000)
-    invoices = await db.invoices.find({"community_id": cid}).to_list(10000)
+    payments, expenses, invoices = await asyncio.gather(
+        db.payments.find({"community_id": cid}).to_list(10000),
+        db.expenses.find({"community_id": cid}).to_list(10000),
+        db.invoices.find({"community_id": cid}).to_list(10000),
+    )
     out = []
     for prefix in _last_month_prefixes():
         income = sum(
@@ -123,10 +126,12 @@ async def community_summary(db: DB, user: CurrentUser) -> CommunitySummary:
     """Computed from real data — current calendar month."""
     cid = user.community_id
     prefix = date.today().isoformat()[:7]
-    payments = await db.payments.find({"community_id": cid}).to_list(10000)
-    expenses = await db.expenses.find({"community_id": cid}).to_list(10000)
-    invoices = await db.invoices.find({"community_id": cid}).to_list(length=10000)
-    reserve = await db.reserve_fund.find({"community_id": cid}).to_list(length=1000)
+    payments, expenses, invoices, reserve = await asyncio.gather(
+        db.payments.find({"community_id": cid}).to_list(10000),
+        db.expenses.find({"community_id": cid}).to_list(10000),
+        db.invoices.find({"community_id": cid}).to_list(length=10000),
+        db.reserve_fund.find({"community_id": cid}).to_list(length=1000),
+    )
     return CommunitySummary(
         month_income=sum(
             p["amount"] for p in payments

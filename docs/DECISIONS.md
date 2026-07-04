@@ -130,3 +130,13 @@ request re-reads it, so RBAC and data scoping genuinely follow the switch.
 serving manager-scoped data; the owner asked to *experience* the owner view.
 **Trade-off:** active role is global per account (all devices/sessions see
 the same view) — acceptable, arguably a feature.
+
+## D-020 · 2026-07-04 · Database co-located with compute (Mumbai)
+**Decision:** migrated from the shared `cluster0` (far from asia-south1,
+~270ms/query) to a dedicated Atlas cluster in AWS Mumbai next to Cloud Run;
+multi-query endpoints parallelized with asyncio.gather; API min-instances=1.
+**Why:** every request paid 2–7 sequential cross-ocean round-trips — Vishnu
+(India) saw 0.5–2.2s per call. Rule: the database lives next to the compute;
+clients cross the ocean once, the app would otherwise cross it N times.
+**Amends D-004:** still Raj's Atlas account, but a dedicated, region-matched
+cluster per app rather than one shared cluster for everything.

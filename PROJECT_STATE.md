@@ -4,7 +4,7 @@ Last updated: 2026-07-03
 
 | Field | Value |
 |---|---|
-| Current version | 0.5.0 |
+| Current version | 0.5.1 |
 | Current milestone | **M4 Governance — complete. PRD Phases 1–4 fully shipped.** Next: M5 (AI, mobile) or hardening |
 | Current sprint | M4 complete |
 | Current branch | main (github.com/rajmanda/manikrishna-enclave, public) |

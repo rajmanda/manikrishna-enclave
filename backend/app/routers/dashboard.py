@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from typing import Annotated, Any
 
@@ -41,11 +42,15 @@ async def nav_badges(db: DB, user: CurrentUser) -> NavBadges:
     invoice_query: dict = {"community_id": user.community_id, "status": {"$ne": "paid"}}
     if user.role in ("owner", "tenant") and user.apartment_id:
         invoice_query["apartment_id"] = user.apartment_id
-    return NavBadges(
-        open_invoices=await db.invoices.count_documents(invoice_query),
-        pending_payment_confirmations=await db.payments.count_documents(
+    open_inv, pending_pay = await asyncio.gather(
+        db.invoices.count_documents(invoice_query),
+        db.payments.count_documents(
             {"community_id": user.community_id, "status": "pending"}
         ),
+    )
+    return NavBadges(
+        open_invoices=open_inv,
+        pending_payment_confirmations=pending_pay,
     )
 
 
@@ -55,17 +60,21 @@ async def owner_dashboard(db: DB, user: CurrentUser) -> OwnerDashboard:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="User has no apartment assigned"
         )
-    invoices = await db.invoices.find(
-        {"community_id": user.community_id, "apartment_id": user.apartment_id}
-    ).to_list(length=1000)
-    open_wos = await db.work_orders.count_documents(
-        {"community_id": user.community_id, "stage": {"$in": OPEN_STAGES}}
+    invoices, open_wos, month_exp, reserve = await asyncio.gather(
+        db.invoices.find(
+            {"community_id": user.community_id, "apartment_id": user.apartment_id}
+        ).to_list(length=1000),
+        db.work_orders.count_documents(
+            {"community_id": user.community_id, "stage": {"$in": OPEN_STAGES}}
+        ),
+        _month_expenses(db, user.community_id),
+        _reserve_balance(db, user.community_id),
     )
     return OwnerDashboard(
         outstanding_balance=sum(i["amount"] - i["paid_amount"] for i in invoices),
         open_work_orders=open_wos,
-        month_expenses=await _month_expenses(db, user.community_id),
-        reserve_fund_balance=await _reserve_balance(db, user.community_id),
+        month_expenses=month_exp,
+        reserve_fund_balance=reserve,
     )
 
 
@@ -74,22 +83,27 @@ async def manager_dashboard(db: DB, user: CurrentUser) -> ManagerDashboard:
     if user.role not in ("property_manager", "community_admin", "auditor", "super_admin"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Managers only")
     cid = user.community_id
-    invoices = await db.invoices.find({"community_id": cid}).to_list(length=10000)
+    (invoices, month_exp, reserve, open_wos, approvals, overdue, pending_pay
+     ) = await asyncio.gather(
+        db.invoices.find({"community_id": cid}).to_list(length=10000),
+        _month_expenses(db, cid),
+        _reserve_balance(db, cid),
+        db.work_orders.count_documents(
+            {"community_id": cid, "stage": {"$in": OPEN_STAGES}}
+        ),
+        db.work_orders.count_documents(
+            {"community_id": cid, "stage": {"$in": APPROVAL_STAGES}}
+        ),
+        db.invoices.count_documents({"community_id": cid, "status": "overdue"}),
+        db.payments.count_documents({"community_id": cid, "status": "pending"}),
+    )
     return ManagerDashboard(
         outstanding_collections=sum(i["amount"] - i["paid_amount"] for i in invoices),
         payments_received=sum(i["paid_amount"] for i in invoices),
-        month_expenses=await _month_expenses(db, cid),
-        reserve_fund_balance=await _reserve_balance(db, cid),
-        open_work_orders=await db.work_orders.count_documents(
-            {"community_id": cid, "stage": {"$in": OPEN_STAGES}}
-        ),
-        pending_approvals=await db.work_orders.count_documents(
-            {"community_id": cid, "stage": {"$in": APPROVAL_STAGES}}
-        ),
-        overdue_invoices=await db.invoices.count_documents(
-            {"community_id": cid, "status": "overdue"}
-        ),
-        pending_payment_confirmations=await db.payments.count_documents(
-            {"community_id": cid, "status": "pending"}
-        ),
+        month_expenses=month_exp,
+        reserve_fund_balance=reserve,
+        open_work_orders=open_wos,
+        pending_approvals=approvals,
+        overdue_invoices=overdue,
+        pending_payment_confirmations=pending_pay,
     )

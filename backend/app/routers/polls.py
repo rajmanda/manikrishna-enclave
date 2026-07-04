@@ -30,15 +30,18 @@ def _effective_status(doc: dict) -> str:
     return "open"
 
 
-async def _to_out(db: Any, doc: dict, user_apartment: str | None) -> PollOut:
+async def _to_out(
+    db: Any, doc: dict, user_apartment: str | None, eligible: int | None = None
+) -> PollOut:
     votes_by: dict = doc.get("votes_by", {})
     counts = {label: 0 for label in doc.get("option_labels", [])}
     for label in votes_by.values():
         if label in counts:
             counts[label] += 1
-    eligible = await db.apartments.count_documents(
-        {"community_id": doc["community_id"]}
-    )
+    if eligible is None:
+        eligible = await db.apartments.count_documents(
+            {"community_id": doc["community_id"]}
+        )
     return PollOut(
         id=doc["id"],
         community_id=doc["community_id"],
@@ -57,7 +60,10 @@ async def _to_out(db: Any, doc: dict, user_apartment: str | None) -> PollOut:
 async def list_polls(db: DB, user: CurrentUser) -> list[PollOut]:
     docs = await db.polls.find({"community_id": user.community_id}).to_list(1000)
     docs.sort(key=lambda d: d["open_date"], reverse=True)
-    return [await _to_out(db, d, user.apartment_id) for d in docs]
+    eligible = await db.apartments.count_documents(
+        {"community_id": user.community_id}
+    )
+    return [await _to_out(db, d, user.apartment_id, eligible) for d in docs]
 
 
 @router.post("", response_model=PollOut, status_code=status.HTTP_201_CREATED, dependencies=[Writer])
