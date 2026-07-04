@@ -9,14 +9,20 @@ from app.core.config import get_settings
 from app.migrations import run_migrations
 from app.routers import (
     apartments,
+    audit_log,
     auth,
     communities,
     dashboard,
+    documents,
     feed,
     finance,
     invoices,
     maintenance,
+    meetings,
     notifications,
+    polls,
+    reports,
+    search,
     statements,
     users,
     vendors,
@@ -74,6 +80,12 @@ app.include_router(statements.router, prefix=API_PREFIX)
 app.include_router(maintenance.router, prefix=API_PREFIX)
 app.include_router(feed.router, prefix=API_PREFIX)
 app.include_router(notifications.router, prefix=API_PREFIX)
+app.include_router(polls.router, prefix=API_PREFIX)
+app.include_router(documents.router, prefix=API_PREFIX)
+app.include_router(meetings.router, prefix=API_PREFIX)
+app.include_router(search.router, prefix=API_PREFIX)
+app.include_router(reports.router, prefix=API_PREFIX)
+app.include_router(audit_log.router, prefix=API_PREFIX)
 app.include_router(work_orders.router, prefix=API_PREFIX)
 app.include_router(vendors.router, prefix=API_PREFIX)
 

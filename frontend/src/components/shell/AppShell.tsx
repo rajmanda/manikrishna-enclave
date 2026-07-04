@@ -15,8 +15,7 @@ import {
 import { useAuth, useSessionUser } from "@/context/AuthContext";
 import { api, DEV_LOGIN_ENABLED } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
-import { community } from "@/lib/data";
-import type { Notification, Role } from "@/lib/types";
+import type { Community, Notification, Role } from "@/lib/types";
 import { Avatar, Badge } from "@/components/ui";
 import { mobilePrimary, visibleNavItems } from "./nav";
 import { GlobalSearch } from "./GlobalSearch";
@@ -136,6 +135,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const primary = items.filter((i) => mobilePrimary.includes(i.href));
   const secondary = items.filter((i) => !mobilePrimary.includes(i.href));
   const notifications = useApi<Notification[]>("/notifications");
+  const communities = useApi<Community[]>("/communities");
+  const communityName = communities.data?.[0]?.name ?? "CommunityHub";
   const unread = (notifications.data ?? []).filter((n) => !n.read).length;
 
   async function markAllRead() {
@@ -161,7 +162,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
           <div>
             <p className="text-sm font-bold leading-tight">CommunityHub</p>
-            <p className="text-xs text-slate-500">{community.name}</p>
+            <p className="text-xs text-slate-500">{communityName}</p>
           </div>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
@@ -209,7 +210,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Building2 className="h-[18px] w-[18px]" />
             </span>
             <p className="mr-auto truncate text-sm font-semibold lg:hidden">
-              {community.name}
+              {communityName}
             </p>
 
             {/* Desktop search trigger */}

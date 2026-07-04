@@ -14,6 +14,10 @@ from app.core.security import CurrentUser
 from app.db import get_db
 from app.models import User
 
+
+def _latin1(text) -> str:
+    return str(text).encode("latin-1", "replace").decode("latin-1")
+
 router = APIRouter(tags=["statements"])
 
 DB = Annotated[Any, Depends(get_db)]
@@ -63,7 +67,7 @@ async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Respons
     pdf.add_page()
 
     pdf.set_font("helvetica", "B", 16)
-    pdf.cell(0, 10, d["community"]["name"], new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 10, _latin1(d["community"]["name"]), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("helvetica", "", 10)
     pdf.cell(
         0, 6,
@@ -71,7 +75,7 @@ async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Respons
         new_x="LMARGIN", new_y="NEXT",
     )
     if d["owner"]:
-        pdf.cell(0, 6, f"Owner: {d['owner']['name']}", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, _latin1(f"Owner: {d['owner']['name']}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
     # Invoices table
@@ -89,7 +93,7 @@ async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Respons
         total_paid += inv["paid_amount"]
         cells = (
             inv["period"],
-            inv["description"][:40],
+            _latin1(inv["description"])[:40],
             f"Rs {inv['amount']:,.0f}",
             f"Rs {inv['paid_amount']:,.0f}",
             inv["status"],
@@ -114,7 +118,7 @@ async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Respons
     pdf.ln()
     pdf.set_font("helvetica", "", 9)
     for p in d["payments"]:
-        cells = (p["date"], f"Rs {p['amount']:,.0f}", p["method"], p["reference"])
+        cells = (p["date"], f"Rs {p['amount']:,.0f}", p["method"], _latin1(p["reference"]))
         for w, c in zip(pwidths, cells):
             pdf.cell(w, 6, str(c), border=1)
         pdf.ln()

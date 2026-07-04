@@ -3,6 +3,26 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.4.0] — 2026-07-04 · M4 Governance module
+
+- Polls: create (notifies members), one-vote-per-apartment with revoting,
+  auto-close by date + manual close, results with turnout and myVote.
+- Documents: versioned uploads to GCS (v1, v2, …), latest-version download,
+  category filter + search, delete; legacy seed entries marked
+  "not digitised yet".
+- Meetings: CRUD (creation notifies members), agenda/resolutions editing,
+  minutes PDF upload/download.
+- Global search endpoint across apartments/members/vendors/invoices
+  (RBAC-scoped)/work orders/documents/minutes/expenses/feed; search overlay
+  now server-backed with debounce.
+- Report PDFs: collection, expense, vendor-spend (manager/auditor only);
+  reports page wired to real downloads.
+- Audit-log endpoint + viewer page (manager/admin/auditor nav item).
+- fpdf2 output sanitized to latin-1 (em-dashes no longer crash PDFs).
+- Migration 003 backfills governance collections; schema v3.
+- Frontend fully API-driven — `src/lib/data.ts` deleted.
+- Tests 54 → 64.
+
 ## [0.3.0] — 2026-07-04 · M3 Operations module
 
 - Work orders: create (notifies members), update, stage transitions with

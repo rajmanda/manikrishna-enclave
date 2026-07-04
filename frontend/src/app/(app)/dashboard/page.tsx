@@ -13,16 +13,18 @@ import {
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import type {
+  FeedPost,
   Invoice,
   ManagerDashboardData,
+  Meeting,
   MonthlyFinance,
   OwnerDashboardData,
   Payment,
   ReserveFundEntry,
+  User,
   WorkOrder,
 } from "@/lib/types";
-// Feed and meetings have no backend yet (Phase 3/4) — still seed data.
-import { feedPosts, meetings, userById } from "@/lib/data";
+import { userName } from "@/lib/lookup";
 import { formatDate, formatINR } from "@/lib/format";
 import { stageTone } from "@/lib/tones";
 import {
@@ -60,6 +62,9 @@ function OwnerDashboard() {
   const invoices = useApi<Invoice[]>("/invoices");
   const payments = useApi<Payment[]>("/payments");
   const workOrders = useApi<WorkOrder[]>("/work-orders");
+  const feed = useApi<FeedPost[]>("/feed");
+  const meetings = useApi<Meeting[]>("/meetings");
+  const users = useApi<User[]>("/users");
 
   const error = summary.error ?? invoices.error ?? workOrders.error;
   if (error) return <ErrorNote message={error} onRetry={summary.reload} />;
@@ -69,8 +74,8 @@ function OwnerDashboard() {
   const openWorkOrders = (workOrders.data ?? []).filter((w) =>
     OPEN_STAGES.includes(w.stage)
   );
-  const announcements = feedPosts.filter((p) => p.type === "announcement");
-  const nextMeeting = meetings.find((m) => m.resolutions.length === 0);
+  const announcements = (feed.data ?? []).filter((p) => p.type === "announcement");
+  const nextMeeting = (meetings.data ?? []).find((m) => m.resolutions.length === 0);
   const firstName = user.name.split(" ")[0];
 
   return (
@@ -210,7 +215,7 @@ function OwnerDashboard() {
                 <div className="min-w-0">
                   <p className="line-clamp-2 text-sm text-slate-700">{post.text}</p>
                   <p className="mt-1 text-xs text-slate-400">
-                    {userById(post.authorId)?.name} · {formatDate(post.date)}
+                    {userName(users.data, post.authorId)} · {formatDate(post.date)}
                   </p>
                 </div>
               </div>

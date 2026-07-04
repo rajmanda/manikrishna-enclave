@@ -218,6 +218,72 @@ FEED_COMMENTS = {
 }
 
 
+POLLS = [
+    ("poll-1", "Approve Lift Door Sensor Replacement (Rs 8,500)", "Sree Lift Services quoted Rs 8,500. Taken from the reserve fund.", "2026-06-25", "2026-06-27", "closed", ["Approve", "Reject", "Need more quotes"],
+     {"apt-101": "Approve", "apt-102": "Approve", "apt-201": "Reject", "apt-202": "Approve", "apt-301": "Approve", "apt-302": "Approve", "apt-401": "Need more quotes", "apt-402": "Approve", "apt-501": "Approve", "apt-502": "Approve"}),
+    ("poll-2", "Approve Roof Waterproofing (Rs 12,000)", "Waterproofing for the Block A stairwell leakage (see work order wo-5).", "2026-07-01", "2026-07-08", "open", ["Approve", "Reject", "Get another quote"],
+     {"apt-101": "Approve", "apt-202": "Approve", "apt-302": "Approve", "apt-402": "Get another quote", "apt-501": "Approve"}),
+    ("poll-3", "Increase Monthly Maintenance to Rs 4,000 from August", "Rising electricity and security costs.", "2026-06-20", "2026-07-10", "open", ["Approve", "Reject"],
+     {"apt-101": "Approve", "apt-201": "Reject", "apt-301": "Reject", "apt-402": "Approve", "apt-501": "Approve", "apt-502": "Reject"}),
+]
+
+DOCUMENTS = [
+    ("doc-1", "Society Rules & Bye-laws", "Society Rules", "2026-01-15", 3, 840, "pdf"),
+    ("doc-2", "Building Insurance Policy 2026-27", "Insurance", "2026-04-01", 1, 1220, "pdf"),
+    ("doc-3", "Water Bill - June 2026", "Water Bills", "2026-06-14", 1, 180, "pdf"),
+    ("doc-4", "Electricity Bill - June 2026", "Electric Bills", "2026-06-16", 1, 210, "pdf"),
+    ("doc-5", "Audit Report FY 2025-26", "Audit Reports", "2026-05-20", 2, 2400, "pdf"),
+    ("doc-6", "AGM Minutes - April 2026", "AGM Minutes", "2026-04-28", 1, 460, "pdf"),
+    ("doc-7", "Approved Building Plan", "Building Plans", "2026-01-10", 1, 5300, "image"),
+    ("doc-8", "Lift AMC Contract - Sree Lift Services", "Contracts", "2026-01-05", 2, 620, "pdf"),
+    ("doc-9", "Security Contract - Guardian Agency", "Contracts", "2026-03-28", 1, 580, "pdf"),
+]
+
+MEETINGS = [
+    ("meet-1", "Annual General Meeting 2026", "2026-04-26", 9,
+     ["FY 2025-26 accounts review", "Election of committee members", "Maintenance charge revision discussion", "Painting project planning"],
+     ["Accounts approved unanimously", "Vishnu re-appointed as property manager", "Maintenance revision moved to community poll"]),
+    ("meet-2", "Emergency Meeting - Lift Breakdown", "2026-06-26", 7,
+     ["Lift door sensor failure", "Vendor quote review", "Temporary arrangements for senior citizens"],
+     ["Approved Rs 8,500 sensor replacement via poll", "Watchman to assist seniors during lift downtime"]),
+    ("meet-3", "Monthly Committee Meeting - July", "2026-07-06", 0,
+     ["Roof waterproofing decision", "Maintenance increase poll results", "Diwali event planning kickoff"],
+     []),
+]
+
+
+async def seed_m4(db: Any) -> bool:
+    """Seed governance collections if empty (also used by migration 003)."""
+    if await db.communities.find_one({"id": CID}) is None:
+        return False
+    changed = False
+    if await db.polls.find_one({"community_id": CID}) is None:
+        for pid, q, desc, od, cd, pstatus, options, votes in POLLS:
+            await db.polls.insert_one(
+                {"id": pid, "community_id": CID, "question": q, "description": desc,
+                 "open_date": od, "close_date": cd, "status": pstatus,
+                 "option_labels": options, "votes_by": votes}
+            )
+        changed = True
+    if await db.documents.find_one({"community_id": CID}) is None:
+        for did, title, cat, up, ver, kb, ft in DOCUMENTS:
+            await db.documents.insert_one(
+                {"id": did, "community_id": CID, "title": title, "category": cat,
+                 "uploaded_date": up, "version": ver, "size_kb": kb,
+                 "file_type": ft, "path": None, "uploaded_by": "u-vishnu"}
+            )
+        changed = True
+    if await db.meetings.find_one({"community_id": CID}) is None:
+        for mid, title, mdate, att, agenda, resolutions in MEETINGS:
+            await db.meetings.insert_one(
+                {"id": mid, "community_id": CID, "title": title, "date": mdate,
+                 "attendance": att, "agenda": agenda, "resolutions": resolutions,
+                 "has_pdf": False, "has_audio": False, "minutes_path": None}
+            )
+        changed = True
+    return changed
+
+
 async def seed_m3(db: Any) -> bool:
     """Seed M3 collections if empty. Safe to call repeatedly; also used by
     migration 002 to backfill databases seeded before M3 existed."""
@@ -380,6 +446,7 @@ async def seed(db: Any) -> bool:
         )
 
     await seed_m3(db)
+    await seed_m4(db)
     return True
 
 

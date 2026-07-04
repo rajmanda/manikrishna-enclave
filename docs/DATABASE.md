@@ -34,8 +34,12 @@ visibility private/community, status, created_by, created_date), `feed_posts`
 community_id, user_id, text, date ISO, read, type). `work_orders` gained
 `photos[]` (GCS paths).
 
-Planned (Phase 4): `polls`, `documents`, `meetings` — shapes exist in
-`frontend/src/lib/types.ts`.
+M4 additions: `polls` (id, community_id, question, description, open/close
+dates, status, option_labels[], votes_by {apartment_id→label} — one vote per
+apartment), `documents` (id, community_id, title, category, uploaded_date,
+version, size_kb, file_type, path GCS|null, uploaded_by), `meetings` (id,
+community_id, title, date, attendance, agenda[], resolutions[], has_pdf,
+minutes_path). All PRD collections now exist.
 
 ## Indexes (`app/db.py::ensure_indexes`, created at startup)
 
@@ -70,7 +74,8 @@ startup; current version in `meta` ({"id": "schema", "version": N}).
 |---|---|
 | 001 | `communities.monthly_maintenance` default 3500 |
 | 002 | Backfill M3 collections (feed, maintenance) into pre-M3 databases |
+| 003 | Backfill M4 collections (polls, documents, meetings) |
 
-Schema version: **2**.
+Schema version: **3**.
 
 **Policy:** update this file in the same change as any schema modification.

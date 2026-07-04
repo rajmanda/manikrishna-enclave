@@ -4,15 +4,15 @@ Last updated: 2026-07-03
 
 | Field | Value |
 |---|---|
-| Current version | 0.3.0 |
-| Current milestone | **M3 Operations — complete**; next: M4 Governance (polls, documents, minutes, reports, email) |
-| Current sprint | M3 complete |
+| Current version | 0.4.0 |
+| Current milestone | **M4 Governance — complete. PRD Phases 1–4 fully shipped.** Next: M5 (AI, mobile) or hardening |
+| Current sprint | M4 complete |
 | Current branch | main (github.com/rajmanda/manikrishna-enclave, public) |
-| Last completed feature | M3: work-order lifecycle, maintenance requests, vendor CRUD, feed, notifications |
+| Last completed feature | M4: polls, versioned documents, meetings, report PDFs, search, audit viewer |
 | Current feature | — |
-| Next priority | M4 Governance module |
+| Next priority | Owner decision: M5 features vs hardening (email provider, staging, payment gateway) |
 | Deployment status | **Live at https://community.rajmanda.com** (Cloud Run, asia-south1) |
-| Database version | Schema v2 (migrations 001-002); Atlas `cluster0.sod5j`, DB `manikrishna_enclave` |
+| Database version | Schema v3 (migrations 001-003); Atlas `cluster0.sod5j`, DB `manikrishna_enclave` |
 | Infrastructure version | Terraform applied — 35 resources (incl. GCS media bucket), state in gs://mm-owners-5b8611-tfstate |
 | Last deployment | 2026-07-03 via deploy.yml (manual dispatch) |
 
@@ -44,9 +44,9 @@ Last updated: 2026-07-03
   global HTTPS LB with same-origin /api/* routing), deploy workflow via WIF,
   first production deploy with health checks, full docs/ set.
 
-## Still on seed data (frontend)
+## Seed data status
 
-Polls, documents, meetings, global search (backends land M4).
+None — `frontend/src/lib/data.ts` deleted in M4; every screen is API-driven.
 
 ## Known issues
 

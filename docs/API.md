@@ -106,6 +106,23 @@ cross-tenant, 409 conflict).
 | GET | `/notifications` | own | Latest 50 |
 | POST | `/notifications/read-all` · `/notifications/{id}/read` | own | |
 
+## Governance (M4)
+
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET/POST | `/polls` | create: manager/admin | List includes counts, `myVote`, auto-close by date; creation notifies members |
+| POST | `/polls/{id}/vote` | members with an apartment | **One vote per apartment** (revotable while open); 409 when closed |
+| POST | `/polls/{id}/close` · DELETE `/polls/{id}` | manager/admin | |
+| GET/POST | `/documents` | upload: manager/admin | Multipart + title/category; versioned on GCS |
+| POST | `/documents/{id}/file` | manager/admin | New version (bumps `version`) |
+| GET | `/documents/{id}/file` | any member | Streams latest version; 404 for legacy metadata-only entries |
+| DELETE | `/documents/{id}` | manager/admin | |
+| GET/POST/PATCH/DELETE | `/meetings[/{id}]` | write: manager/admin | Creation notifies members |
+| POST/GET | `/meetings/{id}/minutes` | upload: manager/admin; read: members | Minutes PDF on GCS |
+| GET | `/search?q=` | any member | Cross-module substring search (RBAC-scoped invoices), max 15 results |
+| GET | `/reports/collection.pdf` · `/reports/expenses.pdf` · `/reports/vendor-spend.pdf` | manager/admin/auditor | fpdf2 |
+| GET | `/audit-log?limit=` | manager/admin/auditor | Newest first, max 500 |
+
 ## Health
 
 | Method | Path | Access |

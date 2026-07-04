@@ -24,6 +24,12 @@ Last updated: 2026-07-03. M1 approved and executed 2026-07-03.
   maintenance requests with visibility rules, vendor CRUD, community feed
   (reactions/comments/pins), in-app notifications with live bell.
 
+- **M4 — Governance module (2026-07-04):** polls (one vote per apartment),
+  versioned documents on GCS, meeting minutes with PDF upload, report PDFs,
+  global search endpoint, audit-log viewer. Frontend now 100% API-driven
+  (seed data file deleted). **Deferred:** email/push notification delivery —
+  blocked on provider choice (owner decision).
+
 ## Upcoming milestones
 
 ### M4 — Governance module (PRD Phase 4)

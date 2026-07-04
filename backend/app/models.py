@@ -459,3 +459,97 @@ class AuditEntry(APIModel):
     entity_id: str
     timestamp: str
     details: dict = {}
+
+
+# ---------- Governance (M4) ----------
+
+
+class PollOptionOut(APIModel):
+    label: str
+    votes: int
+
+
+class Poll(APIModel):
+    # Stored shape - one vote per apartment (votes_by: apartment_id -> label).
+    id: str = Field(default_factory=lambda: new_id("poll"))
+    community_id: str
+    question: str
+    description: str = ""
+    open_date: str
+    close_date: str
+    status: Literal["open", "closed"] = "open"
+    option_labels: list[str] = []
+    votes_by: dict[str, str] = {}
+
+
+class PollOut(APIModel):
+    id: str
+    community_id: str
+    question: str
+    description: str
+    open_date: str
+    close_date: str
+    status: str
+    options: list[PollOptionOut]
+    total_eligible: int
+    my_vote: str | None = None
+
+
+class PollCreate(APIModel):
+    question: str
+    description: str = ""
+    close_date: str
+    options: list[str]
+
+
+class VoteRequest(APIModel):
+    option: str
+
+
+class CommunityDocument(APIModel):
+    id: str = Field(default_factory=lambda: new_id("doc"))
+    community_id: str
+    title: str
+    category: str
+    uploaded_date: str
+    version: int = 1
+    size_kb: int = 0
+    file_type: Literal["pdf", "image", "sheet"] = "pdf"
+    path: str | None = None  # None for legacy metadata-only entries
+    uploaded_by: str | None = None
+
+
+class Meeting(APIModel):
+    id: str = Field(default_factory=lambda: new_id("meet"))
+    community_id: str
+    title: str
+    date: str
+    attendance: int = 0
+    agenda: list[str] = []
+    resolutions: list[str] = []
+    has_pdf: bool = False
+    has_audio: bool = False
+    minutes_path: str | None = None
+
+
+class MeetingCreate(APIModel):
+    title: str
+    date: str
+    attendance: int = 0
+    agenda: list[str] = []
+    resolutions: list[str] = []
+
+
+class MeetingUpdate(APIModel):
+    title: str | None = None
+    date: str | None = None
+    attendance: int | None = None
+    agenda: list[str] | None = None
+    resolutions: list[str] | None = None
+
+
+class SearchResult(APIModel):
+    category: str
+    title: str
+    subtitle: str
+    href: str

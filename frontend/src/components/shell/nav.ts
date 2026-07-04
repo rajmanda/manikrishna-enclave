@@ -12,6 +12,7 @@ import {
   Wrench,
   ClipboardList,
   BarChart3,
+  ScrollText,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -37,6 +38,7 @@ export const navItems: NavItem[] = [
   { label: "Vendors", href: "/vendors", icon: Store, roles: ["property_manager", "community_admin", "auditor", "super_admin"] },
   { label: "Reserve Fund", href: "/reserve-fund", icon: PiggyBank },
   { label: "Reports", href: "/reports", icon: BarChart3, roles: ["property_manager", "community_admin", "auditor", "super_admin"] },
+  { label: "Audit Log", href: "/audit", icon: ScrollText, roles: ["property_manager", "community_admin", "auditor", "super_admin"] },
 ];
 
 // The 4 primary destinations on the mobile bottom bar (plus "More").

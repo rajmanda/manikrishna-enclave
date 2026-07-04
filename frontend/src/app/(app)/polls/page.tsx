@@ -1,21 +1,106 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Clock } from "lucide-react";
+import { CheckCircle2, Clock, PlusCircle, XCircle } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
-import { polls } from "@/lib/data";
-import { formatDate } from "@/lib/format";
+import { useApi } from "@/hooks/useApi";
+import { api, ApiError } from "@/lib/api";
 import type { Poll } from "@/lib/types";
-import { Badge, Card, PageTitle, ProgressBar } from "@/components/ui";
+import { formatDate } from "@/lib/format";
+import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
+import {
+  Badge,
+  Card,
+  ErrorNote,
+  PageLoading,
+  PageTitle,
+  ProgressBar,
+} from "@/components/ui";
 
-function PollCard({ poll }: { poll: Poll }) {
-  const { role } = useSessionUser();
-  const [votedFor, setVotedFor] = useState<string | null>(null);
-  const canVote = poll.status === "open" && role === "owner" && !votedFor;
+const WRITER_ROLES = ["property_manager", "community_admin", "super_admin"];
 
-  const totalVotes =
-    poll.options.reduce((s, o) => s + o.votes, 0) + (votedFor ? 1 : 0);
-  const turnout = Math.round((totalVotes / poll.totalEligible) * 100);
+function NewPollDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [question, setQuestion] = useState("");
+  const [description, setDescription] = useState("");
+  const [closeDate, setCloseDate] = useState("");
+  const [options, setOptions] = useState("Approve\nReject");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/polls", {
+        method: "POST",
+        body: JSON.stringify({
+          question,
+          description,
+          closeDate,
+          options: options.split("\n").map((o) => o.trim()).filter(Boolean),
+        }),
+      });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create poll");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="New Poll" onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <div>
+          <label className={labelCls}>Question</label>
+          <input className={inputCls} value={question} onChange={(e) => setQuestion(e.target.value)} required />
+        </div>
+        <div>
+          <label className={labelCls}>Description</label>
+          <textarea rows={2} className={inputCls} value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+        <div>
+          <label className={labelCls}>Voting closes on</label>
+          <input type="date" className={inputCls} value={closeDate} onChange={(e) => setCloseDate(e.target.value)} required />
+        </div>
+        <div>
+          <label className={labelCls}>Options (one per line)</label>
+          <textarea rows={3} className={inputCls} value={options} onChange={(e) => setOptions(e.target.value)} />
+        </div>
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button type="submit" disabled={busy} className={primaryBtnCls}>
+          {busy ? "Creating…" : "Open poll (members are notified)"}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function PollCard({ poll, onChanged }: { poll: Poll; onChanged: () => void }) {
+  const { user, role } = useSessionUser();
+  const canManage = WRITER_ROLES.includes(role);
+  const canVote = poll.status === "open" && !!user.apartmentId;
+  const [error, setError] = useState<string | null>(null);
+
+  const totalVotes = poll.options.reduce((s, o) => s + o.votes, 0);
+  const turnout = poll.totalEligible
+    ? Math.round((totalVotes / poll.totalEligible) * 100)
+    : 0;
+  const maxVotes = Math.max(...poll.options.map((o) => o.votes), 0);
+
+  async function vote(option: string) {
+    setError(null);
+    try {
+      await api(`/polls/${poll.id}/vote`, {
+        method: "POST",
+        body: JSON.stringify({ option }),
+      });
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Vote failed");
+    }
+  }
 
   return (
     <Card className="p-4 sm:p-5">
@@ -27,38 +112,52 @@ function PollCard({ poll }: { poll: Poll }) {
           <Clock className="h-3 w-3" />
           {formatDate(poll.openDate)} – {formatDate(poll.closeDate)}
         </span>
+        {canManage && poll.status === "open" && (
+          <button
+            onClick={async () => {
+              await api(`/polls/${poll.id}/close`, { method: "POST" });
+              onChanged();
+            }}
+            className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-red-600"
+          >
+            <XCircle className="h-3.5 w-3.5" /> Close poll
+          </button>
+        )}
       </div>
 
       <h2 className="mt-2.5 text-base font-semibold">{poll.question}</h2>
-      <p className="mt-1 text-sm text-slate-500">{poll.description}</p>
+      {poll.description && (
+        <p className="mt-1 text-sm text-slate-500">{poll.description}</p>
+      )}
 
       <div className="mt-4 space-y-3">
         {poll.options.map((opt) => {
-          const votes = opt.votes + (votedFor === opt.label ? 1 : 0);
-          const pct = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
-          const leading =
-            poll.status === "closed" &&
-            votes === Math.max(...poll.options.map((o) => o.votes));
+          const pct = totalVotes > 0 ? Math.round((opt.votes / totalVotes) * 100) : 0;
+          const leading = poll.status === "closed" && opt.votes === maxVotes && maxVotes > 0;
+          const mine = poll.myVote === opt.label;
           return (
             <div key={opt.label}>
               <div className="mb-1 flex items-center justify-between gap-2">
                 {canVote ? (
                   <button
-                    onClick={() => setVotedFor(opt.label)}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700"
+                    onClick={() => vote(opt.label)}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                      mine
+                        ? "border-brand-500 bg-brand-50 text-brand-700"
+                        : "border-slate-200 text-slate-700 hover:border-brand-400 hover:bg-brand-50"
+                    }`}
                   >
-                    Vote — {opt.label}
+                    {mine && <CheckCircle2 className="mr-1 inline h-4 w-4 text-brand-600" />}
+                    {opt.label}
                   </button>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-700">
                     {opt.label}
-                    {votedFor === opt.label && (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    )}
+                    {mine && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
                   </span>
                 )}
                 <span className="text-xs font-semibold text-slate-500">
-                  {pct}% · {votes} vote{votes === 1 ? "" : "s"}
+                  {pct}% · {opt.votes} vote{opt.votes === 1 ? "" : "s"}
                 </span>
               </div>
               <ProgressBar value={pct} tone={leading ? "green" : "brand"} />
@@ -67,36 +166,55 @@ function PollCard({ poll }: { poll: Poll }) {
         })}
       </div>
 
+      {error && <p className="mt-3 text-sm font-medium text-red-600">{error}</p>}
       <p className="mt-4 text-xs text-slate-400">
-        Turnout: {totalVotes} of {poll.totalEligible} owners ({turnout}%)
-        {votedFor && " · Your vote has been recorded"}
+        Turnout: {totalVotes} of {poll.totalEligible} apartments ({turnout}%)
+        {poll.myVote && ` · Your apartment voted: ${poll.myVote}`}
+        {!user.apartmentId && poll.status === "open" && " · Voting is one per apartment"}
       </p>
     </Card>
   );
 }
 
 export default function PollsPage() {
-  const open = polls.filter((p) => p.status === "open");
-  const closed = polls.filter((p) => p.status === "closed");
+  const { role } = useSessionUser();
+  const polls = useApi<Poll[]>("/polls");
+  const [newOpen, setNewOpen] = useState(false);
+  const canCreate = WRITER_ROLES.includes(role);
+
+  if (polls.error) return <ErrorNote message={polls.error} onRetry={polls.reload} />;
+  if (polls.loading || !polls.data) return <PageLoading />;
+
+  const open = polls.data.filter((p) => p.status === "open");
+  const closed = polls.data.filter((p) => p.status === "closed");
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageTitle
         title="Polls & Voting"
         subtitle="Community decisions — one vote per apartment"
+        actions={
+          canCreate ? (
+            <button
+              onClick={() => setNewOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+            >
+              <PlusCircle className="h-4 w-4" /> New poll
+            </button>
+          ) : undefined
+        }
       />
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-slate-500">Open ({open.length})</h2>
-        {open.map((p) => (
-          <PollCard key={p.id} poll={p} />
-        ))}
+        {open.map((p) => <PollCard key={p.id} poll={p} onChanged={polls.reload} />)}
+        {open.length === 0 && <p className="text-sm text-slate-400">No open polls.</p>}
       </section>
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-slate-500">Closed ({closed.length})</h2>
-        {closed.map((p) => (
-          <PollCard key={p.id} poll={p} />
-        ))}
+        {closed.map((p) => <PollCard key={p.id} poll={p} onChanged={polls.reload} />)}
       </section>
+
+      {newOpen && <NewPollDialog onClose={() => setNewOpen(false)} onDone={polls.reload} />}
     </div>
   );
 }

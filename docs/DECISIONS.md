@@ -99,3 +99,16 @@ apartment scale.
 inline with the request. **Why:** ~10 recipients per community; no queue
 infrastructure warranted. **Follow-up:** revisit with Cloud Tasks + email in
 M4 if fan-out grows.
+
+## D-016 · 2026-07-04 · One vote per apartment, keyed by apartment_id
+**Decision:** poll votes stored as `votes_by: {apartment_id: option}`; only
+users with an apartment can vote; revoting replaces while open.
+**Why:** the PRD's governance unit is the apartment, not the person (couples
+share ownership). **Trade-off:** managers without apartments can't vote —
+matches how societies actually run.
+
+## D-017 · 2026-07-04 · Search is in-process substring scan, not an index
+**Decision:** `/search` scans community-scoped collections in Python.
+**Why:** tens-to-hundreds of documents per community — an Atlas Search index
+is premature. **Follow-up:** swap to Atlas Search when a community exceeds
+~10k documents.

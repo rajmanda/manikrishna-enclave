@@ -162,6 +162,7 @@ export interface Poll {
   status: "open" | "closed";
   options: PollOption[];
   totalEligible: number;
+  myVote?: string | null;
 }
 
 export interface Vendor {
@@ -185,6 +186,7 @@ export interface CommunityDocument {
   version: number;
   sizeKb: number;
   fileType: "pdf" | "image" | "sheet";
+  path?: string | null;
 }
 
 export interface Meeting {
@@ -197,6 +199,7 @@ export interface Meeting {
   resolutions: string[];
   hasPdf: boolean;
   hasAudio: boolean;
+  minutesPath?: string | null;
 }
 
 export interface ReserveFundEntry {
@@ -235,6 +238,25 @@ export interface CommunitySummary {
   monthExpenses: number;
   outstandingDues: number;
   reserveFundBalance: number;
+}
+
+export interface SearchResult {
+  category: string;
+  title: string;
+  subtitle: string;
+  href: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  communityId: string;
+  userId: string;
+  userName: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  timestamp: string;
+  details: Record<string, unknown>;
 }
 
 export interface Notification {
