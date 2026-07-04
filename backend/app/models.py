@@ -140,6 +140,8 @@ class Invoice(APIModel):
     due_date: str
     status: InvoiceStatus = "due"
     parent_invoice_id: str | None = None  # set on late-fee invoices
+    # "community" money vs the manager's personal service fee — never mixed.
+    ledger: Literal["community", "manager_fee"] = "community"
 
 
 class InvoiceCreate(APIModel):
@@ -183,6 +185,7 @@ class Payment(APIModel):
     # Owner-reported payments start pending; only confirmed ones count.
     status: Literal["pending", "confirmed"] = "confirmed"
     reported_by: str | None = None
+    ledger: Literal["community", "manager_fee"] = "community"
 
 
 class PaymentReport(APIModel):
@@ -458,6 +461,21 @@ class CommunitySummary(APIModel):
     reserve_fund_balance: float
 
 
+class FeeEnrollment(APIModel):
+    apartment_id: str
+    amount: float
+    active: bool = True
+
+
+class FeeEnrollmentsUpdate(APIModel):
+    enrollments: list[FeeEnrollment]
+
+
+class FeeGenerateRequest(APIModel):
+    period: str
+    due_date: str
+
+
 class NavBadges(APIModel):
     """Live counts for navigation badges — state-driven, role-scoped."""
 
@@ -474,6 +492,8 @@ class ManagerDashboard(APIModel):
     pending_approvals: int
     overdue_invoices: int
     pending_payment_confirmations: int = 0
+    fee_outstanding: float = 0  # manager service-fee ledger (separate money)
+    fee_collected: float = 0
 
 
 # ---------- Audit ----------

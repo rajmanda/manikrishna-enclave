@@ -111,6 +111,18 @@ cross-tenant, 409 conflict).
 | GET | `/notifications` | own | Latest 50 |
 | POST | `/notifications/read-all` · `/notifications/{id}/read` | own | |
 
+## Manager service fees (private ledger)
+
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET/PUT | `/manager-fees/enrollments` | manager/admin | Per-apartment amount + active flag (untick when tenant moves out) |
+| POST | `/manager-fees/generate` | manager/admin | One `ledger=manager_fee` invoice per active enrollment at its own amount; idempotent per period |
+
+Fee invoices/payments flow through the normal report→confirm path but are
+excluded from every community aggregate (summary, monthly, collection %,
+collection report, directory dues). Owner sees only their own; statement PDF
+shows a separate fee section; manager dashboard gets a separate fee tile.
+
 ## Governance (M4)
 
 | Method | Path | Access | Notes |

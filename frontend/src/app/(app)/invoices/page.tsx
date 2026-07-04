@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { AlarmClock, Banknote, Download, FileDown, PlusCircle } from "lucide-react";
+import { AlarmClock, Banknote, Download, FileDown, HandCoins, PlusCircle, Trash2 } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError, downloadFile } from "@/lib/api";
-import type { Apartment, Invoice, Payment, User } from "@/lib/types";
+import type { Apartment, FeeEnrollment, Invoice, Payment, User } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
 import { invoiceTone } from "@/lib/tones";
@@ -342,6 +342,174 @@ function PaymentDialog({
   );
 }
 
+function FeeDialog({
+  apartments,
+  users,
+  onClose,
+  onDone,
+}: {
+  apartments: Apartment[] | undefined;
+  users: User[] | undefined;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const enrollments = useApi<FeeEnrollment[]>("/manager-fees/enrollments");
+  const [rows, setRows] = useState<FeeEnrollment[] | null>(null);
+  const [period, setPeriod] = useState(nextMonthLabel());
+  const [dueDate, setDueDate] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
+
+  const list = rows ?? enrollments.data ?? [];
+  const sortedApts = [...(apartments ?? [])].sort((a, b) => a.number.localeCompare(b.number));
+  const available = sortedApts.filter((a) => !list.some((r) => r.apartmentId === a.id));
+
+  function update(i: number, patch: Partial<FeeEnrollment>) {
+    setRows(list.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+
+  async function save(): Promise<boolean> {
+    try {
+      await api("/manager-fees/enrollments", {
+        method: "PUT",
+        body: JSON.stringify({ enrollments: list }),
+      });
+      return true;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save enrollments");
+      return false;
+    }
+  }
+
+  async function saveAndGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    if (!(await save())) {
+      setBusy(false);
+      return;
+    }
+    try {
+      const res = await api<{ created: number; skipped: number }>(
+        "/manager-fees/generate",
+        { method: "POST", body: JSON.stringify({ period, dueDate }) }
+      );
+      setResult(res);
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to generate");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Manager Service Fees" onClose={onClose}>
+      {result ? (
+        <div className="space-y-4 text-center">
+          <p className="text-sm text-slate-700">
+            Created <b>{result.created}</b> fee invoice{result.created === 1 ? "" : "s"}
+            {result.skipped > 0 && ` · ${result.skipped} already existed`}. This
+            money is tracked separately from community funds.
+          </p>
+          <button className={primaryBtnCls} onClick={onClose}>Done</button>
+        </div>
+      ) : (
+        <form className="space-y-4" onSubmit={saveAndGenerate}>
+          <p className="text-xs text-slate-500">
+            Private fees paid to the manager — never mixed into community
+            income. Untick an apartment when its tenant moves out.
+          </p>
+          <div>
+            <label className={labelCls}>Enrolled apartments</label>
+            <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
+              {list.map((r, i) => (
+                <div key={r.apartmentId} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={r.active}
+                    onChange={(e) => update(i, { active: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                  />
+                  <span className={`w-16 font-medium ${r.active ? "" : "text-slate-400 line-through"}`}>
+                    Apt {r.apartmentId.replace("apt-", "")}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-slate-400">
+                    {ownerNameFor(users, apartments, r.apartmentId)}
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={r.amount}
+                    onChange={(e) => update(i, { amount: Number(e.target.value) })}
+                    className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Remove"
+                    onClick={() => setRows(list.filter((_, idx) => idx !== i))}
+                    className="text-slate-300 hover:text-red-500"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              {list.length === 0 && (
+                <p className="py-3 text-center text-xs text-slate-400">No apartments enrolled.</p>
+              )}
+              {available.length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) =>
+                    e.target.value &&
+                    setRows([...list, { apartmentId: e.target.value, amount: 1500, active: true }])
+                  }
+                  className="mt-1 w-full rounded-lg border border-dashed border-slate-300 px-2 py-1.5 text-xs text-slate-500"
+                >
+                  <option value="">+ Enroll an apartment…</option>
+                  {available.map((a) => (
+                    <option key={a.id} value={a.id}>Apt {a.number}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Period</label>
+              <input className={inputCls} value={period} onChange={(e) => setPeriod(e.target.value)} required />
+            </div>
+            <div>
+              <label className={labelCls}>Due date</label>
+              <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+            </div>
+          </div>
+          {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true); setError(null);
+                if (await save()) onClose();
+                else setBusy(false);
+              }}
+              className="rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Save config only
+            </button>
+            <button type="submit" disabled={busy || !dueDate}
+              className="rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50">
+              {busy ? "Working…" : "Save & generate"}
+            </button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
 function LateFeeDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [period, setPeriod] = useState("");
   const [amount, setAmount] = useState("200");
@@ -413,7 +581,7 @@ export default function InvoicesPage() {
   const payments = useApi<Payment[]>("/payments");
   const apartments = useApi<Apartment[]>(mine ? null : "/apartments");
   const users = useApi<User[]>(mine ? null : "/users");
-  const [dialog, setDialog] = useState<"generate" | "latefee" | null>(null);
+  const [dialog, setDialog] = useState<"generate" | "latefee" | "fees" | null>(null);
   const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
   const [reportInvoice, setReportInvoice] = useState<Invoice | null>(null);
 
@@ -427,6 +595,16 @@ export default function InvoicesPage() {
 
   const list = invoices.data;
   const sorted = [...list].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+  // Group by period, newest first (insertion order follows the sort).
+  const periodGroups = (() => {
+    const map = new Map<string, Invoice[]>();
+    for (const inv of sorted) {
+      const items = map.get(inv.period) ?? [];
+      items.push(inv);
+      map.set(inv.period, items);
+    }
+    return [...map.entries()].map(([period, items]) => ({ period, items }));
+  })();
   const outstanding = list.reduce((s, i) => s + (i.amount - i.paidAmount), 0);
   const billed = list.reduce((s, i) => s + i.amount, 0);
   const collected = list.reduce((s, i) => s + i.paidAmount, 0);
@@ -450,6 +628,12 @@ export default function InvoicesPage() {
                   className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
                 >
                   <PlusCircle className="h-4 w-4" /> Generate
+                </button>
+                <button
+                  onClick={() => setDialog("fees")}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3.5 py-2 text-sm font-medium text-violet-700 shadow-sm hover:bg-violet-100"
+                >
+                  <HandCoins className="h-4 w-4" /> Service fees
                 </button>
                 <button
                   onClick={() => setDialog("latefee")}
@@ -489,15 +673,35 @@ export default function InvoicesPage() {
         />
       </div>
 
-      <Card className="divide-y divide-slate-100">
-        {sorted.map((inv) => {
-          const balance = inv.amount - inv.paidAmount;
+      {periodGroups.map(({ period, items }) => {
+        const groupBilled = items.reduce((sum, i) => sum + i.amount, 0);
+        const groupDue = items.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0);
+        return (
+          <section key={period}>
+            <div className="mb-2 flex items-baseline justify-between px-1">
+              <h2 className="text-sm font-bold text-slate-700">{period}</h2>
+              <p className="text-xs text-slate-400">
+                {items.length} invoice{items.length === 1 ? "" : "s"} ·{" "}
+                {formatINR(groupBilled)} billed ·{" "}
+                {groupDue > 0 ? (
+                  <span className="font-medium text-red-500">{formatINR(groupDue)} due</span>
+                ) : (
+                  <span className="font-medium text-emerald-600">all paid</span>
+                )}
+              </p>
+            </div>
+            <Card className="divide-y divide-slate-100">
+              {items.map((inv) => {
+                const balance = inv.amount - inv.paidAmount;
           return (
             <div key={inv.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                     {inv.description} — {inv.period}
+                    {inv.ledger === "manager_fee" && (
+                      <Badge tone="violet">Manager fee</Badge>
+                    )}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-500">
                     {!mine &&
@@ -536,13 +740,18 @@ export default function InvoicesPage() {
                   </button>
                 )
               )}
-            </div>
-          );
-        })}
-        {sorted.length === 0 && (
+                </div>
+              );
+            })}
+            </Card>
+          </section>
+        );
+      })}
+      {sorted.length === 0 && (
+        <Card>
           <p className="p-5 text-center text-sm text-slate-400">No invoices yet.</p>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {dialog === "generate" && (
         <GenerateDialog
@@ -554,6 +763,14 @@ export default function InvoicesPage() {
       )}
       {dialog === "latefee" && (
         <LateFeeDialog onClose={() => setDialog(null)} onDone={invoices.reload} />
+      )}
+      {dialog === "fees" && (
+        <FeeDialog
+          apartments={apartments.data}
+          users={users.data}
+          onClose={() => setDialog(null)}
+          onDone={invoices.reload}
+        />
       )}
       {payInvoice && (
         <PaymentDialog

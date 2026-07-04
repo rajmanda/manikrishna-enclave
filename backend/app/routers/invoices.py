@@ -219,6 +219,7 @@ async def record_payment(body: PaymentCreate, db: DB, user: CurrentUser) -> Paym
     payment = Payment(
         community_id=user.community_id,
         apartment_id=invoice["apartment_id"],
+        ledger=invoice.get("ledger", "community"),
         **body.model_dump(),
     )
     await db.payments.insert_one(payment.model_dump())
@@ -298,6 +299,7 @@ async def report_payment(body: PaymentReport, db: DB, user: CurrentUser) -> Paym
         apartment_id=invoice["apartment_id"],
         status="pending",
         reported_by=user.id,
+        ledger=invoice.get("ledger", "community"),
         **body.model_dump(),
     )
     await db.payments.insert_one(payment.model_dump())

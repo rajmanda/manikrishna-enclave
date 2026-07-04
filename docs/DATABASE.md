@@ -21,13 +21,14 @@ scoped by it (see `scoped_community_id` in `backend/app/core/security.py`).
 | `communities` | Tenants | id, name, address, apartment_count, monthly_maintenance |
 | `users` | Members **and the login whitelist** | id, community_id, name, email (unique), role (active), roles[] (switchable set), apartment_id?, phone? |
 | `apartments` | Units | id, community_id, number (unique per community), floor, owner_ids[] |
-| `invoices` | Charges per apartment | id, community_id, apartment_id, period, description, amount, paid_amount, due_date, status (paid/due/overdue/partial), parent_invoice_id (late fees) |
+| `invoices` | Charges per apartment | id, community_id, apartment_id, period, description, amount, paid_amount, due_date, status, parent_invoice_id (late fees), ledger (community \| manager_fee) |
 | `payments` | Receipts | id, community_id, invoice_id, apartment_id, amount, date, method (incl. "Credit"), reference, status (pending/confirmed — owner-reported start pending), reported_by? |
 | `expenses` | Community spend | id, community_id, category, description, vendor_id?, amount, paid_date, has_receipt, receipt_path (GCS) |
 | `work_orders` | Common-area jobs | id, community_id, title, description, priority, stage, vendor_id?, assigned_to?, estimate?, final_cost?, reported_date, photo_count, timeline[], comments[] |
 | `vendors` | Service providers | id, community_id, name, service, phone, gst?, amc_expiry?, rating, active_contracts |
 | `reserve_fund` | Monthly fund entries | community_id, month, contributions, expenses, balance |
 | ~~`monthly_finance`~~ | Deprecated — the monthly series is computed from payments/expenses/invoices since 0.4.x | (unused) |
+| `fee_enrollments` | Manager-fee config | community_id, apartment_id, amount, active |
 | `audit_log` | Every modification | id, community_id, user_id, user_name, action, entity, entity_id, timestamp (ISO), details |
 
 M3 additions: `maintenance_requests` (id, community_id, title, description,
@@ -79,7 +80,8 @@ startup; current version in `meta` ({"id": "schema", "version": N}).
 | 002 | Backfill M3 collections (feed, maintenance) into pre-M3 databases |
 | 003 | Backfill M4 collections (polls, documents, meetings) |
 | 004 | `users.roles` backfilled to `[role]` |
+| 005 | `invoices/payments.ledger` backfilled to `community` |
 
-Schema version: **4**.
+Schema version: **5**.
 
 **Policy:** update this file in the same change as any schema modification.

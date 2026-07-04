@@ -41,11 +41,19 @@ async def _m004_user_roles_list(db: Any) -> None:
         )
 
 
+async def _m005_invoice_ledger(db: Any) -> None:
+    for coll in (db.invoices, db.payments):
+        await coll.update_many(
+            {"ledger": {"$exists": False}}, {"$set": {"ledger": "community"}}
+        )
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], Awaitable[None]]]] = [
     (1, _m001_community_monthly_maintenance),
     (2, _m002_backfill_m3_collections),
     (3, _m003_backfill_m4_collections),
     (4, _m004_user_roles_list),
+    (5, _m005_invoice_ledger),
 ]
 
 

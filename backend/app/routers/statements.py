@@ -81,9 +81,13 @@ async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Respons
         pdf.cell(0, 6, _latin1(f"Owner: {d['owner']['name']}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
+    community_invoices = [i for i in d["invoices"] if i.get("ledger", "community") == "community"]
+    fee_invoices = [i for i in d["invoices"] if i.get("ledger") == "manager_fee"]
+    d["invoices"] = community_invoices
+
     # Invoices table
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(0, 7, "Invoices", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, "Community Invoices", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("helvetica", "B", 9)
     widths = (30, 70, 30, 30, 25)
     for w, h in zip(widths, ("Period", "Description", "Amount", "Paid", "Status")):
@@ -110,6 +114,33 @@ async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Respons
     pdf.cell(30, 6, f"Rs {total_paid:,.0f}", border=1)
     pdf.cell(25, 6, f"Due Rs {total_billed - total_paid:,.0f}", border=1)
     pdf.ln(10)
+
+    # Manager service fees — separate money, never community funds.
+    if fee_invoices:
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(0, 7, "Manager Service Fees (payable to the property manager)",
+                 new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "B", 9)
+        for w, h in zip(widths, ("Period", "Description", "Amount", "Paid", "Status")):
+            pdf.cell(w, 6, h, border=1)
+        pdf.ln()
+        pdf.set_font("helvetica", "", 9)
+        fee_billed = fee_paid = 0.0
+        for inv in fee_invoices:
+            fee_billed += inv["amount"]
+            fee_paid += inv["paid_amount"]
+            cells = (inv["period"], _latin1(inv["description"])[:40],
+                     f"Rs {inv['amount']:,.0f}", f"Rs {inv['paid_amount']:,.0f}",
+                     inv["status"])
+            for w, c in zip(widths, cells):
+                pdf.cell(w, 6, str(c), border=1)
+            pdf.ln()
+        pdf.set_font("helvetica", "B", 9)
+        pdf.cell(100, 6, "Fee Total", border=1)
+        pdf.cell(30, 6, f"Rs {fee_billed:,.0f}", border=1)
+        pdf.cell(30, 6, f"Rs {fee_paid:,.0f}", border=1)
+        pdf.cell(25, 6, f"Due Rs {fee_billed - fee_paid:,.0f}", border=1)
+        pdf.ln(10)
 
     # Payments table
     pdf.set_font("helvetica", "B", 10)
@@ -147,7 +178,7 @@ async def invoices_csv(db: DB, user: CurrentUser) -> Response:
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(
-        ["Invoice ID", "Apartment", "Period", "Description", "Amount", "Paid", "Due Date", "Status"]
+        ["Invoice ID", "Apartment", "Period", "Description", "Ledger", "Amount", "Paid", "Due Date", "Status"]
     )
     for i in invoices:
         writer.writerow(
@@ -156,6 +187,7 @@ async def invoices_csv(db: DB, user: CurrentUser) -> Response:
                 i["apartment_id"].replace("apt-", ""),
                 i["period"],
                 i["description"],
+                i.get("ledger", "community"),
                 i["amount"],
                 i["paid_amount"],
                 i["due_date"],

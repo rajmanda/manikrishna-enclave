@@ -315,6 +315,19 @@ function ManagerDashboard() {
         </Link>
       )}
 
+      {(s.feeOutstanding > 0 || s.feeCollected > 0) && (
+        <Card className="flex flex-wrap items-center justify-between gap-2 border-violet-200 bg-violet-50/50 p-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+              Manager service fees (separate from community funds)
+            </p>
+            <p className="mt-1 text-sm text-violet-900">
+              Collected {formatINR(s.feeCollected)} · Outstanding {formatINR(s.feeOutstanding)}
+            </p>
+          </div>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           label="Outstanding Collections"

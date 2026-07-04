@@ -215,7 +215,9 @@ export default function CommunityPage() {
   // Owners only receive their own invoices from the API, so dues badges
   // appear only where the caller is allowed to see them.
   const duesByApartment = new Map<string, number>();
-  for (const inv of invoices.data ?? []) {
+  for (const inv of (invoices.data ?? []).filter(
+    (i) => (i.ledger ?? "community") === "community"
+  )) {
     duesByApartment.set(
       inv.apartmentId,
       (duesByApartment.get(inv.apartmentId) ?? 0) + (inv.amount - inv.paidAmount)

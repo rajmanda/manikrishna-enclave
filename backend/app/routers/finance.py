@@ -107,10 +107,19 @@ async def monthly_finance(db: DB, user: CurrentUser) -> list[MonthlyFinance]:
             p["amount"] for p in payments
             if p["date"].startswith(prefix)
             and p.get("status", "confirmed") == "confirmed"
+            and p.get("ledger", "community") == "community"
         )
         spent = sum(e["amount"] for e in expenses if e["paid_date"].startswith(prefix))
-        billed = sum(i["amount"] for i in invoices if i["due_date"].startswith(prefix))
-        paid = sum(i["paid_amount"] for i in invoices if i["due_date"].startswith(prefix))
+        billed = sum(
+            i["amount"] for i in invoices
+            if i["due_date"].startswith(prefix)
+            and i.get("ledger", "community") == "community"
+        )
+        paid = sum(
+            i["paid_amount"] for i in invoices
+            if i["due_date"].startswith(prefix)
+            and i.get("ledger", "community") == "community"
+        )
         rate = round(100 * paid / billed) if billed else 0
         out.append(MonthlyFinance(
             month=MONTH_LABELS[int(prefix[5:7]) - 1],
@@ -137,11 +146,15 @@ async def community_summary(db: DB, user: CurrentUser) -> CommunitySummary:
             p["amount"] for p in payments
             if p["date"].startswith(prefix)
             and p.get("status", "confirmed") == "confirmed"
+            and p.get("ledger", "community") == "community"
         ),
         month_expenses=sum(
             e["amount"] for e in expenses if e["paid_date"].startswith(prefix)
         ),
-        outstanding_dues=sum(i["amount"] - i["paid_amount"] for i in invoices),
+        outstanding_dues=sum(
+            i["amount"] - i["paid_amount"] for i in invoices
+            if i.get("ledger", "community") == "community"
+        ),
         reserve_fund_balance=reserve[-1]["balance"] if reserve else 0,
     )
 

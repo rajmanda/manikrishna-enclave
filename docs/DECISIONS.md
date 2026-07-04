@@ -140,3 +140,12 @@ multi-query endpoints parallelized with asyncio.gather; API min-instances=1.
 clients cross the ocean once, the app would otherwise cross it N times.
 **Amends D-004:** still Raj's Atlas account, but a dedicated, region-matched
 cluster per app rather than one shared cluster for everything.
+
+## D-021 · 2026-07-04 · Manager fees as a parallel ledger, not a module
+**Decision:** invoices/payments carry `ledger: community | manager_fee`; the
+entire generation → report → confirm pipeline is shared; every community
+aggregate filters to `ledger=community`. Enrollment config (per-apartment
+amount + active flag) drives fee generation.
+**Why:** owner requirement — private fees to the manager must never mix with
+community funds, but flows must be identical. One enum reuses everything and
+extends to future ledgers (special assessments, sinking funds).

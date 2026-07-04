@@ -97,13 +97,17 @@ async def manager_dashboard(db: DB, user: CurrentUser) -> ManagerDashboard:
         db.invoices.count_documents({"community_id": cid, "status": "overdue"}),
         db.payments.count_documents({"community_id": cid, "status": "pending"}),
     )
+    community_inv = [i for i in invoices if i.get("ledger", "community") == "community"]
+    fee_inv = [i for i in invoices if i.get("ledger") == "manager_fee"]
     return ManagerDashboard(
-        outstanding_collections=sum(i["amount"] - i["paid_amount"] for i in invoices),
-        payments_received=sum(i["paid_amount"] for i in invoices),
+        outstanding_collections=sum(i["amount"] - i["paid_amount"] for i in community_inv),
+        payments_received=sum(i["paid_amount"] for i in community_inv),
         month_expenses=month_exp,
         reserve_fund_balance=reserve,
         open_work_orders=open_wos,
         pending_approvals=approvals,
         overdue_invoices=overdue,
         pending_payment_confirmations=pending_pay,
+        fee_outstanding=sum(i["amount"] - i["paid_amount"] for i in fee_inv),
+        fee_collected=sum(i["paid_amount"] for i in fee_inv),
     )

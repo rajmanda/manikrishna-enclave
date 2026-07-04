@@ -57,7 +57,11 @@ def _respond(pdf: Any, filename: str) -> Response:
 async def collection_report(
     db: DB, user: Annotated[User, Depends(require_roles("property_manager", "community_admin", "auditor"))]
 ) -> Response:
-    invoices = await db.invoices.find({"community_id": user.community_id}).to_list(10000)
+    invoices = [
+        i for i in await db.invoices.find(
+            {"community_id": user.community_id}).to_list(10000)
+        if i.get("ledger", "community") == "community"
+    ]
     by_apt: dict[str, dict] = {}
     for i in invoices:
         apt = by_apt.setdefault(i["apartment_id"], {"billed": 0.0, "paid": 0.0})

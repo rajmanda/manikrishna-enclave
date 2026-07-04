@@ -48,6 +48,7 @@ export interface Invoice {
   paidAmount: number;
   dueDate: string;
   status: InvoiceStatus;
+  ledger?: "community" | "manager_fee";
 }
 
 export interface Payment {
@@ -235,6 +236,14 @@ export interface ManagerDashboardData {
   pendingApprovals: number;
   overdueInvoices: number;
   pendingPaymentConfirmations: number;
+  feeOutstanding: number;
+  feeCollected: number;
+}
+
+export interface FeeEnrollment {
+  apartmentId: string;
+  amount: number;
+  active: boolean;
 }
 
 export interface CommunitySummary {

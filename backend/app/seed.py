@@ -365,6 +365,7 @@ async def seed(db: Any) -> bool:
                 "paid_amount": paid,
                 "due_date": "2026-06-10",
                 "status": invoice_status,
+                "ledger": "community",
             }
         )
 

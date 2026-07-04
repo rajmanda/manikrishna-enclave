@@ -3,6 +3,15 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.6.0] — 2026-07-04
+- Invoices page groups invoices into per-month boxes with billed/due
+  subtotals per period (like the Meetings layout).
+- **Manager service fees (private ledger):** per-apartment enrollment config
+  (amount + active), one-click fee generation, identical payment
+  report→confirm flow, complete exclusion from all community aggregates;
+  ledger badges, dashboard fee tile, statement fee section, CSV ledger
+  column. Migration 005 (schema v5). Tests 85 → 89.
+
 ## [0.5.1] — 2026-07-04 · Latency
 
 - **Database moved to Mumbai** (new Atlas cluster `hyderabad`, AWS ap-south-1,

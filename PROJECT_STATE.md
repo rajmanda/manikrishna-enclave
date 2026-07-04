@@ -4,11 +4,11 @@ Last updated: 2026-07-03
 
 | Field | Value |
 |---|---|
-| Current version | 0.5.1 |
+| Current version | 0.6.0 |
 | Current milestone | **M4 Governance — complete. PRD Phases 1–4 fully shipped.** Next: M5 (AI, mobile) or hardening |
 | Current sprint | M4 complete |
 | Current branch | main (github.com/rajmanda/manikrishna-enclave, public) |
-| Last completed feature | Dual-role View-as switching, Members admin page, super-user, clickable expense graphs |
+| Last completed feature | Manager service-fee ledger (separate money, same flow), month-grouped invoices |
 | Current feature | — |
 | Next priority | Owner decision: M5 features vs hardening (email provider, staging, payment gateway) |
 | Deployment status | **Live at https://community.rajmanda.com** (Cloud Run, asia-south1) |
