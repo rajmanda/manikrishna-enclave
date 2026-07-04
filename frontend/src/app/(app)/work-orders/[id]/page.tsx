@@ -2,6 +2,7 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Camera, Check, Phone, Send, Upload } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
@@ -140,6 +141,7 @@ export default function WorkOrderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const { role } = useSessionUser();
   const canWrite = WRITER_ROLES.includes(role);
   const workOrder = useApi<WorkOrder>(`/work-orders/${id}`);
@@ -179,6 +181,16 @@ export default function WorkOrderDetailPage({
     }
   }
 
+  async function deleteWorkOrder() {
+    if (!confirm("Are you sure you want to delete this work order?")) return;
+    try {
+      await api(`/work-orders/${id}`, { method: "DELETE" });
+      router.push("/work-orders");
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete");
+    }
+  }
+
   if (workOrder.error)
     return <ErrorNote message={workOrder.error} onRetry={workOrder.reload} />;
   if (workOrder.loading || !workOrder.data) return <PageLoading />;
@@ -204,14 +216,24 @@ export default function WorkOrderDetailPage({
         </div>
         <h1 className="mt-2 text-xl font-bold sm:text-2xl">{wo.title}</h1>
         <p className="mt-1.5 text-sm text-slate-600">{wo.description}</p>
-        {canWrite && wo.stage !== "Closed" && (
-          <button
-            onClick={() => setStageOpen(true)}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
-          >
-            <ArrowRight className="h-4 w-4" /> Update stage
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          {canWrite && wo.stage !== "Closed" && (
+            <button
+              onClick={() => setStageOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+            >
+              <ArrowRight className="h-4 w-4" /> Update stage
+            </button>
+          )}
+          {role === "super_admin" && (
+            <button
+              onClick={deleteWorkOrder}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-red-50 border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-100 hover:text-red-700"
+            >
+              Delete work order
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">

@@ -264,3 +264,21 @@ async def test_notifications_read_flow_and_isolation(client, manager_headers, ow
         f"/api/v1/notifications/{nid}/read", headers=manager_headers
     )
     assert other.status_code == 404
+
+
+async def test_maintenance_delete_super_admin_only(client, manager_headers, db):
+    denied = await client.delete(
+        "/api/v1/maintenance-requests/mr-1", headers=manager_headers
+    )
+    assert denied.status_code == 403  # property_manager is not enough
+
+    login = await client.post(
+        "/api/v1/auth/dev-login", json={"email": "super@communityhub.app"}
+    )
+    super_headers = {"Authorization": f"Bearer {login.json()['accessToken']}"}
+    # Super admins are platform-level: delete works across communities.
+    ok = await client.delete(
+        "/api/v1/maintenance-requests/mr-1", headers=super_headers
+    )
+    assert ok.status_code == 204
+    assert await db.maintenance_requests.find_one({"id": "mr-1"}) is None

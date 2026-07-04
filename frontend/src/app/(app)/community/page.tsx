@@ -14,12 +14,14 @@ import type {
   CommunitySummary,
   Expense,
   Invoice,
+  MonthlyFinance,
   User,
   Vendor,
 } from "@/lib/types";
-import { formatDate, formatINR } from "@/lib/format";
+import { currentMonthLabel, formatDate, formatINR } from "@/lib/format";
 import { vendorFor } from "@/lib/lookup";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
+import { ExpensesModal } from "@/components/ExpensesModal";
 import {
   Avatar,
   Badge,
@@ -182,12 +184,14 @@ export default function CommunityPage() {
   const { role } = useSessionUser();
   const canWrite = WRITER_ROLES.includes(role);
   const [addOpen, setAddOpen] = useState(false);
+  const [categoryModal, setCategoryModal] = useState<string | null>(null);
   const summary = useApi<CommunitySummary>("/finance/summary");
   const expenses = useApi<Expense[]>("/expenses");
   const apartments = useApi<Apartment[]>("/apartments");
   const users = useApi<User[]>("/users");
   const invoices = useApi<Invoice[]>("/invoices");
   const vendors = useApi<Vendor[]>("/vendors");
+  const monthly = useApi<MonthlyFinance[]>("/finance/monthly");
 
   const error = summary.error ?? expenses.error ?? apartments.error ?? users.error;
   if (error) return <ErrorNote message={error} onRetry={summary.reload} />;
@@ -227,8 +231,26 @@ export default function CommunityPage() {
 
       {/* Financial summary — /finance/summary */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Month Income" value={formatINR(s.monthIncome)} tone="positive" />
-        <Stat label="Month Expenses" value={formatINR(s.monthExpenses)} tone="negative" />
+        <Stat
+          label={`Income (${currentMonthLabel()})`}
+          value={formatINR(s.monthIncome)}
+          tone="positive"
+          hint={
+            monthly.data && monthly.data.length >= 2
+              ? `${monthly.data[monthly.data.length - 2].month}: ${formatINR(monthly.data[monthly.data.length - 2].income)}`
+              : undefined
+          }
+        />
+        <Stat
+          label={`Expenses (${currentMonthLabel()})`}
+          value={formatINR(s.monthExpenses)}
+          tone="negative"
+          hint={
+            monthly.data && monthly.data.length >= 2
+              ? `${monthly.data[monthly.data.length - 2].month}: ${formatINR(monthly.data[monthly.data.length - 2].expenses)}`
+              : undefined
+          }
+        />
         <Stat label="Outstanding Dues" value={formatINR(s.outstandingDues)} />
         <Stat label="Reserve Fund" value={formatINR(s.reserveFundBalance)} tone="positive" />
       </div>
@@ -237,7 +259,8 @@ export default function CommunityPage() {
         {/* Expense breakdown chart */}
         <Card className="p-4 lg:col-span-2">
           <h2 className="mb-2 text-sm font-semibold">Expense Breakdown</h2>
-          <ExpensePie data={pieData} />
+          <p className="mb-1 text-xs text-slate-400">Tap a slice for the line items</p>
+          <ExpensePie data={pieData} onSliceClick={setCategoryModal} />
         </Card>
 
         {/* Expense ledger */}
@@ -329,6 +352,14 @@ export default function CommunityPage() {
           })}
         </div>
       </section>
+
+      {categoryModal && (
+        <ExpensesModal
+          title={`${categoryModal} expenses`}
+          expenses={expenseList.filter((e) => e.category === categoryModal)}
+          onClose={() => setCategoryModal(null)}
+        />
+      )}
 
       {addOpen && (
         <AddExpenseDialog

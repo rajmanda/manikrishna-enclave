@@ -87,3 +87,19 @@ async def update_status(
             href="/maintenance",
         )
     return MaintenanceRequest.model_validate(result)
+
+
+@router.delete(
+    "/{request_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_roles("super_admin"))],
+)
+async def delete_maintenance_request(
+    request_id: str, db: DB, user: CurrentUser
+) -> None:
+    result = await db.maintenance_requests.delete_one({"id": request_id})
+    if result.deleted_count == 0:
+         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Request not found")
+    await record_audit(db, user, "delete", "maintenance_requests", request_id)
+
+

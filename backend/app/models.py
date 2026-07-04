@@ -78,7 +78,8 @@ class User(APIModel):
     community_id: str
     name: str
     email: EmailStr
-    role: Role
+    role: Role  # active role — all RBAC reads this
+    roles: list[Role] = []  # roles this user may switch between ([] = just `role`)
     apartment_id: str | None = None
     phone: str | None = None
 
@@ -95,9 +96,15 @@ class UserCreate(APIModel):
 
 class UserUpdate(APIModel):
     name: str | None = None
+    email: EmailStr | None = None  # changing it re-keys the whitelist
     role: Role | None = None
+    roles: list[Role] | None = None
     apartment_id: str | None = None
     phone: str | None = None
+
+
+class SwitchRoleRequest(APIModel):
+    role: Role
 
 
 # ---------- Auth ----------

@@ -12,11 +12,13 @@ import {
   useState,
 } from "react";
 import {
+  api,
   clearToken,
   fetchMe,
   getToken,
   loginDev,
   loginWithGoogle,
+  setToken,
 } from "@/lib/api";
 import type { Role, User } from "@/lib/types";
 
@@ -26,6 +28,7 @@ interface AuthState {
   loading: boolean;
   devLogin: (email: string) => Promise<void>;
   googleLogin: (idToken: string) => Promise<void>;
+  switchRole: (role: Role) => Promise<void>;
   logout: () => void;
 }
 
@@ -56,6 +59,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(result.user);
   }, []);
 
+  const switchRole = useCallback(async (role: Role) => {
+    const result = await api<{ accessToken: string; user: User }>(
+      "/auth/switch-role",
+      { method: "POST", body: JSON.stringify({ role }) }
+    );
+    setToken(result.accessToken);
+    // Full reload: every page and badge re-fetches under the new role.
+    window.location.assign("/dashboard");
+  }, []);
+
   const logout = useCallback(() => {
     clearToken();
     setUser(null);
@@ -63,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, role: user?.role ?? null, loading, devLogin, googleLogin, logout }}
+      value={{ user, role: user?.role ?? null, loading, devLogin, googleLogin, switchRole, logout }}
     >
       {children}
     </AuthContext.Provider>

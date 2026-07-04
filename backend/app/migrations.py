@@ -33,10 +33,19 @@ async def _m003_backfill_m4_collections(db: Any) -> None:
     await seed_m4(db)
 
 
+async def _m004_user_roles_list(db: Any) -> None:
+    users = await db.users.find({"roles": {"$exists": False}}).to_list(10000)
+    for u in users:
+        await db.users.update_one(
+            {"id": u["id"]}, {"$set": {"roles": [u["role"]]}}
+        )
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], Awaitable[None]]]] = [
     (1, _m001_community_monthly_maintenance),
     (2, _m002_backfill_m3_collections),
     (3, _m003_backfill_m4_collections),
+    (4, _m004_user_roles_list),
 ]
 
 

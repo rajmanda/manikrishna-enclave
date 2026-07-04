@@ -3,6 +3,31 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.5.0] — 2026-07-04
+
+- **Super-user support:** accounts can hold any number of switchable roles;
+  the switcher becomes a "View as" dropdown beyond 3 roles; the Members
+  dialog preserves custom role sets.
+- **Members admin page** and **dual-role View-as switching** (below).
+- **Self-explanatory finance cards:** "Expenses (Jul)" with previous-month
+  hint (e.g. "Jun: ₹19,300") on both dashboards and the community page.
+- **Clickable expense graphs:** dashboard cash-flow chart (tap a month) and
+  community expense pie (tap a slice) open a line-items modal with totals.
+- **Maintenance request deletion** (super_admin only, platform-level).
+- Dev account switcher is now dynamic (reads live members — immune to email
+  changes); login-page quick buttons point at real accounts.
+- Migration 004 (users.roles, schema v4). Backend tests 70 → 85.
+
+### Details
+- **Dual-role & View-as switcher:** users can hold multiple roles
+  (`roles[]`); a Manager/Owner toggle in the top bar switches the active role
+  server-side so all dashboards, scoping and permissions genuinely follow.
+  Owner view requires an assigned apartment. Migration 004 (schema v4).
+- **Members admin page:** whitelist management UI — add/edit/remove members,
+  change Google emails (unique, normalized, audited; old address stops
+  working immediately), assign apartments and roles, grant the owner-view
+  toggle to managers.
+
 ## [0.4.1] — 2026-07-04
 - **Nav badges & actionable notifications:** state-driven red badges on the
   left nav / mobile tab bar (Invoices = unpaid count, role-scoped; Payments =

@@ -28,10 +28,30 @@ function inrTick(v: number): string {
   return v >= 1000 ? `₹${Math.round(v / 1000)}k` : `₹${v}`;
 }
 
-export function CashFlowChart({ data }: { data: MonthlyFinance[] }) {
+export function CashFlowChart({
+  data,
+  onMonthClick,
+}: {
+  data: MonthlyFinance[];
+  onMonthClick?: (index: number, label: string) => void;
+}) {
   return (
     <ResponsiveContainer width="100%" height={240}>
-      <BarChart data={data} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
+      <BarChart
+        data={data}
+        margin={{ top: 4, right: 4, left: -12, bottom: 0 }}
+        style={onMonthClick ? { cursor: "pointer" } : undefined}
+        onClick={(state) => {
+          if (
+            onMonthClick &&
+            state &&
+            state.activeTooltipIndex != null &&
+            typeof state.activeLabel === "string"
+          ) {
+            onMonthClick(state.activeTooltipIndex, state.activeLabel);
+          }
+        }}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
         <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
         <YAxis tick={{ fontSize: 11 }} tickFormatter={inrTick} tickLine={false} axisLine={false} />
@@ -115,8 +135,10 @@ const PIE_COLORS = [
 
 export function ExpensePie({
   data,
+  onSliceClick,
 }: {
   data: { name: string; value: number }[];
+  onSliceClick?: (category: string) => void;
 }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
@@ -129,6 +151,12 @@ export function ExpensePie({
           outerRadius={85}
           paddingAngle={2}
           strokeWidth={0}
+          style={onSliceClick ? { cursor: "pointer" } : undefined}
+          onClick={(entry) => {
+            if (onSliceClick && entry && typeof entry.name === "string") {
+              onSliceClick(entry.name);
+            }
+          }}
         >
           {data.map((_, i) => (
             <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />

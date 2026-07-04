@@ -53,6 +53,16 @@ async def update_user(
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+    if "email" in updates:
+        # Email IS the whitelist key — normalize and keep unique.
+        updates["email"] = updates["email"].lower()
+        clash = await db.users.find_one(
+            {"email": updates["email"], "id": {"$ne": user_id}}
+        )
+        if clash:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, detail="Email already whitelisted"
+            )
     result = await db.users.find_one_and_update(
         {"id": user_id, "community_id": user.community_id},
         {"$set": updates},

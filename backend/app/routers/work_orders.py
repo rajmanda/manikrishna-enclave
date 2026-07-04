@@ -180,3 +180,18 @@ async def get_photo(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Photo not found")
     data, content_type = storage.download_object(wo["photos"][index])
     return Response(content=data, media_type=content_type)
+
+
+@router.delete(
+    "/{work_order_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_roles("super_admin"))],
+)
+async def delete_work_order(
+    work_order_id: str, db: DB, user: CurrentUser
+) -> None:
+    result = await db.work_orders.delete_one({"id": work_order_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Work order not found")
+    await record_audit(db, user, "delete", "work_orders", work_order_id)
+

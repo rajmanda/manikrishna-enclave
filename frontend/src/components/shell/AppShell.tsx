@@ -15,7 +15,7 @@ import {
 import { useAuth, useSessionUser } from "@/context/AuthContext";
 import { api, DEV_LOGIN_ENABLED } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
-import type { Community, NavBadges, Notification, Role } from "@/lib/types";
+import type { Community, NavBadges, Notification, Role, User } from "@/lib/types";
 import { Avatar, Badge } from "@/components/ui";
 import { mobilePrimary, visibleNavItems } from "./nav";
 import { GlobalSearch } from "./GlobalSearch";
@@ -29,42 +29,41 @@ const roleLabels: Partial<Record<Role, string>> = {
   super_admin: "Platform Admin",
 };
 
-// Dev-only: switch between seeded accounts to preview each role's view.
-const DEV_ACCOUNTS: { value: string; label: string }[] = [
-  { value: "owner502@example.com", label: "Owner view" },
-  { value: "vishnu@communityhub.app", label: "Manager view" },
-  { value: "auditor@communityhub.app", label: "Auditor view" },
-];
-
+// Dev-only: impersonate any real member — reads the live user list, so it
+// can never reference a stale/renamed email.
 function DevAccountSwitcher() {
   const { user, devLogin } = useAuth();
+  const users = useApi<User[]>("/users");
   const [switching, setSwitching] = useState(false);
-  const current =
-    DEV_ACCOUNTS.find((a) => a.value === user?.email)?.value ?? "";
 
   async function handleSwitch(email: string) {
-    if (!email || email === current) return;
+    if (!email || email === user?.email) return;
     setSwitching(true);
     try {
       await devLogin(email);
-    } finally {
+      // Full reload so all role-scoped data refetches under the new account.
+      window.location.assign("/dashboard");
+    } catch (err) {
       setSwitching(false);
+      alert(err instanceof Error ? err.message : "Could not switch account");
     }
   }
+
+  const sorted = [...(users.data ?? [])].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <label className="relative inline-flex items-center">
       <span className="sr-only">Switch account (dev)</span>
       <select
-        value={current}
-        disabled={switching}
+        value={user?.email ?? ""}
+        disabled={switching || sorted.length === 0}
         onChange={(e) => handleSwitch(e.target.value)}
         className="appearance-none rounded-lg border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-medium text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none disabled:opacity-50"
       >
-        {current === "" && <option value="">Dev accounts…</option>}
-        {DEV_ACCOUNTS.map((a) => (
-          <option key={a.value} value={a.value}>
-            {a.label}
+        {sorted.length === 0 && <option value="">Dev accounts…</option>}
+        {sorted.map((u) => (
+          <option key={u.id} value={u.email}>
+            {u.name.length > 22 ? u.name.slice(0, 22) + "…" : u.name} ({u.role.replace("_", " ")})
           </option>
         ))}
       </select>
@@ -144,6 +143,75 @@ function NotificationsPanel({
           </li>
         )}
       </ul>
+    </div>
+  );
+}
+
+const roleShort: Record<string, string> = {
+  super_admin: "Super Admin",
+  community_admin: "Admin",
+  property_manager: "Manager",
+  owner: "Owner",
+  tenant: "Tenant",
+  auditor: "Auditor",
+  vendor: "Vendor",
+};
+
+function ViewAsSwitcher() {
+  const { user, switchRole } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const roles = user?.roles ?? [];
+  if (!user || roles.length < 2) return null;
+
+  async function handle(role: Role) {
+    if (role === user!.role) return;
+    setBusy(true);
+    try {
+      await switchRole(role);
+    } catch (err) {
+      setBusy(false);
+      alert(err instanceof Error ? err.message : "Could not switch view");
+    }
+  }
+
+  // Few roles: pill toggle. Many roles (super user): compact dropdown.
+  if (roles.length > 3) {
+    return (
+      <label className="relative inline-flex items-center">
+        <span className="sr-only">View as</span>
+        <select
+          value={user.role}
+          disabled={busy}
+          onChange={(e) => handle(e.target.value as Role)}
+          className="appearance-none rounded-xl border border-brand-200 bg-brand-50 py-1.5 pl-3 pr-8 text-xs font-semibold text-brand-700 shadow-sm focus:outline-none disabled:opacity-50"
+        >
+          {roles.map((r) => (
+            <option key={r} value={r}>
+              View as: {roleShort[r] ?? r}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-brand-500" />
+      </label>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
+      {roles.map((r) => (
+        <button
+          key={r}
+          onClick={() => handle(r)}
+          disabled={busy}
+          className={`rounded-lg px-2.5 py-1 text-xs font-medium transition disabled:opacity-50 ${
+            user.role === r
+              ? "bg-brand-600 text-white"
+              : "text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          {roleShort[r] ?? r}
+        </button>
+      ))}
     </div>
   );
 }
@@ -276,6 +344,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Search anything…
             </button>
 
+            <div className="hidden sm:block">
+              <ViewAsSwitcher />
+            </div>
             {DEV_LOGIN_ENABLED && (
               <div className="hidden sm:block">
                 <DevAccountSwitcher />
@@ -313,9 +384,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           {/* Mobile role row */}
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-1.5 sm:hidden">
+          <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-1.5 sm:hidden">
             <Badge tone="brand">{roleLabels[role] ?? role}</Badge>
-            {DEV_LOGIN_ENABLED && <DevAccountSwitcher />}
+            <span className="flex items-center gap-2">
+              <ViewAsSwitcher />
+              {DEV_LOGIN_ENABLED && <DevAccountSwitcher />}
+            </span>
           </div>
         </header>
 

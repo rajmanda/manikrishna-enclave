@@ -121,3 +121,12 @@ rejects. Pending claims never count toward balances/income/statements.
 come from the money recipient. Owner-side agency preserved via the claim flow
 (replacing WhatsApp payment screenshots). A future payment gateway records
 directly as confirmed.
+
+## D-019 · 2026-07-04 · Dual-role via server-side active-role switching
+**Decision:** users carry `roles[]` (switchable set) and `role` (active).
+`POST /auth/switch-role` updates the active role in the database; every
+request re-reads it, so RBAC and data scoping genuinely follow the switch.
+**Why:** a client-side "view as" toggle would fake the UI while the API kept
+serving manager-scoped data; the owner asked to *experience* the owner view.
+**Trade-off:** active role is global per account (all devices/sessions see
+the same view) — acceptable, arguably a feature.

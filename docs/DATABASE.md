@@ -16,7 +16,7 @@ scoped by it (see `scoped_community_id` in `backend/app/core/security.py`).
 | Collection | Purpose | Key fields |
 |---|---|---|
 | `communities` | Tenants | id, name, address, apartment_count, monthly_maintenance |
-| `users` | Members **and the login whitelist** | id, community_id, name, email (unique), role, apartment_id?, phone? |
+| `users` | Members **and the login whitelist** | id, community_id, name, email (unique), role (active), roles[] (switchable set), apartment_id?, phone? |
 | `apartments` | Units | id, community_id, number (unique per community), floor, owner_ids[] |
 | `invoices` | Charges per apartment | id, community_id, apartment_id, period, description, amount, paid_amount, due_date, status (paid/due/overdue/partial), parent_invoice_id (late fees) |
 | `payments` | Receipts | id, community_id, invoice_id, apartment_id, amount, date, method (incl. "Credit"), reference, status (pending/confirmed — owner-reported start pending), reported_by? |
@@ -75,7 +75,8 @@ startup; current version in `meta` ({"id": "schema", "version": N}).
 | 001 | `communities.monthly_maintenance` default 3500 |
 | 002 | Backfill M3 collections (feed, maintenance) into pre-M3 databases |
 | 003 | Backfill M4 collections (polls, documents, meetings) |
+| 004 | `users.roles` backfilled to `[role]` |
 
-Schema version: **3**.
+Schema version: **4**.
 
 **Policy:** update this file in the same change as any schema modification.

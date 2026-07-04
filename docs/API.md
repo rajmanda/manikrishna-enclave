@@ -15,6 +15,7 @@ cross-tenant, 409 conflict).
 | POST | `/auth/google` | public | Body `{idToken}`. Verifies Google ID token, 403 if email not whitelisted. Returns `{accessToken, tokenType, user}` |
 | POST | `/auth/dev-login` | DEV_MODE only | Body `{email}`. Impersonate a seeded user. 404 in production |
 | GET | `/auth/me` | any authenticated | Current user; re-checks whitelist (403 if revoked) |
+| POST | `/auth/switch-role` | dual-role users | Switches the ACTIVE role server-side (RBAC + scoping follow); owner view requires an assigned apartment |
 
 ## Communities
 
@@ -40,7 +41,7 @@ cross-tenant, 409 conflict).
 |---|---|---|---|
 | GET | `/users` | any member | Community-scoped |
 | POST | `/users` | manager/admin | Whitelists an email (normalized lowercase); 409 if exists |
-| PATCH | `/users/{id}` | manager/admin | name/role/apartmentId/phone |
+| PATCH | `/users/{id}` | manager/admin | name/email (re-keys whitelist, unique, normalized)/role/roles (switchable set)/apartmentId/phone |
 | DELETE | `/users/{id}` | manager/admin | Revokes access immediately; cannot delete self |
 
 ## Dashboards

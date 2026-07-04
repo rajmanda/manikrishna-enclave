@@ -30,8 +30,8 @@ declare global {
 }
 
 const DEV_ACCOUNTS = [
-  { label: "Vishnu — Property Manager", email: "vishnu@communityhub.app" },
-  { label: "Rajaram (Apt 502) — Owner", email: "owner502@example.com" },
+  { label: "Raj — Property Manager", email: "raj.manda@gmail.com" },
+  { label: "Owner 501 (placeholder)", email: "owner501@example.com" },
   { label: "Community Auditor — Read Only", email: "auditor@communityhub.app" },
 ];
 

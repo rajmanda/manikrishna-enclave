@@ -9,7 +9,14 @@ from app.core.security import (
     verify_google_id_token,
 )
 from app.db import get_db
-from app.models import DevLoginRequest, GoogleLoginRequest, TokenResponse, User
+from app.audit import record_audit
+from app.models import (
+    DevLoginRequest,
+    GoogleLoginRequest,
+    SwitchRoleRequest,
+    TokenResponse,
+    User,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -45,3 +52,29 @@ async def dev_login(body: DevLoginRequest, db: DB) -> TokenResponse:
 @router.get("/me", response_model=User)
 async def me(user: CurrentUser) -> User:
     return user
+
+
+@router.post("/switch-role", response_model=TokenResponse)
+async def switch_role(
+    body: SwitchRoleRequest, db: DB, user: CurrentUser
+) -> TokenResponse:
+    """Dual-role users switch their ACTIVE role server-side, so all RBAC and
+    data scoping genuinely follow (e.g. a manager experiencing the owner
+    view). The active role persists until switched back."""
+    allowed = set(user.roles or [user.role])
+    if body.role not in allowed:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=f"Your account cannot act as {body.role}",
+        )
+    if body.role == "owner" and not user.apartment_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Owner view needs an apartment assigned to your account",
+        )
+    doc = await db.users.find_one_and_update(
+        {"id": user.id}, {"$set": {"role": body.role}}, return_document=True
+    )
+    updated = User.model_validate(doc)
+    await record_audit(db, user, "update", "users", user.id, {"active_role": body.role})
+    return TokenResponse(access_token=create_access_token(updated), user=updated)

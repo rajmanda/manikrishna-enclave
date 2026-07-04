@@ -127,6 +127,16 @@ export default function MaintenancePage() {
     requests.reload();
   }
 
+  async function deleteRequest(id: string) {
+    if (!confirm("Are you sure you want to delete this maintenance request?")) return;
+    try {
+      await api(`/maintenance-requests/${id}`, { method: "DELETE" });
+      requests.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete");
+    }
+  }
+
   return (
     <div className="space-y-4">
       <PageTitle
@@ -171,7 +181,7 @@ export default function MaintenancePage() {
               {userName(users.data, r.createdBy)} · {formatDate(r.createdDate)}
             </p>
             {canManage && (
-              <div className="mt-3 flex gap-1.5 border-t border-slate-100 pt-3">
+              <div className="mt-3 flex gap-1.5 border-t border-slate-100 pt-3 flex-wrap">
                 {STATUSES.filter((s) => s !== r.status).map((s) => (
                   <button
                     key={s}
@@ -181,6 +191,14 @@ export default function MaintenancePage() {
                     Mark {s}
                   </button>
                 ))}
+                {role === "super_admin" && (
+                  <button
+                    onClick={() => deleteRequest(r.id)}
+                    className="ml-auto rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 hover:border-red-300 hover:bg-red-100 hover:text-red-700"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             )}
           </Card>

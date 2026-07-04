@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -14,7 +15,9 @@ import {
 } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
+import { ExpensesModal } from "@/components/ExpensesModal";
 import type {
+  Expense,
   FeedPost,
   Invoice,
   ManagerDashboardData,
@@ -27,7 +30,7 @@ import type {
   WorkOrder,
 } from "@/lib/types";
 import { userName } from "@/lib/lookup";
-import { formatDate, formatINR } from "@/lib/format";
+import { currentMonthLabel, formatDate, formatINR } from "@/lib/format";
 import { stageTone } from "@/lib/tones";
 import {
   Badge,
@@ -67,6 +70,7 @@ function OwnerDashboard() {
   const feed = useApi<FeedPost[]>("/feed");
   const meetings = useApi<Meeting[]>("/meetings");
   const users = useApi<User[]>("/users");
+  const monthly = useApi<MonthlyFinance[]>("/finance/monthly");
 
   const error = summary.error ?? invoices.error ?? workOrders.error;
   if (error) return <ErrorNote message={error} onRetry={summary.reload} />;
@@ -117,7 +121,15 @@ function OwnerDashboard() {
           hint={s.outstandingBalance > 0 ? "Payment due" : "All clear"}
         />
         <Stat label="Open Work Orders" value={String(s.openWorkOrders)} hint="Common areas" />
-        <Stat label="Community Expenses" value={formatINR(s.monthExpenses)} hint="This month" />
+        <Stat
+          label={`Community Expenses (${currentMonthLabel()})`}
+          value={formatINR(s.monthExpenses)}
+          hint={
+            monthly.data && monthly.data.length >= 2
+              ? `${monthly.data[monthly.data.length - 2].month}: ${formatINR(monthly.data[monthly.data.length - 2].expenses)}`
+              : "This month"
+          }
+        />
         <Stat
           label="Reserve Fund"
           value={formatINR(s.reserveFundBalance)}
@@ -244,11 +256,21 @@ function OwnerDashboard() {
   );
 }
 
+function monthPrefixFromIndex(index: number, seriesLength: number): string {
+  // Series is the last N months ending in the current one.
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - (seriesLength - 1 - index));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function ManagerDashboard() {
   const summary = useApi<ManagerDashboardData>("/dashboard/manager");
   const monthly = useApi<MonthlyFinance[]>("/finance/monthly");
   const reserve = useApi<ReserveFundEntry[]>("/reserve-fund");
   const workOrders = useApi<WorkOrder[]>("/work-orders");
+  const expenses = useApi<Expense[]>("/expenses");
+  const [monthModal, setMonthModal] = useState<{ prefix: string; label: string } | null>(null);
 
   const error = summary.error ?? monthly.error ?? reserve.error ?? workOrders.error;
   if (error) return <ErrorNote message={error} onRetry={summary.reload} />;
@@ -304,8 +326,17 @@ function ManagerDashboard() {
           label="Payments Received"
           value={formatINR(s.paymentsReceived)}
           tone="positive"
+          hint="All time"
         />
-        <Stat label="Monthly Expenses" value={formatINR(s.monthExpenses)} />
+        <Stat
+          label={`Expenses (${currentMonthLabel()})`}
+          value={formatINR(s.monthExpenses)}
+          hint={
+            monthly.data && monthly.data.length >= 2
+              ? `${monthly.data[monthly.data.length - 2].month}: ${formatINR(monthly.data[monthly.data.length - 2].expenses)}`
+              : undefined
+          }
+        />
         <Stat
           label="Reserve Fund"
           value={formatINR(s.reserveFundBalance)}
@@ -317,7 +348,18 @@ function ManagerDashboard() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="p-4">
           <h2 className="mb-2 text-sm font-semibold">Cash Flow (6 months)</h2>
-          {monthly.data && <CashFlowChart data={monthly.data} />}
+          <p className="mb-1 text-xs text-slate-400">Tap a month for the expense line items</p>
+          {monthly.data && (
+            <CashFlowChart
+              data={monthly.data}
+              onMonthClick={(index, label) =>
+                setMonthModal({
+                  prefix: monthPrefixFromIndex(index, monthly.data!.length),
+                  label,
+                })
+              }
+            />
+          )}
         </Card>
         <Card className="p-4">
           <h2 className="mb-2 text-sm font-semibold">Collection Rate</h2>
@@ -376,6 +418,16 @@ function ManagerDashboard() {
           </Card>
         </section>
       </div>
+
+      {monthModal && (
+        <ExpensesModal
+          title={`Expenses — ${monthModal.label}`}
+          expenses={(expenses.data ?? []).filter((e) =>
+            e.paidDate.startsWith(monthModal.prefix)
+          )}
+          onClose={() => setMonthModal(null)}
+        />
+      )}
     </div>
   );
 }

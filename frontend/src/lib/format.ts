@@ -24,3 +24,7 @@ export function initials(name: string): string {
     .map((w) => w[0].toUpperCase())
     .join("");
 }
+
+export function currentMonthLabel(): string {
+  return new Date().toLocaleDateString("en-US", { month: "short" });
+}
