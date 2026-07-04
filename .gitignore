@@ -22,3 +22,4 @@ __pycache__/
 *.tfstate
 *.tfstate.*
 crash.log
+client_secret_*.json

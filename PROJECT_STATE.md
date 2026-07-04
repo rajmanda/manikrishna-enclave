@@ -27,11 +27,8 @@ Last updated: 2026-07-03
 1. ~~DNS~~ ✅ done 2026-07-04 — cert ACTIVE, https://community.rajmanda.com live.
 2. ~~Atlas Network Access~~ ✅ already allowed (cluster shared with other Cloud
    Run apps); verified via clean API startup logs.
-3. **Google OAuth client:** create a Web client in GCP Console → Credentials
-   (authorized origin `https://community.rajmanda.com`), then
-   `gcloud secrets versions add communityhub-google-client-id --data-file=-`
-   with the client ID, set GitHub repo variable `GOOGLE_CLIENT_ID` to the
-   same value, and re-run Deploy.
+3. ~~Google OAuth client~~ ✅ done 2026-07-04 — client ID in Secret Manager
+   (v2), GitHub variable, and local envs; Google sign-in live.
 4. **Recommended:** rotate the Atlas password (it was shared in a chat
    session) and update the `communityhub-mongodb-uri` secret + local .env.
 5. Replace placeholder owner emails with real Google accounts
