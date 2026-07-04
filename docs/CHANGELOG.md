@@ -3,6 +3,13 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [Unreleased]
+
+### 2026-07-04
+- Invoice generation supports a specific apartment subset (`apartmentIds`);
+  the Generate dialog gained an All / Select-apartments picker with owner
+  names and per-apartment checkboxes.
+
 ## [0.4.0] — 2026-07-04 · M4 Governance module
 
 - Polls: create (notifies members), one-vote-per-apartment with revoting,

@@ -28,16 +28,45 @@ function nextMonthLabel(): string {
   return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
-function GenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+function GenerateDialog({
+  apartments,
+  users,
+  onClose,
+  onDone,
+}: {
+  apartments: Apartment[] | undefined;
+  users: User[] | undefined;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [period, setPeriod] = useState(nextMonthLabel());
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState("");
+  const [scope, setScope] = useState<"all" | "selected">("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
 
+  const sortedApartments = [...(apartments ?? [])].sort((a, b) =>
+    a.number.localeCompare(b.number)
+  );
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (scope === "selected" && selected.size === 0) {
+      setError("Select at least one apartment");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -49,6 +78,7 @@ function GenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
             period,
             dueDate,
             ...(amount ? { amount: Number(amount) } : {}),
+            ...(scope === "selected" ? { apartmentIds: [...selected] } : {}),
           }),
         }
       );
@@ -85,9 +115,64 @@ function GenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
             <label className={labelCls}>Amount per apartment (blank = community default)</label>
             <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="3500" />
           </div>
+          <div>
+            <label className={labelCls}>Apartments</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setScope("all")}
+                className={`rounded-xl border px-3 py-2.5 text-sm font-medium ${
+                  scope === "all"
+                    ? "border-brand-500 bg-brand-50 text-brand-700"
+                    : "border-slate-200 text-slate-600"
+                }`}
+              >
+                All apartments
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope("selected")}
+                className={`rounded-xl border px-3 py-2.5 text-sm font-medium ${
+                  scope === "selected"
+                    ? "border-brand-500 bg-brand-50 text-brand-700"
+                    : "border-slate-200 text-slate-600"
+                }`}
+              >
+                Select apartments
+              </button>
+            </div>
+            {scope === "selected" && (
+              <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
+                {sortedApartments.map((apt) => (
+                  <label
+                    key={apt.id}
+                    className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(apt.id)}
+                      onChange={() => toggle(apt.id)}
+                      className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    />
+                    <span className="font-medium">Apt {apt.number}</span>
+                    <span className="truncate text-xs text-slate-400">
+                      {ownerNameFor(users, sortedApartments, apt.id)}
+                    </span>
+                  </label>
+                ))}
+                <p className="px-2 pt-1 text-xs text-slate-400">
+                  {selected.size} selected
+                </p>
+              </div>
+            )}
+          </div>
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
           <button type="submit" disabled={busy || !dueDate} className={primaryBtnCls}>
-            {busy ? "Generating…" : "Generate for all apartments"}
+            {busy
+              ? "Generating…"
+              : scope === "all"
+                ? "Generate for all apartments"
+                : `Generate for ${selected.size} apartment${selected.size === 1 ? "" : "s"}`}
           </button>
         </form>
       )}
@@ -358,7 +443,12 @@ export default function InvoicesPage() {
       </Card>
 
       {dialog === "generate" && (
-        <GenerateDialog onClose={() => setDialog(null)} onDone={invoices.reload} />
+        <GenerateDialog
+          apartments={apartments.data}
+          users={users.data}
+          onClose={() => setDialog(null)}
+          onDone={invoices.reload}
+        />
       )}
       {dialog === "latefee" && (
         <LateFeeDialog onClose={() => setDialog(null)} onDone={invoices.reload} />

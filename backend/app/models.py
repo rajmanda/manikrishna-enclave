@@ -154,6 +154,7 @@ class GenerateInvoicesRequest(APIModel):
     due_date: str
     amount: float | None = None  # defaults to community.monthly_maintenance
     description: str = "Monthly Maintenance"
+    apartment_ids: list[str] | None = None  # None = all apartments
 
 
 class ApplyLateFeesRequest(APIModel):

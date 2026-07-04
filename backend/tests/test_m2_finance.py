@@ -211,3 +211,29 @@ async def test_csv_export_scoped(client, owner_headers, manager_headers):
 
     mgr_csv = await client.get("/api/v1/invoices/export.csv", headers=manager_headers)
     assert len(mgr_csv.text.strip().splitlines()) == 11  # header + 10
+
+
+async def test_generate_invoices_for_specific_apartments(client, manager_headers):
+    body = {"period": "Aug 2026", "dueDate": "2026-08-10",
+            "apartmentIds": ["apt-101", "apt-502"]}
+    resp = await client.post(
+        "/api/v1/invoices/generate", json=body, headers=manager_headers
+    )
+    assert resp.json() == {"created": 2, "skipped": 0}
+
+    # Idempotent for the subset; the rest of the building is untouched.
+    again = await client.post(
+        "/api/v1/invoices/generate", json=body, headers=manager_headers
+    )
+    assert again.json() == {"created": 0, "skipped": 2}
+
+    invoices = await client.get("/api/v1/invoices", headers=manager_headers)
+    aug = [i for i in invoices.json() if i["period"] == "Aug 2026"]
+    assert {i["apartmentId"] for i in aug} == {"apt-101", "apt-502"}
+
+    unknown = await client.post(
+        "/api/v1/invoices/generate",
+        json={"period": "Aug 2026", "dueDate": "2026-08-10", "apartmentIds": ["apt-999"]},
+        headers=manager_headers,
+    )
+    assert unknown.status_code == 400

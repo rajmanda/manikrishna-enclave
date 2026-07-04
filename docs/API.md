@@ -74,7 +74,7 @@ cross-tenant, 409 conflict).
 | Method | Path | Access | Notes |
 |---|---|---|---|
 | POST | `/invoices` | manager/admin | Single invoice for an apartment |
-| POST | `/invoices/generate` | manager/admin | One per apartment for a period; idempotent; amount defaults to `community.monthlyMaintenance` |
+| POST | `/invoices/generate` | manager/admin | One per apartment for a period (all, or only `apartmentIds` when provided); idempotent; amount defaults to `community.monthlyMaintenance` |
 | POST | `/invoices/apply-late-fees` | manager/admin | Late-fee invoice per overdue invoice of the period (idempotent, linked via `parentInvoiceId`) |
 | PATCH | `/invoices/{id}` | manager/admin | description/amount/dueDate; status recomputed |
 | DELETE | `/invoices/{id}` | manager/admin | 409 if payments exist |

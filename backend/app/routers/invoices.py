@@ -69,16 +69,22 @@ async def create_invoice(body: InvoiceCreate, db: DB, user: CurrentUser) -> Invo
 async def generate_invoices(
     body: GenerateInvoicesRequest, db: DB, user: CurrentUser
 ) -> dict:
-    """Bulk-generate one invoice per apartment for a period. Idempotent —
-    apartments that already have an invoice with this description+period are
-    skipped, so re-running (or a future Cloud Scheduler hook) is safe."""
+    """Generate one invoice per apartment for a period — all apartments by
+    default, or only `apartment_ids` when provided. Idempotent: apartments
+    that already have an invoice with this description+period are skipped,
+    so re-running (or a future Cloud Scheduler hook) is safe."""
     community = await db.communities.find_one({"id": user.community_id})
     amount = body.amount if body.amount is not None else community.get(
         "monthly_maintenance", 3500
     )
-    apartments = await db.apartments.find(
-        {"community_id": user.community_id}
-    ).to_list(1000)
+    apartment_query: dict = {"community_id": user.community_id}
+    if body.apartment_ids is not None:
+        apartment_query["id"] = {"$in": body.apartment_ids}
+    apartments = await db.apartments.find(apartment_query).to_list(1000)
+    if body.apartment_ids is not None and not apartments:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="No matching apartments"
+        )
     created = 0
     for apt in apartments:
         exists = await db.invoices.find_one(
