@@ -21,6 +21,16 @@ export function useUrlFilters(defaults: Record<string, string>) {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
+  function setMany(patch: Record<string, string>) {
+    const next = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === defaults[key]) next.delete(key);
+      else next.set(key, value);
+    }
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
   function clearAll() {
     router.replace(pathname, { scroll: false });
   }
@@ -29,5 +39,5 @@ export function useUrlFilters(defaults: Record<string, string>) {
     (k) => values[k] !== defaults[k]
   ).length;
 
-  return { values, set, clearAll, activeCount };
+  return { values, set, setMany, clearAll, activeCount };
 }

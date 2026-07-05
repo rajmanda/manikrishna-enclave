@@ -101,7 +101,8 @@ async def manager_dashboard(db: DB, user: CurrentUser) -> ManagerDashboard:
         db.payments.count_documents({"community_id": cid, "status": "pending"}),
     )
     community_inv = [i for i in invoices if i.get("ledger", "community") == "community"]
-    fee_inv = [i for i in invoices if i.get("ledger") == "manager_fee"]
+    fee_inv = [i for i in invoices
+               if i.get("ledger", "community") in ("manager_fee", "reimbursement")]
     return ManagerDashboard(
         outstanding_collections=sum(i["amount"] - i["paid_amount"] for i in community_inv),
         payments_received=sum(i["paid_amount"] for i in community_inv),

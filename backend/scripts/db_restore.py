@@ -36,18 +36,24 @@ async def main(backup_path: Path) -> None:
     except Exception as e:
         sys.exit(f"❌ Failed to parse backup file: {e}")
 
-    # Confirm with user
+    # Confirm with user (skip with --yes for scripted use)
     print(f"\n⚠️ WARNING: This will drop all collections in database '{settings.db_name}' and restore from backup.")
-    confirm = input("Type  yes  to proceed: ").strip().lower()
-    if confirm != "yes":
-        print("Aborted.")
-        client.close()
-        return
+    if "--yes" not in sys.argv:
+        confirm = input("Type  yes  to proceed: ").strip().lower()
+        if confirm != "yes":
+            print("Aborted.")
+            client.close()
+            return
 
-    # Drop existing collections in the backup data
+    # True snapshot semantics: drop EVERY existing collection, including ones
+    # created after the backup was taken (otherwise they'd survive and mix
+    # post-backup data into the restored state).
+    for existing in await db.list_collection_names():
+        if not existing.startswith("system."):
+            await db[existing].drop()
+
     for coll_name, docs in backup_data.items():
         print(f"Restoring '{coll_name}'...")
-        await db[coll_name].drop()
         if docs:
             await db[coll_name].insert_many(docs)
             print(f"  Restored {len(docs)} documents.")

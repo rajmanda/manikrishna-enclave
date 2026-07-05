@@ -254,7 +254,7 @@ export default function CommunityPage() {
           }
         />
         <Stat label="Outstanding Dues" value={formatINR(s.outstandingDues)} />
-        <Stat label="Reserve Fund" value={formatINR(s.reserveFundBalance)} tone="positive" />
+        <Stat label="Community Reserve" value={formatINR(s.reserveFundBalance)} tone="positive" hint="Shared fund balance" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-5">

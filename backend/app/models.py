@@ -166,8 +166,25 @@ class Invoice(APIModel):
     due_date: str
     status: InvoiceStatus = "due"
     parent_invoice_id: str | None = None  # set on late-fee invoices
-    # "community" money vs the manager's personal service fee — never mixed.
-    ledger: Literal["community", "manager_fee"] = "community"
+    # "community" money vs the manager's personal streams (monthly service
+    # fee / flat-specific reimbursements) — never mixed into community funds.
+    ledger: Literal["community", "manager_fee", "reimbursement"] = "community"
+    line_items: list["InvoiceLineItem"] = []
+
+
+class InvoiceLineItem(APIModel):
+    description: str
+    amount: float
+
+
+class BillOwnerRequest(APIModel):
+    """Itemized personal charges the manager collects from one apartment."""
+
+    apartment_id: str
+    period: str
+    due_date: str
+    description: str = "Flat expenses"
+    line_items: list[InvoiceLineItem]
 
 
 class InvoiceCreate(APIModel):
@@ -212,7 +229,7 @@ class Payment(APIModel):
     # Owner-reported payments start pending; only confirmed ones count.
     status: Literal["pending", "confirmed"] = "confirmed"
     reported_by: str | None = None
-    ledger: Literal["community", "manager_fee"] = "community"
+    ledger: Literal["community", "manager_fee", "reimbursement"] = "community"
 
 
 class PaymentReport(APIModel):

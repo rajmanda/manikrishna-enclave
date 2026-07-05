@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { AlarmClock, ArrowUpDown, Banknote, Download, FileDown, HandCoins, LayoutGrid, PlusCircle, Table2, Trash2 } from "lucide-react";
+import { AlarmClock, ArrowUpDown, Banknote, Download, FileDown, HandCoins, LayoutGrid, PlusCircle, ReceiptText, Table2, Trash2 } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError, downloadFile } from "@/lib/api";
@@ -10,7 +10,7 @@ import { useUrlFilters } from "@/hooks/useUrlFilters";
 import { FilterBar } from "@/components/FilterBar";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
-import { invoiceTone } from "@/lib/tones";
+import { invoiceTone, ledgerAccent } from "@/lib/tones";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import {
   Badge,
@@ -171,7 +171,7 @@ function GenerateDialog({
   }
 
   return (
-    <Modal title="Generate Monthly Invoices" onClose={onClose}>
+    <Modal title="Create Community Invoices" onClose={onClose}>
       <form className="space-y-4" onSubmit={submit}>
         <div>
           <label className={labelCls}>Period</label>
@@ -239,10 +239,10 @@ function GenerateDialog({
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
           <button type="submit" disabled={busy || !dueDate} className={primaryBtnCls}>
             {busy
-              ? "Generating…"
+              ? "Creating…"
               : scope === "all"
-                ? "Generate for all apartments"
-                : `Generate for ${selected.size} apartment${selected.size === 1 ? "" : "s"}`}
+                ? "Create for all apartments"
+                : `Create for ${selected.size} apartment${selected.size === 1 ? "" : "s"}`}
           </button>
         </form>
       </Modal>
@@ -318,6 +318,143 @@ function PaymentDialog({
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button type="submit" disabled={busy} className={primaryBtnCls}>
           {busy ? "Saving…" : `Record ${formatINR(Number(amount) || 0)}`}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function BillOwnerDialog({
+  apartments,
+  users,
+  onClose,
+  onDone,
+}: {
+  apartments: Apartment[] | undefined;
+  users: User[] | undefined;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [apartmentId, setApartmentId] = useState("");
+  const [period, setPeriod] = useState(
+    new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })
+  );
+  const [dueDate, setDueDate] = useState("");
+  const [items, setItems] = useState<{ description: string; amount: string }[]>([
+    { description: "", amount: "" },
+  ]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const total = items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const sortedApts = [...(apartments ?? [])].sort((a, b) => a.number.localeCompare(b.number));
+
+  function update(i: number, patch: Partial<{ description: string; amount: string }>) {
+    setItems(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/invoices/bill-owner", {
+        method: "POST",
+        body: JSON.stringify({
+          apartmentId,
+          period,
+          dueDate,
+          lineItems: items
+            .filter((i) => i.description.trim() && Number(i.amount) > 0)
+            .map((i) => ({ description: i.description.trim(), amount: Number(i.amount) })),
+        }),
+      });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to bill owner");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Bill an Owner (personal reimbursement)" onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <p className="text-xs text-slate-500">
+          Flat-specific expenses you paid and are collecting back — kept fully
+          separate from community funds. The owner sees this exact breakdown.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Apartment</label>
+            <select className={inputCls} value={apartmentId} onChange={(e) => setApartmentId(e.target.value)} required>
+              <option value="">Select…</option>
+              {sortedApts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  Apt {a.number} — {ownerNameFor(users, apartments, a.id).slice(0, 20)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Due date</label>
+            <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Line items</label>
+          <div className="space-y-1.5">
+            {items.map((it, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                  placeholder="e.g. May electricity bill"
+                  value={it.description}
+                  onChange={(e) => update(i, { description: e.target.value })}
+                />
+                <input
+                  type="number"
+                  min="1"
+                  className="w-24 rounded-lg border border-slate-200 px-2.5 py-1.5 text-right text-sm focus:border-brand-500 focus:outline-none"
+                  placeholder="₹"
+                  value={it.amount}
+                  onChange={(e) => update(i, { amount: e.target.value })}
+                />
+                <button
+                  type="button"
+                  aria-label="Remove item"
+                  onClick={() => setItems(items.filter((_, idx) => idx !== i))}
+                  disabled={items.length === 1}
+                  className="text-slate-300 hover:text-red-500 disabled:opacity-30"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setItems([...items, { description: "", amount: "" }])}
+              className="text-xs font-medium text-brand-600 hover:text-brand-700"
+            >
+              + Add line item
+            </button>
+          </div>
+          <p className="mt-2 flex justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold">
+            <span>Total</span>
+            <span>{formatINR(total)}</span>
+          </p>
+        </div>
+        <div>
+          <label className={labelCls}>Period (billing month)</label>
+          <input className={inputCls} value={period} onChange={(e) => setPeriod(e.target.value)} required />
+        </div>
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={busy || !apartmentId || !dueDate || total <= 0}
+          className={primaryBtnCls}
+        >
+          {busy ? "Billing…" : `Bill ${formatINR(total)} (owner is notified)`}
         </button>
       </form>
     </Modal>
@@ -541,11 +678,11 @@ function InvoicesPageInner() {
   const apartments = useApi<Apartment[]>(mine ? null : "/apartments");
   const users = useApi<User[]>(mine ? null : "/users");
   const accounts = useApi<Account[]>(mine ? null : "/accounts");
-  const { values: f, set: setFilter, clearAll, activeCount } = useUrlFilters({
+  const { values: f, set: setFilter, setMany, clearAll, activeCount } = useUrlFilters({
     client: "all", apt: "all", status: "all", ledger: "all", view: "boxes",
   });
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: "dueDate", dir: -1 });
-  const [dialog, setDialog] = useState<"generate" | "latefee" | "fees" | null>(null);
+  const [dialog, setDialog] = useState<"generate" | "latefee" | "fees" | "billowner" | null>(null);
   const [aptTab, setAptTab] = useState<string>("all");
   const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
   const [reportInvoice, setReportInvoice] = useState<Invoice | null>(null);
@@ -614,9 +751,15 @@ function InvoicesPageInner() {
     }
     return [...map.entries()].map(([period, items]) => ({ period, items }));
   })();
-  const outstanding = list.reduce((s, i) => s + (i.amount - i.paidAmount), 0);
-  const billed = list.reduce((s, i) => s + i.amount, 0);
-  const collected = list.reduce((s, i) => s + i.paidAmount, 0);
+  const communityInv = list.filter((i) => (i.ledger ?? "community") === "community");
+  const personalInv = list.filter((i) => (i.ledger ?? "community") !== "community");
+  const sums = (arr: Invoice[]) => ({
+    billed: arr.reduce((s, i) => s + i.amount, 0),
+    collected: arr.reduce((s, i) => s + i.paidAmount, 0),
+    due: arr.reduce((s, i) => s + (i.amount - i.paidAmount), 0),
+  });
+  const c = sums(communityInv);
+  const p = sums(personalInv);
   const myApts = (user.apartmentIds?.length ? user.apartmentIds : user.apartmentId ? [user.apartmentId] : []).slice().sort();
 
   return (
@@ -636,7 +779,13 @@ function InvoicesPageInner() {
                   onClick={() => setDialog("generate")}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
                 >
-                  <PlusCircle className="h-4 w-4" /> Generate
+                  <PlusCircle className="h-4 w-4" /> Create invoices
+                </button>
+                <button
+                  onClick={() => setDialog("billowner")}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-sm font-medium text-amber-700 shadow-sm hover:bg-amber-100"
+                >
+                  <ReceiptText className="h-4 w-4" /> Bill owner
                 </button>
                 <button
                   onClick={() => setDialog("fees")}
@@ -696,6 +845,7 @@ function InvoicesPageInner() {
                 { key: "apt", label: "Apartment", options: [
                   { value: "all", label: "All apartments" },
                   ...[...(apartments.data ?? [])]
+                    .filter((a) => f.client === "all" || accountApts.has(a.id))
                     .sort((a, b) => a.number.localeCompare(b.number))
                     .map((a) => ({ value: a.id, label: `Apt ${a.number}` })),
                 ]},
@@ -707,13 +857,21 @@ function InvoicesPageInner() {
                   { value: "paid", label: "Paid" },
                 ]},
                 { key: "ledger", label: "Ledger", options: [
-                  { value: "all", label: "Both ledgers" },
+                  { value: "all", label: "All ledgers" },
                   { value: "community", label: "Community" },
                   { value: "manager_fee", label: "Manager fee" },
+                  { value: "reimbursement", label: "Reimbursement" },
                 ]},
               ]}
               values={f}
-              onChange={setFilter}
+              onChange={(key, value) => {
+                if (key === "client" && value !== "all") {
+                  const apts = accounts.data?.find((a) => a.id === value)?.apartmentIds ?? [];
+                  setMany({ client: value, ...(apts.includes(f.apt) ? {} : { apt: "all" }) });
+                } else {
+                  setFilter(key, value);
+                }
+              }}
               onClearAll={clearAll}
               activeCount={activeCount}
             />
@@ -755,14 +913,28 @@ function InvoicesPageInner() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3">
-        <Stat label="Billed" value={formatINR(billed)} />
-        <Stat label="Collected" value={formatINR(collected)} tone="positive" />
-        <Stat
-          label="Outstanding"
-          value={formatINR(outstanding)}
-          tone={outstanding > 0 ? "negative" : "positive"}
-        />
+      {/* Never blend the two monies — one panel per ledger. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Card className="p-4">
+          <div className="flex items-center gap-2">
+            <Badge tone="blue">Community funds</Badge>
+          </div>
+          <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
+            <div><p className="text-xs text-slate-500">Billed</p><p className="text-sm font-bold sm:text-base">{formatINR(c.billed)}</p></div>
+            <div><p className="text-xs text-slate-500">Collected</p><p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(c.collected)}</p></div>
+            <div><p className="text-xs text-slate-500">Due</p><p className={`text-sm font-bold sm:text-base ${c.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(c.due)}</p></div>
+          </div>
+        </Card>
+        <Card className="border-violet-200 bg-violet-50/40 p-4">
+          <div className="flex items-center gap-2">
+            <Badge tone="violet">{mine ? "Payable to manager" : "Personal — fees & reimbursements"}</Badge>
+          </div>
+          <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
+            <div><p className="text-xs text-slate-500">Billed</p><p className="text-sm font-bold sm:text-base">{formatINR(p.billed)}</p></div>
+            <div><p className="text-xs text-slate-500">Collected</p><p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(p.collected)}</p></div>
+            <div><p className="text-xs text-slate-500">Due</p><p className={`text-sm font-bold sm:text-base ${p.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(p.due)}</p></div>
+          </div>
+        </Card>
       </div>
 
       {!mine && f.view === "table" ? (
@@ -803,7 +975,7 @@ function InvoicesPageInner() {
                   return (av < bv ? -1 : av > bv ? 1 : 0) * sort.dir;
                 })
                 .map((inv) => (
-                  <tr key={inv.id} className="hover:bg-slate-50/60">
+                  <tr key={inv.id} className={`hover:bg-slate-50/60 ${ledgerAccent(inv.ledger)}`}>
                     <td className="px-3 py-2.5 font-semibold">{aptNumber(inv.apartmentId)}</td>
                     <td className="max-w-[16rem] truncate px-3 py-2.5">
                       {inv.description}{" "}
@@ -836,19 +1008,21 @@ function InvoicesPageInner() {
 
       <div className={!mine && f.view === "table" ? "space-y-5 md:hidden" : "space-y-5"} key={`boxes-${JSON.stringify(f)}-${aptTab}`}>
       {periodGroups.map(({ period, items }) => {
-        const groupBilled = items.reduce((sum, i) => sum + i.amount, 0);
-        const groupDue = items.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0);
+        const gc = items.filter((i) => (i.ledger ?? "community") === "community");
+        const gp = items.filter((i) => (i.ledger ?? "community") !== "community");
+        const gcDue = gc.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0);
+        const gpDue = gp.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0);
         return (
           <section key={period} className="animate-rise">
             <div className="mb-2 flex items-baseline justify-between px-1">
               <h2 className="text-sm font-bold text-slate-700">{period}</h2>
               <p className="text-xs text-slate-400">
-                {items.length} invoice{items.length === 1 ? "" : "s"} ·{" "}
-                {formatINR(groupBilled)} billed ·{" "}
-                {groupDue > 0 ? (
-                  <span className="font-medium text-red-500">{formatINR(groupDue)} due</span>
-                ) : (
-                  <span className="font-medium text-emerald-600">all paid</span>
+                {items.length} invoice{items.length === 1 ? "" : "s"}
+                {gc.length > 0 && (
+                  <> · community {gcDue > 0 ? <span className="font-medium text-red-500">{formatINR(gcDue)} due</span> : <span className="font-medium text-emerald-600">paid</span>}</>
+                )}
+                {gp.length > 0 && (
+                  <> · personal {gpDue > 0 ? <span className="font-medium text-red-500">{formatINR(gpDue)} due</span> : <span className="font-medium text-emerald-600">paid</span>}</>
                 )}
               </p>
             </div>
@@ -856,7 +1030,7 @@ function InvoicesPageInner() {
               {items.map((inv) => {
                 const balance = inv.amount - inv.paidAmount;
           return (
-            <div key={inv.id} className="p-4">
+            <div key={inv.id} className={`p-4 ${ledgerAccent(inv.ledger)}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
@@ -941,6 +1115,14 @@ function InvoicesPageInner() {
       )}
       {dialog === "latefee" && (
         <LateFeeDialog onClose={() => setDialog(null)} onDone={invoices.reload} />
+      )}
+      {dialog === "billowner" && (
+        <BillOwnerDialog
+          apartments={apartments.data}
+          users={users.data}
+          onClose={() => setDialog(null)}
+          onDone={invoices.reload}
+        />
       )}
       {dialog === "fees" && (
         <FeeDialog

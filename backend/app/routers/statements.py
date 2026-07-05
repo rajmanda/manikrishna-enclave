@@ -91,7 +91,7 @@ async def consolidated_statement(db: DB, user: CurrentUser) -> Response:
         # (rows are labeled; totals here are the account's full obligation).
         fee_rows = [i for i in await db.invoices.find(
             {"community_id": user.community_id, "apartment_id": apt_id,
-             "ledger": "manager_fee"}).to_list(1000)]
+             "ledger": {"$in": ["manager_fee", "reimbursement"]}}).to_list(1000)]
         fee_rows.sort(key=lambda i: i["due_date"])
         d["invoices"] = d["invoices"] + fee_rows
         pdf.ln(3)
@@ -159,7 +159,8 @@ async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Respons
     pdf.ln(4)
 
     community_invoices = [i for i in d["invoices"] if i.get("ledger", "community") == "community"]
-    fee_invoices = [i for i in d["invoices"] if i.get("ledger") == "manager_fee"]
+    fee_invoices = [i for i in d["invoices"]
+                    if i.get("ledger", "community") in ("manager_fee", "reimbursement")]
     d["invoices"] = community_invoices
 
     # Invoices table
@@ -195,7 +196,7 @@ async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Respons
     # Manager service fees — separate money, never community funds.
     if fee_invoices:
         pdf.set_font("helvetica", "B", 10)
-        pdf.cell(0, 7, "Manager Service Fees (payable to the property manager)",
+        pdf.cell(0, 7, "Payable to the Property Manager (fees & reimbursements)",
                  new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("helvetica", "B", 9)
         for w, h in zip(widths, ("Period", "Description", "Amount", "Paid", "Status")):

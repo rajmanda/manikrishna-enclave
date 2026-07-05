@@ -189,3 +189,62 @@ async def test_accounts_endpoint(client, manager_headers, owner_headers, db):
     assert any(a["name"] == "Zeta Family" for a in listed.json())
     denied = await client.get("/api/v1/accounts", headers=owner_headers)
     assert denied.status_code == 403
+
+
+async def test_bill_owner_itemized_reimbursement(client, manager_headers, owner_headers, db):
+    before = (await client.get("/api/v1/finance/summary", headers=manager_headers)).json()
+
+    created = await client.post(
+        "/api/v1/invoices/bill-owner",
+        json={"apartmentId": "apt-502", "period": "Jul 2026", "dueDate": "2026-07-15",
+              "lineItems": [
+                  {"description": "May electricity", "amount": 60},
+                  {"description": "June electricity", "amount": 100},
+                  {"description": "Rental agreement document", "amount": 500},
+                  {"description": "Painting work + material", "amount": 1500},
+              ]},
+        headers=manager_headers,
+    )
+    assert created.status_code == 201
+    inv = created.json()
+    assert inv["amount"] == 2160          # auto-summed
+    assert inv["ledger"] == "reimbursement"
+    assert "Apt 502" in inv["description"]
+    assert len(inv["lineItems"]) == 4
+
+    # Community money untouched; manager tile includes it.
+    after = (await client.get("/api/v1/finance/summary", headers=manager_headers)).json()
+    assert after["outstandingDues"] == before["outstandingDues"]
+    dash = (await client.get("/api/v1/dashboard/manager", headers=manager_headers)).json()
+    assert dash["feeOutstanding"] >= 2160
+
+    # Owner sees breakdown, notified, and same report->confirm path works.
+    notes = await client.get("/api/v1/notifications", headers=owner_headers)
+    assert any("2,160" in n["text"] for n in notes.json())
+    mine = (await client.get("/api/v1/invoices", headers=owner_headers)).json()
+    r = next(i for i in mine if i["id"] == inv["id"])
+    assert r["lineItems"][3]["amount"] == 1500
+
+    reported = await client.post(
+        "/api/v1/payments/report",
+        json={"invoiceId": inv["id"], "amount": 2160, "date": "2026-07-06",
+              "method": "UPI", "reference": "R-1"},
+        headers=owner_headers,
+    )
+    assert reported.json()["ledger"] == "reimbursement"
+
+    # Validation: empty items rejected; owners cannot bill.
+    bad = await client.post(
+        "/api/v1/invoices/bill-owner",
+        json={"apartmentId": "apt-502", "period": "Jul 2026", "dueDate": "2026-07-15",
+              "lineItems": []},
+        headers=manager_headers,
+    )
+    assert bad.status_code == 400
+    denied = await client.post(
+        "/api/v1/invoices/bill-owner",
+        json={"apartmentId": "apt-502", "period": "Jul 2026", "dueDate": "2026-07-15",
+              "lineItems": [{"description": "x", "amount": 1}]},
+        headers=owner_headers,
+    )
+    assert denied.status_code == 403

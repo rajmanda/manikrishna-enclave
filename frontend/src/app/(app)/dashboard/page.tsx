@@ -140,10 +140,10 @@ function OwnerDashboard() {
           }
         />
         <Stat
-          label="Reserve Fund"
+          label="Community Reserve"
           value={formatINR(s.reserveFundBalance)}
           tone="positive"
-          hint="Current balance"
+          hint="Shared community fund — not your balance"
         />
       </div>
 
@@ -328,7 +328,7 @@ function ManagerDashboard() {
         <Card className="flex flex-wrap items-center justify-between gap-2 border-violet-200 bg-violet-50/50 p-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
-              Manager service fees (separate from community funds)
+              Payable to you — fees & reimbursements (separate from community funds)
             </p>
             <p className="mt-1 text-sm text-violet-900">
               Collected {formatINR(s.feeCollected)} · Outstanding {formatINR(s.feeOutstanding)}

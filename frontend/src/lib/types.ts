@@ -65,7 +65,8 @@ export interface Invoice {
   paidAmount: number;
   dueDate: string;
   status: InvoiceStatus;
-  ledger?: "community" | "manager_fee";
+  ledger?: "community" | "manager_fee" | "reimbursement";
+  lineItems?: { description: string; amount: number }[];
 }
 
 export interface Payment {
@@ -78,7 +79,7 @@ export interface Payment {
   reference: string;
   status?: "pending" | "confirmed";
   reportedBy?: string | null;
-  ledger?: "community" | "manager_fee";
+  ledger?: "community" | "manager_fee" | "reimbursement";
 }
 
 export type ExpenseCategory =

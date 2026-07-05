@@ -11,6 +11,7 @@ from app.db import get_db
 from app.models import (
     WRITE_ROLES,
     ApplyLateFeesRequest,
+    BillOwnerRequest,
     GenerateInvoicesRequest,
     Invoice,
     InvoiceCreate,
@@ -129,6 +130,64 @@ async def generate_invoices(
         db, user, "create", "invoices", f"bulk:{body.period}", {"created": created}
     )
     return {"created": created, "skipped": len(apartments) - created}
+
+
+@router.post(
+    "/invoices/bill-owner",
+    response_model=Invoice,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Writer],
+)
+async def bill_owner(body: BillOwnerRequest, db: DB, user: CurrentUser) -> Invoice:
+    """Itemized reimbursement invoice — money the manager spent on a specific
+    flat (electricity, paperwork, repairs) and collects personally. Never
+    touches community funds (ledger="reimbursement")."""
+    apt = await db.apartments.find_one(
+        {"id": body.apartment_id, "community_id": user.community_id}
+    )
+    if apt is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Apartment not found")
+    items = [i for i in body.line_items if i.description.strip() and i.amount > 0]
+    if not items:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="At least one line item required"
+        )
+    total = sum(i.amount for i in items)
+    invoice = Invoice(
+        community_id=user.community_id,
+        apartment_id=body.apartment_id,
+        period=body.period,
+        description=with_apartment(body.description, body.apartment_id),
+        amount=total,
+        due_date=body.due_date,
+        status=compute_status(total, 0, body.due_date),
+        ledger="reimbursement",
+        line_items=items,
+    )
+    await db.invoices.insert_one(invoice.model_dump())
+    await record_audit(
+        db, user, "create", "invoices", invoice.id,
+        {"ledger": "reimbursement", "total": total, "items": len(items)},
+    )
+    # Notify everyone whose account (or legacy link) covers this apartment.
+    recipients: set[str] = set()
+    async for u in db.users.find({"community_id": user.community_id}):
+        apts = set()
+        if u.get("account_id"):
+            acct = await db.accounts.find_one({"id": u["account_id"]})
+            if acct:
+                apts.update(acct.get("apartment_ids", []))
+        if u.get("apartment_id"):
+            apts.add(u["apartment_id"])
+        if body.apartment_id in apts and u["id"] != user.id:
+            recipients.add(u["id"])
+    for rid in recipients:
+        await notify_user(
+            db, user.community_id, rid,
+            f"{user.name} billed Rs {total:,.0f} for {invoice.description}",
+            "invoice", href="/invoices",
+        )
+    return invoice
 
 
 @router.post("/invoices/apply-late-fees", dependencies=[Writer])

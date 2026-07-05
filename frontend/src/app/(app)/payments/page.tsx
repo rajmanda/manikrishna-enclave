@@ -9,6 +9,7 @@ import { FilterBar } from "@/components/FilterBar";
 import type { Account, Apartment, Payment, User } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
+import { ledgerAccent } from "@/lib/tones";
 import {
   Badge,
   Card,
@@ -23,7 +24,7 @@ function PaymentsPageInner() {
   const apartments = useApi<Apartment[]>("/apartments");
   const users = useApi<User[]>("/users");
   const accounts = useApi<Account[]>("/accounts");
-  const { values: f, set: setFilter, clearAll, activeCount } = useUrlFilters({
+  const { values: f, set: setFilter, setMany, clearAll, activeCount } = useUrlFilters({
     client: "all", apt: "all", method: "all", ledger: "all",
   });
 
@@ -46,7 +47,12 @@ function PaymentsPageInner() {
   const pending = visible.filter((p) => p.status === "pending");
   const confirmed = visible.filter((p) => p.status !== "pending");
   const sorted = [...confirmed].sort((a, b) => b.date.localeCompare(a.date));
-  const total = confirmed.reduce((s, p) => s + p.amount, 0);
+  const communityTotal = confirmed
+    .filter((p) => (p.ledger ?? "community") === "community")
+    .reduce((s, p) => s + p.amount, 0);
+  const personalTotal = confirmed
+    .filter((p) => (p.ledger ?? "community") !== "community")
+    .reduce((s, p) => s + p.amount, 0);
 
   async function act(p: Payment, action: "confirm" | "reject") {
     if (action === "reject" && !confirm(`Reject the reported payment of ${formatINR(p.amount)}? The owner will be notified.`)) return;
@@ -71,6 +77,7 @@ function PaymentsPageInner() {
           { key: "apt", label: "Apartment", options: [
             { value: "all", label: "All apartments" },
             ...[...(apartments.data ?? [])]
+              .filter((a) => f.client === "all" || accountApts.has(a.id))
               .sort((a, b) => a.number.localeCompare(b.number))
               .map((a) => ({ value: a.id, label: `Apt ${a.number}` })),
           ]},
@@ -83,20 +90,37 @@ function PaymentsPageInner() {
             { value: "Credit", label: "Credit / Waiver" },
           ]},
           { key: "ledger", label: "Ledger", options: [
-            { value: "all", label: "Both ledgers" },
+            { value: "all", label: "All ledgers" },
             { value: "community", label: "Community" },
             { value: "manager_fee", label: "Manager fee" },
+            { value: "reimbursement", label: "Reimbursement" },
           ]},
         ]}
         values={f}
-        onChange={setFilter}
+        onChange={(key, value) => {
+          if (key === "client" && value !== "all") {
+            const apts = accounts.data?.find((a) => a.id === value)?.apartmentIds ?? [];
+            setMany({ client: value, ...(apts.includes(f.apt) ? {} : { apt: "all" }) });
+          } else {
+            setFilter(key, value);
+          }
+        }}
         onClearAll={clearAll}
         activeCount={activeCount}
       />
 
       <div className="grid grid-cols-2 gap-3">
-        <Stat label="Total Recorded" value={formatINR(total)} tone="positive" />
-        <Stat label="Payments" value={String(payments.data.length)} hint="This period" />
+        <Stat
+          label="Community Funds Received"
+          value={formatINR(communityTotal)}
+          tone="positive"
+          hint="Never mixed with personal money"
+        />
+        <Stat
+          label="Personal — Fees & Reimbursements"
+          value={formatINR(personalTotal)}
+          hint="Payable to the manager"
+        />
       </div>
 
       {pending.length > 0 && (
@@ -106,7 +130,7 @@ function PaymentsPageInner() {
           </h2>
           <Card className="divide-y divide-amber-100 border-amber-200">
             {pending.map((p) => (
-              <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div key={p.id} className={`flex flex-wrap items-center justify-between gap-3 p-4 ${ledgerAccent(p.ledger)}`}>
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
                     Apt {aptNumber(p.apartmentId)} ·{" "}
@@ -139,7 +163,7 @@ function PaymentsPageInner() {
 
       <Card className="divide-y divide-slate-100 animate-rise" key={JSON.stringify(f)}>
         {sorted.map((p) => (
-          <div key={p.id} className="flex items-center justify-between gap-3 p-4">
+          <div key={p.id} className={`flex items-center justify-between gap-3 p-4 ${ledgerAccent(p.ledger)}`}>
             <div className="flex min-w-0 items-center gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                 <Banknote className="h-4 w-4" />

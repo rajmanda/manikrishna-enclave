@@ -165,3 +165,10 @@ view mode) are URL search params, not component state.
 **Why:** shareable links ("Apt 301 overdue" → WhatsApp), working back button,
 bookmarkable views. Client-side filtering only — dataset is small and 2ms
 from the API.
+
+## D-024 · 2026-07-05 · Reimbursements as a third ledger value
+**Decision:** flat-specific expenses the manager collects personally are
+`ledger="reimbursement"` invoices with stored line items (auto-summed).
+**Why:** third real money stream from field usage (Vishnu's itemized
+WhatsApp bills). Community aggregates filter on `ledger=="community"`, so
+new ledger values are excluded by construction — validating D-021's design.

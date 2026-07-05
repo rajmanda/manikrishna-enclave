@@ -3,6 +3,25 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.7.0] — 2026-07-05
+
+- **Ledger clarity suite:** invoices/payments summary panels split Community
+  vs Personal (fees + reimbursements) — no blended totals anywhere; month-box
+  headers show per-ledger dues; subtle color-coded left edges on every row
+  (sky=community, violet=fee, amber=reimbursement); cascading Client →
+  Apartment filter; "Generate" renamed "Create invoices"; owner dashboard
+  "Reserve Fund" → "Community Reserve — not your balance".
+- **Backup/restore validated:** full round-trip into a scratch DB (20
+  collections, all counts matched); restore script now drops ALL collections
+  (true snapshot semantics) + `--yes` flag; fresh post-Account baseline taken.
+- **Bill an Owner — itemized reimbursements:** manager records flat-specific
+  expenses (electricity, paperwork, repairs) as one itemized invoice
+  (`ledger=reimbursement`, line items auto-summed, breakdown shown on the
+  invoice row and to the owner). Owner is notified; same report→confirm
+  payment path; fully excluded from community aggregates. Dashboard tile now
+  covers fees + reimbursements; statements section renamed "Payable to the
+  Property Manager"; new ledger filter option.
+
 ## [0.6.0] — 2026-07-05
 
 - **Account & LegalOwner domain model (by Raj):** billing/portal Accounts own

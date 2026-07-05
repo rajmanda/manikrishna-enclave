@@ -46,3 +46,11 @@ export function invoiceTone(status: InvoiceStatus): Tone {
       return "blue";
   }
 }
+
+
+/** Subtle left-edge accent per ledger — scannable without reading badges. */
+export function ledgerAccent(ledger?: string): string {
+  if (ledger === "manager_fee") return "border-l-[3px] border-l-violet-400";
+  if (ledger === "reimbursement") return "border-l-[3px] border-l-amber-400";
+  return "border-l-[3px] border-l-sky-300";
+}
