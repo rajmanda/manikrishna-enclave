@@ -575,6 +575,7 @@ class Meeting(APIModel):
     title: str
     date: str
     attendance: int = 0
+    attendees: list[str] = []  # apartment IDs that attended
     agenda: list[str] = []
     resolutions: list[str] = []
     has_pdf: bool = False
@@ -586,6 +587,7 @@ class MeetingCreate(APIModel):
     title: str
     date: str
     attendance: int = 0
+    attendees: list[str] = []
     agenda: list[str] = []
     resolutions: list[str] = []
 
@@ -594,6 +596,7 @@ class MeetingUpdate(APIModel):
     title: str | None = None
     date: str | None = None
     attendance: int | None = None
+    attendees: list[str] | None = None
     agenda: list[str] | None = None
     resolutions: list[str] | None = None
 

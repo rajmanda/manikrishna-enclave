@@ -26,7 +26,11 @@ async def list_meetings(db: DB, user: CurrentUser) -> list[Meeting]:
 
 @router.post("", response_model=Meeting, status_code=status.HTTP_201_CREATED, dependencies=[Writer])
 async def create_meeting(body: MeetingCreate, db: DB, user: CurrentUser) -> Meeting:
-    meeting = Meeting(community_id=user.community_id, **body.model_dump())
+    # Derive attendance count from attendees list when provided.
+    data = body.model_dump()
+    if data["attendees"]:
+        data["attendance"] = len(data["attendees"])
+    meeting = Meeting(community_id=user.community_id, **data)
     await db.meetings.insert_one(meeting.model_dump())
     await record_audit(db, user, "create", "meetings", meeting.id)
     await notify_members(
@@ -42,6 +46,9 @@ async def update_meeting(
     meeting_id: str, body: MeetingUpdate, db: DB, user: CurrentUser
 ) -> Meeting:
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    # Derive attendance from attendees list length when attendees are updated.
+    if "attendees" in updates:
+        updates["attendance"] = len(updates["attendees"])
     if not updates:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update")
     result = await db.meetings.find_one_and_update(

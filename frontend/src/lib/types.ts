@@ -199,6 +199,7 @@ export interface Meeting {
   title: string;
   date: string;
   attendance: number;
+  attendees: string[];  // apartment IDs
   agenda: string[];
   resolutions: string[];
   hasPdf: boolean;

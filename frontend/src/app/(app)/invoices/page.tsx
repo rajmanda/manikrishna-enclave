@@ -123,7 +123,6 @@ function GenerateDialog({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
 
   const sortedApartments = [...(apartments ?? [])].sort((a, b) =>
     a.number.localeCompare(b.number)
@@ -147,7 +146,7 @@ function GenerateDialog({
     setBusy(true);
     setError(null);
     try {
-      const res = await api<{ created: number; skipped: number }>(
+      await api<{ created: number; skipped: number }>(
         "/invoices/generate",
         {
           method: "POST",
@@ -159,65 +158,45 @@ function GenerateDialog({
           }),
         }
       );
-      setResult(res);
       onDone();
+      onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to generate");
-    } finally {
       setBusy(false);
     }
   }
 
   return (
     <Modal title="Generate Monthly Invoices" onClose={onClose}>
-      {result ? (
-        <div className="space-y-4 text-center">
-          {result.created === 0 ? (
-            <p className="text-sm text-slate-700">
-              No new invoices — all {result.skipped} selected apartment
-              {result.skipped === 1 ? " already has" : "s already have"} an
-              invoice for this period. To bill again, use a different period
-              or description.
-            </p>
-          ) : (
-            <p className="text-sm text-slate-700">
-              Created <b>{result.created}</b> invoice{result.created === 1 ? "" : "s"}
-              {result.skipped > 0 && ` · ${result.skipped} already existed`} —
-              they&apos;re at the top of the list.
-            </p>
-          )}
-          <button className={primaryBtnCls} onClick={onClose}>Done</button>
+      <form className="space-y-4" onSubmit={submit}>
+        <div>
+          <label className={labelCls}>Period</label>
+          <input className={inputCls} value={period} onChange={(e) => setPeriod(e.target.value)} required />
         </div>
-      ) : (
-        <form className="space-y-4" onSubmit={submit}>
-          <div>
-            <label className={labelCls}>Period</label>
-            <input className={inputCls} value={period} onChange={(e) => setPeriod(e.target.value)} required />
-          </div>
-          <div>
-            <label className={labelCls}>Due date</label>
-            <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
-          </div>
-          <div>
-            <label className={labelCls}>Amount per apartment (blank = community default)</label>
-            <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="3500" />
-          </div>
-          <div>
-            <label className={labelCls}>Apartments</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setScope("all")}
-                className={`rounded-xl border px-3 py-2.5 text-sm font-medium ${
-                  scope === "all"
-                    ? "border-brand-500 bg-brand-50 text-brand-700"
-                    : "border-slate-200 text-slate-600"
-                }`}
-              >
-                All apartments
-              </button>
-              <button
-                type="button"
+        <div>
+          <label className={labelCls}>Due date</label>
+          <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+        </div>
+        <div>
+          <label className={labelCls}>Amount per apartment (blank = community default)</label>
+          <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="3500" />
+        </div>
+        <div>
+          <label className={labelCls}>Apartments</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setScope("all")}
+              className={`rounded-xl border px-3 py-2.5 text-sm font-medium ${
+                scope === "all"
+                  ? "border-brand-500 bg-brand-50 text-brand-700"
+                  : "border-slate-200 text-slate-600"
+              }`}
+            >
+              All apartments
+            </button>
+            <button
+              type="button"
                 onClick={() => setScope("selected")}
                 className={`rounded-xl border px-3 py-2.5 text-sm font-medium ${
                   scope === "selected"
@@ -262,9 +241,8 @@ function GenerateDialog({
                 : `Generate for ${selected.size} apartment${selected.size === 1 ? "" : "s"}`}
           </button>
         </form>
-      )}
-    </Modal>
-  );
+      </Modal>
+    );
 }
 
 function PaymentDialog({
@@ -359,7 +337,6 @@ function FeeDialog({
   const [dueDate, setDueDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
 
   const list = rows ?? enrollments.data ?? [];
   const sortedApts = [...(apartments ?? [])].sort((a, b) => a.number.localeCompare(b.number));
@@ -391,60 +368,49 @@ function FeeDialog({
       return;
     }
     try {
-      const res = await api<{ created: number; skipped: number }>(
+      await api<{ created: number; skipped: number }>(
         "/manager-fees/generate",
         { method: "POST", body: JSON.stringify({ period, dueDate }) }
       );
-      setResult(res);
       onDone();
+      onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to generate");
-    } finally {
       setBusy(false);
     }
   }
 
   return (
     <Modal title="Manager Service Fees" onClose={onClose}>
-      {result ? (
-        <div className="space-y-4 text-center">
-          <p className="text-sm text-slate-700">
-            Created <b>{result.created}</b> fee invoice{result.created === 1 ? "" : "s"}
-            {result.skipped > 0 && ` · ${result.skipped} already existed`}. This
-            money is tracked separately from community funds.
-          </p>
-          <button className={primaryBtnCls} onClick={onClose}>Done</button>
-        </div>
-      ) : (
-        <form className="space-y-4" onSubmit={saveAndGenerate}>
-          <p className="text-xs text-slate-500">
-            Private fees paid to the manager — never mixed into community
-            income. Untick an apartment when its tenant moves out.
-          </p>
-          <div>
-            <label className={labelCls}>Enrolled apartments</label>
-            <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
-              {list.map((r, i) => (
-                <div key={r.apartmentId} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={r.active}
-                    onChange={(e) => update(i, { active: e.target.checked })}
-                    className="h-4 w-4 rounded border-slate-300 text-brand-600"
-                  />
-                  <span className={`w-16 font-medium ${r.active ? "" : "text-slate-400 line-through"}`}>
-                    Apt {r.apartmentId.replace("apt-", "")}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-slate-400">
-                    {ownerNameFor(users, apartments, r.apartmentId)}
-                  </span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={r.amount}
-                    onChange={(e) => update(i, { amount: Number(e.target.value) })}
-                    className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm"
-                  />
+      <form className="space-y-4" onSubmit={saveAndGenerate}>
+        <p className="text-xs text-slate-500">
+          Private fees paid to the manager — never mixed into community
+          income. Untick an apartment when its tenant moves out.
+        </p>
+        <div>
+          <label className={labelCls}>Enrolled apartments</label>
+          <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
+            {list.map((r, i) => (
+              <div key={r.apartmentId} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={r.active}
+                  onChange={(e) => update(i, { active: e.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                />
+                <span className={`w-16 font-medium ${r.active ? "" : "text-slate-400 line-through"}`}>
+                  Apt {r.apartmentId.replace("apt-", "")}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-xs text-slate-400">
+                  {ownerNameFor(users, apartments, r.apartmentId)}
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  value={r.amount}
+                  onChange={(e) => update(i, { amount: Number(e.target.value) })}
+                  className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm"
+                />
                   <button
                     type="button"
                     aria-label="Remove"
@@ -505,9 +471,8 @@ function FeeDialog({
             </button>
           </div>
         </form>
-      )}
-    </Modal>
-  );
+      </Modal>
+    );
 }
 
 function LateFeeDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
@@ -516,59 +481,48 @@ function LateFeeDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const [dueDate, setDueDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<number | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const res = await api<{ created: number }>("/invoices/apply-late-fees", {
+      await api<{ created: number }>("/invoices/apply-late-fees", {
         method: "POST",
         body: JSON.stringify({ period, amount: Number(amount), dueDate }),
       });
-      setCreated(res.created);
       onDone();
+      onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed");
-    } finally {
       setBusy(false);
     }
   }
 
   return (
     <Modal title="Apply Late Fees" onClose={onClose}>
-      {created !== null ? (
-        <div className="space-y-4 text-center">
-          <p className="text-sm text-slate-700">
-            Added late fees to <b>{created}</b> overdue invoice{created === 1 ? "" : "s"}.
-          </p>
-          <button className={primaryBtnCls} onClick={onClose}>Done</button>
+      <form className="space-y-4" onSubmit={submit}>
+        <p className="text-sm text-slate-500">
+          Adds a late-fee invoice for every overdue invoice in the period
+          (skips ones already charged).
+        </p>
+        <div>
+          <label className={labelCls}>Period (e.g. Jun 2026)</label>
+          <input className={inputCls} value={period} onChange={(e) => setPeriod(e.target.value)} required />
         </div>
-      ) : (
-        <form className="space-y-4" onSubmit={submit}>
-          <p className="text-sm text-slate-500">
-            Adds a late-fee invoice for every overdue invoice in the period
-            (skips ones already charged).
-          </p>
-          <div>
-            <label className={labelCls}>Period (e.g. Jun 2026)</label>
-            <input className={inputCls} value={period} onChange={(e) => setPeriod(e.target.value)} required />
-          </div>
-          <div>
-            <label className={labelCls}>Late fee amount</label>
-            <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
-          </div>
-          <div>
-            <label className={labelCls}>Fee due date</label>
-            <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
-          </div>
-          {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-          <button type="submit" disabled={busy} className={primaryBtnCls}>
-            {busy ? "Applying…" : "Apply late fees"}
-          </button>
-        </form>
-      )}
+        <div>
+          <label className={labelCls}>Late fee amount</label>
+          <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+        </div>
+        <div>
+          <label className={labelCls}>Fee due date</label>
+          <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+        </div>
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button type="submit" disabled={busy} className={primaryBtnCls}>
+          {busy ? "Applying…" : "Apply late fees"}
+        </button>
+      </form>
     </Modal>
   );
 }
@@ -577,6 +531,7 @@ export default function InvoicesPage() {
   const { role, user } = useSessionUser();
   const mine = role === "owner" || role === "tenant";
   const canWrite = WRITER_ROLES.includes(role);
+  const canDelete = role === "super_admin";
   const invoices = useApi<Invoice[]>("/invoices");
   const payments = useApi<Payment[]>("/payments");
   const apartments = useApi<Apartment[]>(mine ? null : "/apartments");
@@ -584,10 +539,26 @@ export default function InvoicesPage() {
   const [dialog, setDialog] = useState<"generate" | "latefee" | "fees" | null>(null);
   const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
   const [reportInvoice, setReportInvoice] = useState<Invoice | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const pendingInvoiceIds = new Set(
     (payments.data ?? []).filter((p) => p.status === "pending").map((p) => p.invoiceId)
   );
+
+  async function handleDelete(inv: Invoice) {
+    const label = `${inv.description} — ${inv.period} (${formatINR(inv.amount)})`;
+    if (!confirm(`Delete invoice: ${label}?\n\nThis cannot be undone. Any linked payments must be reversed first.`)) return;
+    setDeletingId(inv.id);
+    try {
+      await api(`/invoices/${inv.id}`, { method: "DELETE" });
+      invoices.reload();
+      payments.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete invoice");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   if (invoices.error)
     return <ErrorNote message={invoices.error} onRetry={invoices.reload} />;
@@ -595,13 +566,24 @@ export default function InvoicesPage() {
 
   const list = invoices.data;
   const sorted = [...list].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
-  // Group by period, newest first (insertion order follows the sort).
+
+  // Derive a canonical "Mon YYYY" label from an invoice's due date so that
+  // all charges for a calendar month land in the same group regardless of how
+  // `period` was stored ("Jul 2026", "July 2026", "2026-07", etc.).
+  function monthLabel(dueDate: string): string {
+    const d = new Date(dueDate + "T00:00:00");
+    if (isNaN(d.getTime())) return "Other";
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  }
+
+  // Group by the due-date month, newest first (insertion order follows sort).
   const periodGroups = (() => {
     const map = new Map<string, Invoice[]>();
     for (const inv of sorted) {
-      const items = map.get(inv.period) ?? [];
+      const key = monthLabel(inv.dueDate);
+      const items = map.get(key) ?? [];
       items.push(inv);
-      map.set(inv.period, items);
+      map.set(key, items);
     }
     return [...map.entries()].map(([period, items]) => ({ period, items }));
   })();
@@ -698,7 +680,10 @@ export default function InvoicesPage() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                    {inv.description} — {inv.period}
+                    {mine ? inv.description : `${inv.description} — ${inv.period}`}
+                    {(!inv.ledger || inv.ledger === "community") && (
+                      <Badge tone="blue">Community</Badge>
+                    )}
                     {inv.ledger === "manager_fee" && (
                       <Badge tone="violet">Manager fee</Badge>
                     )}
@@ -714,6 +699,16 @@ export default function InvoicesPage() {
                 <div className="flex items-center gap-2.5">
                   <span className="text-sm font-bold">{formatINR(inv.amount)}</span>
                   <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDelete(inv)}
+                      disabled={deletingId === inv.id}
+                      title="Delete invoice (super admin only)"
+                      className="ml-1 rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
               {canWrite && balance > 0 && (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Clock, PlusCircle, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, PlusCircle, Trash2, XCircle } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
@@ -80,6 +80,7 @@ function NewPollDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
 function PollCard({ poll, onChanged }: { poll: Poll; onChanged: () => void }) {
   const { user, role } = useSessionUser();
   const canManage = WRITER_ROLES.includes(role);
+  const canDelete = role === "super_admin";
   const canVote = poll.status === "open" && !!user.apartmentId;
   const [error, setError] = useState<string | null>(null);
 
@@ -102,6 +103,16 @@ function PollCard({ poll, onChanged }: { poll: Poll; onChanged: () => void }) {
     }
   }
 
+  async function handleDelete() {
+    if (!confirm(`Delete poll: "${poll.question}"?\n\nThis cannot be undone.`)) return;
+    try {
+      await api(`/polls/${poll.id}`, { method: "DELETE" });
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete poll");
+    }
+  }
+
   return (
     <Card className="p-4 sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
@@ -121,6 +132,15 @@ function PollCard({ poll, onChanged }: { poll: Poll; onChanged: () => void }) {
             className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-red-600"
           >
             <XCircle className="h-3.5 w-3.5" /> Close poll
+          </button>
+        )}
+        {canDelete && (
+          <button
+            onClick={handleDelete}
+            title="Delete poll (super admin only)"
+            className={`${canManage && poll.status === "open" ? "" : "ml-auto"} inline-flex items-center gap-1 text-xs font-medium text-slate-300 hover:text-red-500`}
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
           </button>
         )}
       </div>
