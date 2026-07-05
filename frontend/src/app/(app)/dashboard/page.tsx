@@ -89,8 +89,17 @@ function OwnerDashboard() {
       <div>
         <h1 className="text-xl font-bold sm:text-2xl">Welcome back, {firstName}</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Apartment {user.apartmentId?.replace("apt-", "")} · Here&apos;s what&apos;s
-          happening in your community.
+          Apartment{(user.apartmentIds?.length ?? 0) > 1 ? "s" : ""}{" "}
+          {(user.apartmentIds?.length
+            ? user.apartmentIds
+            : user.apartmentId
+              ? [user.apartmentId]
+              : []
+          )
+            .map((a) => a.replace("apt-", ""))
+            .sort()
+            .join(", ")}{" "}
+          · Here&apos;s what&apos;s happening in your community.
         </p>
       </div>
 

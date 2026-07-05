@@ -8,6 +8,7 @@ from app import db as database
 from app.core.config import get_settings
 from app.migrations import run_migrations
 from app.routers import (
+    accounts,
     apartments,
     audit_log,
     auth,
@@ -73,6 +74,7 @@ API_PREFIX = "/api/v1"
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(communities.router, prefix=API_PREFIX)
 app.include_router(apartments.router, prefix=API_PREFIX)
+app.include_router(accounts.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(finance.router, prefix=API_PREFIX)

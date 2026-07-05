@@ -90,7 +90,8 @@ async def create_poll(body: PollCreate, db: DB, user: CurrentUser) -> PollOut:
 
 @router.post("/{poll_id}/vote", response_model=PollOut)
 async def vote(poll_id: str, body: VoteRequest, db: DB, user: CurrentUser) -> PollOut:
-    if not user.apartment_id:
+    apt_ids = user.apartment_ids or ([user.apartment_id] if user.apartment_id else [])
+    if not apt_ids:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail="Voting is one vote per apartment — your account has none assigned",
@@ -104,9 +105,11 @@ async def vote(poll_id: str, body: VoteRequest, db: DB, user: CurrentUser) -> Po
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Poll is closed")
     if body.option not in poll.get("option_labels", []):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Unknown option")
+    # Cast one vote per apartment the user's account owns.
+    updates = {f"votes_by.{apt_id}": body.option for apt_id in apt_ids}
     result = await db.polls.find_one_and_update(
         {"id": poll_id},
-        {"$set": {f"votes_by.{user.apartment_id}": body.option}},
+        {"$set": updates},
         return_document=True,
     )
     return await _to_out(db, result, user.apartment_id)

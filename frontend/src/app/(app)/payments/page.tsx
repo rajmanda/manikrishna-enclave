@@ -1,9 +1,12 @@
 "use client";
 
+import { Suspense } from "react";
 import { Banknote, Check, X } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
-import type { Apartment, Payment, User } from "@/lib/types";
+import { useUrlFilters } from "@/hooks/useUrlFilters";
+import { FilterBar } from "@/components/FilterBar";
+import type { Account, Apartment, Payment, User } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
 import {
@@ -15,17 +18,33 @@ import {
   Stat,
 } from "@/components/ui";
 
-export default function PaymentsPage() {
+function PaymentsPageInner() {
   const payments = useApi<Payment[]>("/payments");
   const apartments = useApi<Apartment[]>("/apartments");
   const users = useApi<User[]>("/users");
+  const accounts = useApi<Account[]>("/accounts");
+  const { values: f, set: setFilter, clearAll, activeCount } = useUrlFilters({
+    client: "all", apt: "all", method: "all", ledger: "all",
+  });
 
   if (payments.error)
     return <ErrorNote message={payments.error} onRetry={payments.reload} />;
   if (payments.loading || !payments.data) return <PageLoading />;
 
-  const pending = payments.data.filter((p) => p.status === "pending");
-  const confirmed = payments.data.filter((p) => p.status !== "pending");
+  const accountApts = new Set(
+    f.client === "all"
+      ? []
+      : accounts.data?.find((a) => a.id === f.client)?.apartmentIds ?? []
+  );
+  const visible = payments.data.filter(
+    (p) =>
+      (f.apt === "all" || p.apartmentId === f.apt) &&
+      (f.method === "all" || p.method === f.method) &&
+      (f.ledger === "all" || (p.ledger ?? "community") === f.ledger) &&
+      (f.client === "all" || accountApts.has(p.apartmentId))
+  );
+  const pending = visible.filter((p) => p.status === "pending");
+  const confirmed = visible.filter((p) => p.status !== "pending");
   const sorted = [...confirmed].sort((a, b) => b.date.localeCompare(a.date));
   const total = confirmed.reduce((s, p) => s + p.amount, 0);
 
@@ -42,6 +61,38 @@ export default function PaymentsPage() {
   return (
     <div className="space-y-5">
       <PageTitle title="Payments Received" subtitle="All payment records with references" />
+
+      <FilterBar
+        filters={[
+          { key: "client", label: "Client", options: [
+            { value: "all", label: "All clients" },
+            ...(accounts.data ?? []).map((a) => ({ value: a.id, label: a.name })),
+          ]},
+          { key: "apt", label: "Apartment", options: [
+            { value: "all", label: "All apartments" },
+            ...[...(apartments.data ?? [])]
+              .sort((a, b) => a.number.localeCompare(b.number))
+              .map((a) => ({ value: a.id, label: `Apt ${a.number}` })),
+          ]},
+          { key: "method", label: "Method", options: [
+            { value: "all", label: "Any method" },
+            { value: "UPI", label: "UPI" },
+            { value: "Bank Transfer", label: "Bank Transfer" },
+            { value: "Cash", label: "Cash" },
+            { value: "Cheque", label: "Cheque" },
+            { value: "Credit", label: "Credit / Waiver" },
+          ]},
+          { key: "ledger", label: "Ledger", options: [
+            { value: "all", label: "Both ledgers" },
+            { value: "community", label: "Community" },
+            { value: "manager_fee", label: "Manager fee" },
+          ]},
+        ]}
+        values={f}
+        onChange={setFilter}
+        onClearAll={clearAll}
+        activeCount={activeCount}
+      />
 
       <div className="grid grid-cols-2 gap-3">
         <Stat label="Total Recorded" value={formatINR(total)} tone="positive" />
@@ -86,7 +137,7 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      <Card className="divide-y divide-slate-100">
+      <Card className="divide-y divide-slate-100 animate-rise" key={JSON.stringify(f)}>
         {sorted.map((p) => (
           <div key={p.id} className="flex items-center justify-between gap-3 p-4">
             <div className="flex min-w-0 items-center gap-3">
@@ -110,9 +161,20 @@ export default function PaymentsPage() {
           </div>
         ))}
         {sorted.length === 0 && (
-          <p className="p-5 text-center text-sm text-slate-400">No payments recorded.</p>
+          <p className="p-5 text-center text-sm text-slate-400">
+            {activeCount > 0 ? "Nothing matches these filters." : "No payments recorded."}
+          </p>
         )}
       </Card>
     </div>
+  );
+}
+
+
+export default function PaymentsPage() {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <PaymentsPageInner />
+    </Suspense>
   );
 }

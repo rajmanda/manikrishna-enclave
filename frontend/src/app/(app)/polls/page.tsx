@@ -189,7 +189,8 @@ function PollCard({ poll, onChanged }: { poll: Poll; onChanged: () => void }) {
       {error && <p className="mt-3 text-sm font-medium text-red-600">{error}</p>}
       <p className="mt-4 text-xs text-slate-400">
         Turnout: {totalVotes} of {poll.totalEligible} apartments ({turnout}%)
-        {poll.myVote && ` · Your apartment voted: ${poll.myVote}`}
+        {poll.myVote &&
+          ` · Your apartment${(user.apartmentIds?.length ?? 0) > 1 ? "s" : ""} voted: ${poll.myVote}`}
         {!user.apartmentId && poll.status === "open" && " · Voting is one per apartment"}
       </p>
     </Card>

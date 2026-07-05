@@ -25,6 +25,21 @@ export interface Apartment {
   ownerIds: string[];
 }
 
+export interface Account {
+  id: string;
+  communityId: string;
+  name: string;
+  apartmentIds: string[];
+}
+
+export interface LegalOwner {
+  id: string;
+  communityId: string;
+  apartmentId: string;
+  name: string;
+  ownershipPercentage: number;
+}
+
 export interface User {
   id: string;
   communityId: string;
@@ -32,7 +47,9 @@ export interface User {
   email: string;
   role: Role;
   roles?: Role[];
+  accountId?: string;
   apartmentId?: string;
+  apartmentIds?: string[];
   phone?: string;
 }
 
@@ -61,6 +78,7 @@ export interface Payment {
   reference: string;
   status?: "pending" | "confirmed";
   reportedBy?: string | null;
+  ledger?: "community" | "manager_fee";
 }
 
 export type ExpenseCategory =

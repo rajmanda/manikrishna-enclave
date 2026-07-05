@@ -38,9 +38,11 @@ async def _month_expenses(db: Any, community_id: str) -> float:
 @router.get("/badges", response_model=NavBadges)
 async def nav_badges(db: DB, user: CurrentUser) -> NavBadges:
     """Counts behind nav badges. Invoice count is role-scoped (owners see
-    their own apartment); pending confirmations are manager-relevant."""
+    their own apartment(s)); pending confirmations are manager-relevant."""
     invoice_query: dict = {"community_id": user.community_id, "status": {"$ne": "paid"}}
-    if user.role in ("owner", "tenant") and user.apartment_id:
+    if user.role in ("owner", "tenant") and user.apartment_ids:
+        invoice_query["apartment_id"] = {"$in": user.apartment_ids}
+    elif user.role in ("owner", "tenant") and user.apartment_id:
         invoice_query["apartment_id"] = user.apartment_id
     open_inv, pending_pay = await asyncio.gather(
         db.invoices.count_documents(invoice_query),
@@ -56,13 +58,14 @@ async def nav_badges(db: DB, user: CurrentUser) -> NavBadges:
 
 @router.get("/owner", response_model=OwnerDashboard)
 async def owner_dashboard(db: DB, user: CurrentUser) -> OwnerDashboard:
-    if not user.apartment_id:
+    if not user.apartment_ids and not user.apartment_id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="User has no apartment assigned"
         )
+    apt_ids = user.apartment_ids or ([user.apartment_id] if user.apartment_id else [])
     invoices, open_wos, month_exp, reserve = await asyncio.gather(
         db.invoices.find(
-            {"community_id": user.community_id, "apartment_id": user.apartment_id}
+            {"community_id": user.community_id, "apartment_id": {"$in": apt_ids}}
         ).to_list(length=1000),
         db.work_orders.count_documents(
             {"community_id": user.community_id, "stage": {"$in": OPEN_STAGES}}

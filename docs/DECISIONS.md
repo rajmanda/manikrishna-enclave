@@ -149,3 +149,19 @@ amount + active flag) drives fee generation.
 **Why:** owner requirement — private fees to the manager must never mix with
 community funds, but flows must be identical. One enum reuses everything and
 extends to future ledgers (special assessments, sinking funds).
+
+## D-022 · 2026-07-05 · Account entity for multi-apartment ownership (Raj)
+**Decision:** Accounts are the billing/portal unit (own 1..n apartments,
+carry portal users); LegalOwner records preserve title holders separately.
+Users resolve `apartment_ids` from their account at login; every scoped
+surface spans all owned apartments; poll votes cast per owned apartment.
+**Why:** BOOTSTRAP rewrite — "never assume one apartment equals one owner"
+(Sangam family owns 301+302, Rajaram Manda Family 501+502).
+**Note:** designed and implemented by the owner; reviewed + regression-tested.
+
+## D-023 · 2026-07-05 · Filters live in the URL
+**Decision:** manager list filters (client/apartment/status/ledger/method,
+view mode) are URL search params, not component state.
+**Why:** shareable links ("Apt 301 overdue" → WhatsApp), working back button,
+bookmarkable views. Client-side filtering only — dataset is small and 2ms
+from the API.

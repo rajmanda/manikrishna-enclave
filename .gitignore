@@ -23,3 +23,8 @@ __pycache__/
 *.tfstate.*
 crash.log
 client_secret_*.json
+
+# DB backups / build artifacts — never commit (public repo, real data)
+backend/*baseline*.json
+backend/db_backup*.json
+*.tsbuildinfo

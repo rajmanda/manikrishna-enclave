@@ -80,7 +80,21 @@ async def get_current_user(
     if doc is None:
         # User removed from the whitelist since the token was issued.
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Access revoked")
-    return User.model_validate(doc)
+
+    # Resolve apartment_ids from the Account entity for multi-apartment support.
+    user = User.model_validate(doc)
+    if user.account_id:
+        account = await db.accounts.find_one({"id": user.account_id})
+        if account:
+            user.apartment_ids = account.get("apartment_ids", [])
+            # Keep apartment_id in sync: use first apartment if not explicitly set.
+            if not user.apartment_id and user.apartment_ids:
+                user.apartment_id = user.apartment_ids[0]
+    elif user.apartment_id:
+        # Legacy fallback: no account, but has a single apartment_id.
+        user.apartment_ids = [user.apartment_id]
+
+    return user
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

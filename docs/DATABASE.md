@@ -28,6 +28,8 @@ scoped by it (see `scoped_community_id` in `backend/app/core/security.py`).
 | `vendors` | Service providers | id, community_id, name, service, phone, gst?, amc_expiry?, rating, active_contracts |
 | `reserve_fund` | Monthly fund entries | community_id, month, contributions, expenses, balance |
 | ~~`monthly_finance`~~ | Deprecated — the monthly series is computed from payments/expenses/invoices since 0.4.x | (unused) |
+| `accounts` | Billing/portal entity owning 1..n apartments (Raj's model) | id, community_id, name (unique per community), apartment_ids[] |
+| `legal_owners` | Legal title holders per apartment | id, community_id, apartment_id, name, ownership_percentage |
 | `fee_enrollments` | Manager-fee config | community_id, apartment_id, amount, active |
 | `audit_log` | Every modification | id, community_id, user_id, user_name, action, entity, entity_id, timestamp (ISO), details |
 
@@ -81,7 +83,8 @@ startup; current version in `meta` ({"id": "schema", "version": N}).
 | 003 | Backfill M4 collections (polls, documents, meetings) |
 | 004 | `users.roles` backfilled to `[role]` |
 | 005 | `invoices/payments.ledger` backfilled to `community` |
+| 006 | Apartment number baked into invoice descriptions |
 
-Schema version: **5**.
+Schema version: **6**.
 
 **Policy:** update this file in the same change as any schema modification.

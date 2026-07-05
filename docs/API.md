@@ -44,6 +44,12 @@ cross-tenant, 409 conflict).
 | PATCH | `/users/{id}` | manager/admin | name/email (re-keys whitelist, unique, normalized)/role/roles (switchable set)/apartmentId/phone |
 | DELETE | `/users/{id}` | manager/admin | Revokes access immediately; cannot delete self |
 
+## Accounts
+
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | `/accounts` | manager/admin/auditor | Billing entities with their apartment_ids — powers per-client filtering |
+
 ## Dashboards
 
 | Method | Path | Access | Returns |

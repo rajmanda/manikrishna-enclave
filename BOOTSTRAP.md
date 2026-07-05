@@ -150,10 +150,102 @@ Maintain:
 
 ------------------------------------------------------------------------
 
-# Multi-Tenant Model
+# Multi-Tenant Domain Model
 
-Community → Buildings → Apartments → Owners → Tenants → Vendors →
-Invoices → Payments → Work Orders → Documents
+The platform is designed as a multi-tenant SaaS application.
+
+The data model separates Communities, Accounts, Properties, Users, Legal Ownership, Billing and Operations.
+
+High-level domain model:
+
+Platform
+    ↓
+Communities
+    ↓
+Buildings
+    ↓
+Apartments
+    ↓
+Accounts
+    ├── Portal Users
+    ├── Legal Owners
+    ├── Billing
+    ├── Documents
+    ├── Statements
+    ├── Payments
+    └── Voting Rights
+
+Communities also contain Vendors, Work Orders, Common Expenses, Reserve Fund, Meeting Minutes, Community Feed, Notices, Polls and Documents.
+
+The system must never assume that one apartment equals one owner.
+
+An Account may own one or many apartments.
+An apartment may have one or more legal owners.
+Portal users belong to Accounts rather than apartments.
+Billing, invoices and permissions are managed at the Account level.
+
+------------------------------------------------------------------------
+
+# Core Domain Entities
+
+Platform, Community, Building, Apartment, Account, Portal User, Legal Owner, Tenant, Vendor, Invoice, Payment, Statement, Common Expense, Reserve Fund, Work Order, Maintenance Request, Poll, Meeting, Document, Notification and Audit Log.
+
+Every feature should reuse these entities rather than introducing duplicate concepts.
+
+------------------------------------------------------------------------
+
+# Ownership & Billing Model
+
+The platform must separate legal ownership from billing, portal access and day-to-day management.
+
+Guiding principles:
+
+- One Account may own one or many apartments.
+- One apartment may have one or more legal title holders.
+- One apartment is associated with one primary Account for billing.
+- One Account may contain multiple portal users.
+- Preserve legal ownership while supporting consolidated billing.
+
+Billing preferences:
+
+- Separate invoice per apartment.
+- One consolidated monthly statement.
+
+When an Account owns multiple apartments, the dashboard aggregates:
+- Apartments
+- Outstanding balances
+- Payment history
+- Community expenses
+- Reserve fund
+- Work orders
+- Announcements
+
+Suggested entities:
+- Account
+- LegalOwner
+- PortalUser
+- Apartment
+
+Initial Account Mapping
+
+- M.V. Shanmukha Datta → 101
+- Pasupuleti Ramesh Babu & Anjali → 102
+- B.O. Dharani Kumar → 201
+- Vani Padma Sri Manda → 202
+- Bhupendra Krishna Sangam & Subhasri Lakshmi Sangam → 301, 302
+- Kanamatha Reddy & Vani Kanyakaparameswari → 401
+- Vijayaram Sri Venkata Manda & Bhargavi Manda → 402
+- Rajaram Manda Family → 501, 502
+
+Legal title holders must still be preserved for Apartments 501 and 502.
+
+Future-ready support:
+- Joint ownership
+- Ownership percentages
+- Trust/Corporate ownership
+- Ownership history
+- Multiple portal users
+- Consolidated reporting
 
 ------------------------------------------------------------------------
 

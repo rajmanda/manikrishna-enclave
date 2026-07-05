@@ -32,6 +32,15 @@ async def _login_by_email(db: Any, email: str) -> TokenResponse:
             detail="This account is not whitelisted. Contact your property manager.",
         )
     user = User.model_validate(doc)
+    # Resolve apartment_ids from Account for multi-apartment support.
+    if user.account_id:
+        account = await db.accounts.find_one({"id": user.account_id})
+        if account:
+            user.apartment_ids = account.get("apartment_ids", [])
+            if not user.apartment_id and user.apartment_ids:
+                user.apartment_id = user.apartment_ids[0]
+    elif user.apartment_id:
+        user.apartment_ids = [user.apartment_id]
     return TokenResponse(access_token=create_access_token(user), user=user)
 
 
@@ -67,7 +76,7 @@ async def switch_role(
             status.HTTP_403_FORBIDDEN,
             detail=f"Your account cannot act as {body.role}",
         )
-    if body.role == "owner" and not user.apartment_id:
+    if body.role == "owner" and not user.apartment_id and not user.apartment_ids:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="Owner view needs an apartment assigned to your account",
@@ -76,5 +85,14 @@ async def switch_role(
         {"id": user.id}, {"$set": {"role": body.role}}, return_document=True
     )
     updated = User.model_validate(doc)
+    # Resolve apartment_ids from Account.
+    if updated.account_id:
+        account = await db.accounts.find_one({"id": updated.account_id})
+        if account:
+            updated.apartment_ids = account.get("apartment_ids", [])
+            if not updated.apartment_id and updated.apartment_ids:
+                updated.apartment_id = updated.apartment_ids[0]
+    elif updated.apartment_id:
+        updated.apartment_ids = [updated.apartment_id]
     await record_audit(db, user, "update", "users", user.id, {"active_role": body.role})
     return TokenResponse(access_token=create_access_token(updated), user=updated)

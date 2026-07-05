@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { AlarmClock, Banknote, Download, FileDown, HandCoins, PlusCircle, Trash2 } from "lucide-react";
+import { Suspense, useState } from "react";
+import { AlarmClock, ArrowUpDown, Banknote, Download, FileDown, HandCoins, LayoutGrid, PlusCircle, Table2, Trash2 } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError, downloadFile } from "@/lib/api";
-import type { Apartment, FeeEnrollment, Invoice, Payment, User } from "@/lib/types";
+import type { Account, Apartment, FeeEnrollment, Invoice, Payment, User } from "@/lib/types";
+import { useUrlFilters } from "@/hooks/useUrlFilters";
+import { FilterBar } from "@/components/FilterBar";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
 import { invoiceTone } from "@/lib/tones";
@@ -119,6 +121,7 @@ function GenerateDialog({
   const [period, setPeriod] = useState(nextMonthLabel());
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("Monthly Maintenance");
   const [scope, setScope] = useState<"all" | "selected">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -153,6 +156,7 @@ function GenerateDialog({
           body: JSON.stringify({
             period,
             dueDate,
+            description,
             ...(amount ? { amount: Number(amount) } : {}),
             ...(scope === "selected" ? { apartmentIds: [...selected] } : {}),
           }),
@@ -527,7 +531,7 @@ function LateFeeDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
   );
 }
 
-export default function InvoicesPage() {
+function InvoicesPageInner() {
   const { role, user } = useSessionUser();
   const mine = role === "owner" || role === "tenant";
   const canWrite = WRITER_ROLES.includes(role);
@@ -536,7 +540,13 @@ export default function InvoicesPage() {
   const payments = useApi<Payment[]>("/payments");
   const apartments = useApi<Apartment[]>(mine ? null : "/apartments");
   const users = useApi<User[]>(mine ? null : "/users");
+  const accounts = useApi<Account[]>(mine ? null : "/accounts");
+  const { values: f, set: setFilter, clearAll, activeCount } = useUrlFilters({
+    client: "all", apt: "all", status: "all", ledger: "all", view: "boxes",
+  });
+  const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: "dueDate", dir: -1 });
   const [dialog, setDialog] = useState<"generate" | "latefee" | "fees" | null>(null);
+  const [aptTab, setAptTab] = useState<string>("all");
   const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
   const [reportInvoice, setReportInvoice] = useState<Invoice | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -564,7 +574,24 @@ export default function InvoicesPage() {
     return <ErrorNote message={invoices.error} onRetry={invoices.reload} />;
   if (invoices.loading || !invoices.data) return <PageLoading />;
 
-  const list = invoices.data;
+  const allInvoices = invoices.data;
+  const accountApts = new Set(
+    f.client === "all"
+      ? []
+      : accounts.data?.find((a) => a.id === f.client)?.apartmentIds ?? []
+  );
+  // Owners: per-apartment tabs. Managers: URL-synced faceted filters.
+  const list = mine
+    ? aptTab === "all"
+      ? allInvoices
+      : allInvoices.filter((i) => i.apartmentId === aptTab)
+    : allInvoices.filter(
+        (i) =>
+          (f.apt === "all" || i.apartmentId === f.apt) &&
+          (f.status === "all" || i.status === f.status) &&
+          (f.ledger === "all" || (i.ledger ?? "community") === f.ledger) &&
+          (f.client === "all" || accountApts.has(i.apartmentId))
+      );
   const sorted = [...list].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
 
   // Derive a canonical "Mon YYYY" label from an invoice's due date so that
@@ -590,7 +617,7 @@ export default function InvoicesPage() {
   const outstanding = list.reduce((s, i) => s + (i.amount - i.paidAmount), 0);
   const billed = list.reduce((s, i) => s + i.amount, 0);
   const collected = list.reduce((s, i) => s + i.paidAmount, 0);
-  const myApt = user.apartmentId;
+  const myApts = (user.apartmentIds?.length ? user.apartmentIds : user.apartmentId ? [user.apartmentId] : []).slice().sort();
 
   return (
     <div className="space-y-5">
@@ -598,7 +625,7 @@ export default function InvoicesPage() {
         title={mine ? "My Invoices" : "Invoices"}
         subtitle={
           mine
-            ? `Apartment ${myApt ? aptNumber(myApt) : "—"}`
+            ? `Apartment${myApts.length > 1 ? "s" : ""} ${myApts.map(aptNumber).join(", ") || "—"}`
             : "All apartments · monthly maintenance and charges"
         }
         actions={
@@ -631,19 +658,102 @@ export default function InvoicesPage() {
             >
               <FileDown className="h-4 w-4" /> CSV
             </button>
-            {mine && myApt && (
+            {mine &&
+              myApts.map((apt) => (
+                <button
+                  key={apt}
+                  onClick={() =>
+                    downloadFile(`/statements/${apt}.pdf`, `statement-${aptNumber(apt)}.pdf`)
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
+                >
+                  <Download className="h-4 w-4" /> Statement {aptNumber(apt)}
+                </button>
+              ))}
+            {mine && myApts.length > 1 && (
               <button
                 onClick={() =>
-                  downloadFile(`/statements/${myApt}.pdf`, `statement-${aptNumber(myApt)}.pdf`)
+                  downloadFile("/statements/consolidated.pdf", "statement-consolidated.pdf")
                 }
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2 text-sm font-medium text-brand-700 shadow-sm hover:bg-brand-100"
               >
-                <Download className="h-4 w-4" /> Statement
+                <Download className="h-4 w-4" /> Consolidated
               </button>
             )}
           </>
         }
       />
+
+      {!mine && (
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <FilterBar
+              filters={[
+                { key: "client", label: "Client", options: [
+                  { value: "all", label: "All clients" },
+                  ...(accounts.data ?? []).map((a) => ({ value: a.id, label: a.name })),
+                ]},
+                { key: "apt", label: "Apartment", options: [
+                  { value: "all", label: "All apartments" },
+                  ...[...(apartments.data ?? [])]
+                    .sort((a, b) => a.number.localeCompare(b.number))
+                    .map((a) => ({ value: a.id, label: `Apt ${a.number}` })),
+                ]},
+                { key: "status", label: "Status", options: [
+                  { value: "all", label: "Any status" },
+                  { value: "due", label: "Due" },
+                  { value: "overdue", label: "Overdue" },
+                  { value: "partial", label: "Partial" },
+                  { value: "paid", label: "Paid" },
+                ]},
+                { key: "ledger", label: "Ledger", options: [
+                  { value: "all", label: "Both ledgers" },
+                  { value: "community", label: "Community" },
+                  { value: "manager_fee", label: "Manager fee" },
+                ]},
+              ]}
+              values={f}
+              onChange={setFilter}
+              onClearAll={clearAll}
+              activeCount={activeCount}
+            />
+          </div>
+          <div className="hidden shrink-0 items-center gap-0.5 rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm md:flex">
+            <button
+              onClick={() => setFilter("view", "boxes")}
+              aria-label="Card view"
+              className={`rounded-lg p-1.5 ${f.view === "boxes" ? "bg-brand-600 text-white" : "text-slate-400 hover:text-slate-600"}`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setFilter("view", "table")}
+              aria-label="Table view"
+              className={`rounded-lg p-1.5 ${f.view === "table" ? "bg-brand-600 text-white" : "text-slate-400 hover:text-slate-600"}`}
+            >
+              <Table2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mine && myApts.length > 1 && (
+        <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          {["all", ...myApts].map((t) => (
+            <button
+              key={t}
+              onClick={() => setAptTab(t)}
+              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                aptTab === t
+                  ? "bg-brand-600 text-white"
+                  : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              {t === "all" ? "All apartments" : `Apt ${aptNumber(t)}`}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Billed" value={formatINR(billed)} />
@@ -655,11 +765,81 @@ export default function InvoicesPage() {
         />
       </div>
 
+      {!mine && f.view === "table" ? (
+        <Card className="hidden overflow-x-auto md:block animate-rise" key={JSON.stringify(f)}>
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                {[
+                  ["apartmentId", "Apt"],
+                  ["description", "Description"],
+                  ["period", "Period"],
+                  ["dueDate", "Due"],
+                  ["amount", "Amount"],
+                  ["paidAmount", "Paid"],
+                  ["status", "Status"],
+                ].map(([key, label]) => (
+                  <th key={key} className="px-3 py-2.5">
+                    <button
+                      onClick={() =>
+                        setSort((s0) =>
+                          s0.key === key ? { key, dir: s0.dir === 1 ? -1 : 1 } : { key, dir: 1 }
+                        )
+                      }
+                      className={`inline-flex items-center gap-1 hover:text-slate-800 ${sort.key === key ? "text-brand-700" : ""}`}
+                    >
+                      {label} <ArrowUpDown className="h-3 w-3" />
+                    </button>
+                  </th>
+                ))}
+                <th className="px-3 py-2.5" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {[...list]
+                .sort((a, b) => {
+                  const av = a[sort.key as keyof Invoice] ?? "";
+                  const bv = b[sort.key as keyof Invoice] ?? "";
+                  return (av < bv ? -1 : av > bv ? 1 : 0) * sort.dir;
+                })
+                .map((inv) => (
+                  <tr key={inv.id} className="hover:bg-slate-50/60">
+                    <td className="px-3 py-2.5 font-semibold">{aptNumber(inv.apartmentId)}</td>
+                    <td className="max-w-[16rem] truncate px-3 py-2.5">
+                      {inv.description}{" "}
+                      {inv.ledger === "manager_fee" && <Badge tone="violet">fee</Badge>}
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-500">{inv.period}</td>
+                    <td className="px-3 py-2.5 text-slate-500">{formatDate(inv.dueDate)}</td>
+                    <td className="px-3 py-2.5 font-semibold">{formatINR(inv.amount)}</td>
+                    <td className="px-3 py-2.5 text-slate-500">{formatINR(inv.paidAmount)}</td>
+                    <td className="px-3 py-2.5"><Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge></td>
+                    <td className="px-3 py-2.5 text-right">
+                      {canWrite && inv.amount - inv.paidAmount > 0 && (
+                        <button
+                          onClick={() => setPayInvoice(inv)}
+                          className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                        >
+                          Record
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              {list.length === 0 && (
+                <tr><td colSpan={8} className="p-6 text-center text-slate-400">Nothing matches these filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </Card>
+      ) : null}
+
+      <div className={!mine && f.view === "table" ? "space-y-5 md:hidden" : "space-y-5"} key={`boxes-${JSON.stringify(f)}-${aptTab}`}>
       {periodGroups.map(({ period, items }) => {
         const groupBilled = items.reduce((sum, i) => sum + i.amount, 0);
         const groupDue = items.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0);
         return (
-          <section key={period}>
+          <section key={period} className="animate-rise">
             <div className="mb-2 flex items-baseline justify-between px-1">
               <h2 className="text-sm font-bold text-slate-700">{period}</h2>
               <p className="text-xs text-slate-400">
@@ -744,9 +924,12 @@ export default function InvoicesPage() {
       })}
       {sorted.length === 0 && (
         <Card>
-          <p className="p-5 text-center text-sm text-slate-400">No invoices yet.</p>
+          <p className="p-5 text-center text-sm text-slate-400">
+            {activeCount > 0 ? "Nothing matches these filters." : "No invoices yet."}
+          </p>
         </Card>
       )}
+      </div>
 
       {dialog === "generate" && (
         <GenerateDialog
@@ -788,5 +971,14 @@ export default function InvoicesPage() {
         />
       )}
     </div>
+  );
+}
+
+
+export default function InvoicesPage() {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <InvoicesPageInner />
+    </Suspense>
   );
 }

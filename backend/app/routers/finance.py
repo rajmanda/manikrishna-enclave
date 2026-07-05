@@ -41,7 +41,9 @@ MEMBER_SCOPED_ROLES = ("owner", "tenant")
 
 def _apartment_scope(user: User) -> dict:
     query: dict = {"community_id": user.community_id}
-    if user.role in MEMBER_SCOPED_ROLES and user.apartment_id:
+    if user.role in MEMBER_SCOPED_ROLES and user.apartment_ids:
+        query["apartment_id"] = {"$in": user.apartment_ids}
+    elif user.role in MEMBER_SCOPED_ROLES and user.apartment_id:
         query["apartment_id"] = user.apartment_id
     return query
 

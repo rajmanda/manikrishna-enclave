@@ -35,7 +35,9 @@ async def global_search(
             )
 
     invoice_query: dict = {"community_id": cid}
-    if user.role in ("owner", "tenant") and user.apartment_id:
+    if user.role in ("owner", "tenant") and user.apartment_ids:
+        invoice_query["apartment_id"] = {"$in": user.apartment_ids}
+    elif user.role in ("owner", "tenant") and user.apartment_id:
         invoice_query["apartment_id"] = user.apartment_id
     (apartments, users, vendors, invoices, work_orders, documents,
      meetings, expenses, feed_posts) = await asyncio.gather(

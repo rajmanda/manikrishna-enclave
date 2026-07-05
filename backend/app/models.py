@@ -73,6 +73,28 @@ class ApartmentUpdate(APIModel):
     owner_ids: list[str] | None = None
 
 
+class Account(APIModel):
+    """Billing and portal-access entity — one account may own many apartments."""
+    id: str = Field(default_factory=lambda: new_id("acct"))
+    community_id: str
+    name: str
+    apartment_ids: list[str] = []
+
+
+class AccountCreate(APIModel):
+    name: str
+    apartment_ids: list[str] = []
+
+
+class LegalOwner(APIModel):
+    """Legal title holder for an apartment — separate from portal/billing."""
+    id: str = Field(default_factory=lambda: new_id("lo"))
+    community_id: str
+    apartment_id: str
+    name: str
+    ownership_percentage: float = 100.0
+
+
 class User(APIModel):
     id: str = Field(default_factory=lambda: new_id("u"))
     community_id: str
@@ -80,7 +102,9 @@ class User(APIModel):
     email: EmailStr
     role: Role  # active role — all RBAC reads this
     roles: list[Role] = []  # roles this user may switch between ([] = just `role`)
-    apartment_id: str | None = None
+    account_id: str | None = None  # links to Account for multi-apartment support
+    apartment_id: str | None = None  # primary apartment (legacy, derived from account)
+    apartment_ids: list[str] = []  # all apartments via account — populated at login
     phone: str | None = None
 
 
@@ -90,6 +114,7 @@ class UserCreate(APIModel):
     name: str
     email: EmailStr
     role: Role = "owner"
+    account_id: str | None = None
     apartment_id: str | None = None
     phone: str | None = None
 
@@ -99,6 +124,7 @@ class UserUpdate(APIModel):
     email: EmailStr | None = None  # changing it re-keys the whitelist
     role: Role | None = None
     roles: list[Role] | None = None
+    account_id: str | None = None
     apartment_id: str | None = None
     phone: str | None = None
 
@@ -154,6 +180,7 @@ class InvoiceCreate(APIModel):
 
 class InvoiceUpdate(APIModel):
     description: str | None = None
+    period: str | None = None
     amount: float | None = None
     due_date: str | None = None
 

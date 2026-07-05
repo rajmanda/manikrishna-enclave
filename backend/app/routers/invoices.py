@@ -27,6 +27,14 @@ DB = Annotated[Any, Depends(get_db)]
 Writer = Depends(require_roles(*WRITE_ROLES))
 
 
+def with_apartment(description: str, apartment_id: str) -> str:
+    """Bake the apartment into the stored description so every surface
+    (UI, PDFs, CSV, notifications) shows what the invoice is for."""
+    if "apt" in description.lower():
+        return description
+    return f"{description} - Apt {apartment_id.replace('apt-', '')}"
+
+
 def compute_status(amount: float, paid: float, due_date: str) -> str:
     if paid >= amount:
         return "paid"
@@ -60,10 +68,12 @@ async def create_invoice(body: InvoiceCreate, db: DB, user: CurrentUser) -> Invo
     )
     if apt is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Apartment not found")
+    data = body.model_dump()
+    data["description"] = with_apartment(data["description"], body.apartment_id)
     invoice = Invoice(
         community_id=user.community_id,
         status=compute_status(body.amount, 0, body.due_date),
-        **body.model_dump(),
+        **data,
     )
     await db.invoices.insert_one(invoice.model_dump())
     await record_audit(db, user, "create", "invoices", invoice.id)
@@ -92,12 +102,14 @@ async def generate_invoices(
         )
     created = 0
     for apt in apartments:
+        labeled = with_apartment(body.description, apt["id"])
         exists = await db.invoices.find_one(
             {
                 "community_id": user.community_id,
                 "apartment_id": apt["id"],
                 "period": body.period,
-                "description": body.description,
+                # Old rows may carry the unlabeled description — match both.
+                "description": {"$in": [body.description, labeled]},
             }
         )
         if exists:
@@ -106,7 +118,7 @@ async def generate_invoices(
             community_id=user.community_id,
             apartment_id=apt["id"],
             period=body.period,
-            description=body.description,
+            description=labeled,
             amount=amount,
             due_date=body.due_date,
             status=compute_status(amount, 0, body.due_date),
@@ -142,7 +154,7 @@ async def apply_late_fees(
             community_id=user.community_id,
             apartment_id=inv["apartment_id"],
             period=body.period,
-            description=f"Late Fee — {body.period}",
+            description=with_apartment(f"Late Fee — {body.period}", inv["apartment_id"]),
             amount=body.amount,
             due_date=body.due_date,
             status=compute_status(body.amount, 0, body.due_date),
@@ -275,9 +287,10 @@ async def report_payment(body: PaymentReport, db: DB, user: CurrentUser) -> Paym
             status.HTTP_403_FORBIDDEN,
             detail="Managers record payments directly via POST /payments",
         )
+    apt_ids = user.apartment_ids or ([user.apartment_id] if user.apartment_id else [])
     invoice = await db.invoices.find_one(
         {"id": body.invoice_id, "community_id": user.community_id,
-         "apartment_id": user.apartment_id}
+         "apartment_id": {"$in": apt_ids}}
     )
     if invoice is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invoice not found")

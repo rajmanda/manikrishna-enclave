@@ -48,12 +48,25 @@ async def _m005_invoice_ledger(db: Any) -> None:
         )
 
 
+async def _m006_apartment_in_invoice_description(db: Any) -> None:
+    invoices = await db.invoices.find({}).to_list(100000)
+    for inv in invoices:
+        if "apt" in inv["description"].lower():
+            continue
+        number = inv["apartment_id"].replace("apt-", "")
+        await db.invoices.update_one(
+            {"id": inv["id"]},
+            {"$set": {"description": f"{inv['description']} - Apt {number}"}},
+        )
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], Awaitable[None]]]] = [
     (1, _m001_community_monthly_maintenance),
     (2, _m002_backfill_m3_collections),
     (3, _m003_backfill_m4_collections),
     (4, _m004_user_roles_list),
     (5, _m005_invoice_ledger),
+    (6, _m006_apartment_in_invoice_description),
 ]
 
 

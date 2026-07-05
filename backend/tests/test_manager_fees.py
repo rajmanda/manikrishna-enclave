@@ -137,3 +137,55 @@ async def test_statement_pdf_has_fee_section(client, manager_headers):
     )
     pdf = await client.get("/api/v1/statements/apt-201.pdf", headers=manager_headers)
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+
+
+async def test_account_scoping_spans_multiple_apartments(client, manager_headers, db):
+    # Raj's Account model: one account owning two apartments.
+    await db.accounts.insert_one(
+        {"id": "acct-t1", "community_id": "mke", "name": "Test Family",
+         "apartment_ids": ["apt-501", "apt-502"]}
+    )
+    await db.users.update_one({"id": "u-502"}, {"$set": {"account_id": "acct-t1"}})
+
+    login = await client.post("/api/v1/auth/dev-login", json={"email": "owner502@example.com"})
+    h = {"Authorization": f"Bearer {login.json()['accessToken']}"}
+
+    me = (await client.get("/api/v1/auth/me", headers=h)).json()
+    assert set(me["apartmentIds"]) == {"apt-501", "apt-502"}
+
+    inv = (await client.get("/api/v1/invoices", headers=h)).json()
+    assert {i["apartmentId"] for i in inv} == {"apt-501", "apt-502"}
+
+    # Statement access extends to both owned apartments, no others.
+    ok = await client.get("/api/v1/statements/apt-501.pdf", headers=h)
+    assert ok.status_code == 200
+    denied = await client.get("/api/v1/statements/apt-101.pdf", headers=h)
+    assert denied.status_code == 403
+
+
+async def test_consolidated_statement(client, manager_headers, db):
+    await db.accounts.insert_one(
+        {"id": "acct-t2", "community_id": "mke", "name": "Fam",
+         "apartment_ids": ["apt-501", "apt-502"]}
+    )
+    await db.users.update_one({"id": "u-502"}, {"$set": {"account_id": "acct-t2"}})
+    login = await client.post("/api/v1/auth/dev-login", json={"email": "owner502@example.com"})
+    h = {"Authorization": f"Bearer {login.json()['accessToken']}"}
+    pdf = await client.get("/api/v1/statements/consolidated.pdf", headers=h)
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+
+    # Manager without apartments gets a clear 400.
+    none = await client.get("/api/v1/statements/consolidated.pdf", headers=manager_headers)
+    assert none.status_code == 400
+
+
+async def test_accounts_endpoint(client, manager_headers, owner_headers, db):
+    await db.accounts.insert_one(
+        {"id": "acct-t3", "community_id": "mke", "name": "Zeta Family",
+         "apartment_ids": ["apt-101"]}
+    )
+    listed = await client.get("/api/v1/accounts", headers=manager_headers)
+    assert listed.status_code == 200
+    assert any(a["name"] == "Zeta Family" for a in listed.json())
+    denied = await client.get("/api/v1/accounts", headers=owner_headers)
+    assert denied.status_code == 403

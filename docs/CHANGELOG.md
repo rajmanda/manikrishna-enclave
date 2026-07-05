@@ -3,7 +3,31 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
-## [0.6.0] — 2026-07-04
+## [0.6.0] — 2026-07-05
+
+- **Account & LegalOwner domain model (by Raj):** billing/portal Accounts own
+  one or many apartments ("never assume one apartment = one owner"); users
+  resolve apartment_ids via their account at login; all scoping (invoices,
+  payments, dashboards, statements, search, polls) spans owned apartments;
+  poll votes cast once per owned apartment; legal title holders preserved
+  separately. Prod migrated: 8 accounts, 15 legal owners.
+- **Modern filtering for managers:** URL-shareable faceted filters
+  (Client/Apartment/Status/Ledger on Invoices; Client/Apartment/Method/Ledger
+  on Payments) with active-filter chips, reactive totals, sortable desktop
+  table with Boxes/Table toggle, subtle motion (reduced-motion aware).
+  New GET /accounts powers per-client filtering.
+- **Apartment-labeled invoices:** descriptions baked as "… - Apt N" at every
+  creation path (idempotency preserved); migration 006 relabeled existing
+  invoices. Generate dialog gained a description field ("What is this
+  invoice for?"); invoice period is now correctable via PATCH.
+- **Multi-apartment owner UX:** per-apartment tabs, "Apartments 501, 502"
+  headers, per-apartment Statement buttons + consolidated account statement
+  PDF (fees included, grand total), polls plural wording.
+- Month-grouped invoice boxes keyed by due month; Community/Manager-fee
+  badges; meeting attendee picker and poll deletion (by Raj).
+- Migrations 005-006 (schema v6-equivalent labels). Backend tests 89 → 92.
+
+## Older 0.6.0 draft — 2026-07-04
 - Invoices page groups invoices into per-month boxes with billed/due
   subtotals per period (like the Meetings layout).
 - **Manager service fees (private ledger):** per-apartment enrollment config

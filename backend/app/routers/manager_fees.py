@@ -16,7 +16,7 @@ from app.models import (
     FeeGenerateRequest,
     Invoice,
 )
-from app.routers.invoices import compute_status
+from app.routers.invoices import compute_status, with_apartment
 
 router = APIRouter(prefix="/manager-fees", tags=["manager-fees"])
 
@@ -79,12 +79,13 @@ async def generate_fee_invoices(
         )
     created = 0
     for e in enrollments:
+        labeled = with_apartment(FEE_DESCRIPTION, e["apartment_id"])
         exists = await db.invoices.find_one(
             {
                 "community_id": user.community_id,
                 "apartment_id": e["apartment_id"],
                 "period": body.period,
-                "description": FEE_DESCRIPTION,
+                "description": {"$in": [FEE_DESCRIPTION, labeled]},
             }
         )
         if exists:
@@ -93,7 +94,7 @@ async def generate_fee_invoices(
             community_id=user.community_id,
             apartment_id=e["apartment_id"],
             period=body.period,
-            description=FEE_DESCRIPTION,
+            description=labeled,
             amount=e["amount"],
             due_date=body.due_date,
             status=compute_status(e["amount"], 0, body.due_date),

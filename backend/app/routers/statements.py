@@ -24,10 +24,12 @@ DB = Annotated[Any, Depends(get_db)]
 
 
 def _check_apartment_access(user: User, apartment_id: str) -> None:
-    if user.role in ("owner", "tenant") and user.apartment_id != apartment_id:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, detail="Not your apartment"
-        )
+    if user.role in ("owner", "tenant"):
+        allowed = user.apartment_ids or ([user.apartment_id] if user.apartment_id else [])
+        if apartment_id not in allowed:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, detail="Not your apartment"
+            )
 
 
 async def _statement_data(db: Any, community_id: str, apartment_id: str) -> dict:
@@ -56,6 +58,81 @@ async def _statement_data(db: Any, community_id: str, apartment_id: str) -> dict
         "invoices": invoices,
         "payments": payments,
     }
+
+
+@router.get("/statements/consolidated.pdf")
+async def consolidated_statement(db: DB, user: CurrentUser) -> Response:
+    """One statement covering every apartment the caller's account owns
+    (BOOTSTRAP: separate invoice per apartment, one consolidated statement)."""
+    apt_ids = user.apartment_ids or ([user.apartment_id] if user.apartment_id else [])
+    if not apt_ids:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="No apartments on your account"
+        )
+
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    community = await db.communities.find_one({"id": user.community_id})
+    pdf.set_font("helvetica", "B", 16)
+    pdf.cell(0, 10, _latin1(community["name"]), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "", 10)
+    pdf.cell(0, 6, _latin1(f"Consolidated Statement - {user.name}"),
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+
+    widths = (30, 70, 30, 30, 25)
+    grand_billed = grand_paid = 0.0
+    for apt_id in sorted(apt_ids):
+        d = await _statement_data(db, user.community_id, apt_id)
+        # Consolidated view lists everything the account owes, fees included
+        # (rows are labeled; totals here are the account's full obligation).
+        fee_rows = [i for i in await db.invoices.find(
+            {"community_id": user.community_id, "apartment_id": apt_id,
+             "ledger": "manager_fee"}).to_list(1000)]
+        fee_rows.sort(key=lambda i: i["due_date"])
+        d["invoices"] = d["invoices"] + fee_rows
+        pdf.ln(3)
+        pdf.set_font("helvetica", "B", 11)
+        pdf.cell(0, 8, f"Apartment {d['apartment']['number']}",
+                 new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "B", 9)
+        for w, h in zip(widths, ("Period", "Description", "Amount", "Paid", "Status")):
+            pdf.cell(w, 6, h, border=1)
+        pdf.ln()
+        pdf.set_font("helvetica", "", 9)
+        billed = paid = 0.0
+        for inv in d["invoices"]:
+            billed += inv["amount"]
+            paid += inv["paid_amount"]
+            label = "fee" if inv.get("ledger") == "manager_fee" else inv["status"]
+            cells = (inv["period"], _latin1(inv["description"])[:40],
+                     f"Rs {inv['amount']:,.0f}", f"Rs {inv['paid_amount']:,.0f}", label)
+            for w, c in zip(widths, cells):
+                pdf.cell(w, 6, str(c), border=1)
+            pdf.ln()
+        pdf.set_font("helvetica", "B", 9)
+        pdf.cell(100, 6, "Subtotal", border=1)
+        pdf.cell(30, 6, f"Rs {billed:,.0f}", border=1)
+        pdf.cell(30, 6, f"Rs {paid:,.0f}", border=1)
+        pdf.cell(25, 6, f"Due Rs {billed - paid:,.0f}", border=1)
+        pdf.ln(8)
+        grand_billed += billed
+        grand_paid += paid
+
+    pdf.set_font("helvetica", "B", 11)
+    pdf.cell(
+        0, 8,
+        f"TOTAL across {len(apt_ids)} apartment(s): billed Rs {grand_billed:,.0f}, "
+        f"paid Rs {grand_paid:,.0f}, due Rs {grand_billed - grand_paid:,.0f}",
+    )
+    return Response(
+        content=bytes(pdf.output()),
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="statement-consolidated.pdf"'},
+    )
 
 
 @router.get("/statements/{apartment_id}.pdf")
@@ -170,7 +247,9 @@ async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Respons
 @router.get("/invoices/export.csv")
 async def invoices_csv(db: DB, user: CurrentUser) -> Response:
     query: dict = {"community_id": user.community_id}
-    if user.role in ("owner", "tenant") and user.apartment_id:
+    if user.role in ("owner", "tenant") and user.apartment_ids:
+        query["apartment_id"] = {"$in": user.apartment_ids}
+    elif user.role in ("owner", "tenant") and user.apartment_id:
         query["apartment_id"] = user.apartment_id
     invoices = await db.invoices.find(query).to_list(10000)
     invoices.sort(key=lambda i: (i["due_date"], i["apartment_id"]))
