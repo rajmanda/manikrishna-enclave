@@ -251,18 +251,32 @@ async def update_invoice(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Writer],
 )
-async def delete_invoice(invoice_id: str, db: DB, user: CurrentUser) -> None:
-    if await db.payments.find_one({"invoice_id": invoice_id}):
+async def delete_invoice(
+    invoice_id: str, db: DB, user: CurrentUser, cascade: bool = False
+) -> None:
+    """Without cascade, an invoice with payments is protected (409). With
+    cascade=true the caller has confirmed deleting the payments too."""
+    invoice = await db.invoices.find_one(
+        {"id": invoice_id, "community_id": user.community_id}
+    )
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    linked = await db.payments.count_documents({"invoice_id": invoice_id})
+    if linked and not cascade:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="Invoice has payments — reverse them first",
         )
-    result = await db.invoices.delete_one(
-        {"id": invoice_id, "community_id": user.community_id}
+    if linked:
+        await db.payments.delete_many({"invoice_id": invoice_id})
+        await record_audit(
+            db, user, "delete", "payments", f"cascade:{invoice_id}", {"count": linked}
+        )
+    await db.invoices.delete_one({"id": invoice_id, "community_id": user.community_id})
+    await record_audit(
+        db, user, "delete", "invoices", invoice_id,
+        {"cascaded_payments": linked} if linked else None,
     )
-    if result.deleted_count == 0:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invoice not found")
-    await record_audit(db, user, "delete", "invoices", invoice_id)
 
 
 @router.post(

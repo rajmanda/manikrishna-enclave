@@ -672,7 +672,7 @@ function InvoicesPageInner() {
   const { role, user } = useSessionUser();
   const mine = role === "owner" || role === "tenant";
   const canWrite = WRITER_ROLES.includes(role);
-  const canDelete = role === "super_admin";
+  const canDelete = role === "super_admin" || role === "property_manager";
   const invoices = useApi<Invoice[]>("/invoices");
   const payments = useApi<Payment[]>("/payments");
   const apartments = useApi<Apartment[]>(mine ? null : "/apartments");
@@ -694,10 +694,15 @@ function InvoicesPageInner() {
 
   async function handleDelete(inv: Invoice) {
     const label = `${inv.description} — ${inv.period} (${formatINR(inv.amount)})`;
-    if (!confirm(`Delete invoice: ${label}?\n\nThis cannot be undone. Any linked payments must be reversed first.`)) return;
+    const linked = (payments.data ?? []).filter((p) => p.invoiceId === inv.id);
+    const linkedTotal = linked.reduce((s, p) => s + p.amount, 0);
+    const msg = linked.length
+      ? `Delete invoice: ${label}?\n\nThis invoice has ${linked.length} payment${linked.length > 1 ? "s" : ""} totaling ${formatINR(linkedTotal)}. Deleting the invoice will delete ${linked.length > 1 ? "these payments" : "this payment"} too.\n\nThis cannot be undone.`
+      : `Delete invoice: ${label}?\n\nThis cannot be undone.`;
+    if (!confirm(msg)) return;
     setDeletingId(inv.id);
     try {
-      await api(`/invoices/${inv.id}`, { method: "DELETE" });
+      await api(`/invoices/${inv.id}${linked.length ? "?cascade=true" : ""}`, { method: "DELETE" });
       invoices.reload();
       payments.reload();
     } catch (err) {
@@ -987,14 +992,26 @@ function InvoicesPageInner() {
                     <td className="px-3 py-2.5 text-slate-500">{formatINR(inv.paidAmount)}</td>
                     <td className="px-3 py-2.5"><Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge></td>
                     <td className="px-3 py-2.5 text-right">
-                      {canWrite && inv.amount - inv.paidAmount > 0 && (
-                        <button
-                          onClick={() => setPayInvoice(inv)}
-                          className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
-                        >
-                          Record
-                        </button>
-                      )}
+                      <span className="inline-flex items-center gap-1.5">
+                        {canWrite && inv.amount - inv.paidAmount > 0 && (
+                          <button
+                            onClick={() => setPayInvoice(inv)}
+                            className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                          >
+                            Record
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(inv)}
+                            disabled={deletingId === inv.id}
+                            title="Delete invoice"
+                            className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -1057,7 +1074,7 @@ function InvoicesPageInner() {
                     <button
                       onClick={() => handleDelete(inv)}
                       disabled={deletingId === inv.id}
-                      title="Delete invoice (super admin only)"
+                      title="Delete invoice"
                       className="ml-1 rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
                     >
                       <Trash2 className="h-3.5 w-3.5" />

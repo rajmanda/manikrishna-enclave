@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense } from "react";
-import { Banknote, Check, X } from "lucide-react";
+import { Suspense, useState } from "react";
+import { Banknote, Check, Trash2, X } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
+import { useSessionUser } from "@/context/AuthContext";
 import { useUrlFilters } from "@/hooks/useUrlFilters";
 import { FilterBar } from "@/components/FilterBar";
 import type { Account, Apartment, Payment, User } from "@/lib/types";
@@ -20,6 +21,9 @@ import {
 } from "@/components/ui";
 
 function PaymentsPageInner() {
+  const { role } = useSessionUser();
+  const canDelete = role === "super_admin" || role === "property_manager";
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const payments = useApi<Payment[]>("/payments");
   const apartments = useApi<Apartment[]>("/apartments");
   const users = useApi<User[]>("/users");
@@ -61,6 +65,19 @@ function PaymentsPageInner() {
       payments.reload();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "Action failed");
+    }
+  }
+
+  async function reverse(p: Payment) {
+    if (!confirm(`Reverse this payment of ${formatINR(p.amount)} (${p.method}, ${formatDate(p.date)})?\n\nThe amount is added back to the invoice's outstanding balance. This cannot be undone.`)) return;
+    setDeletingId(p.id);
+    try {
+      await api(`/payments/${p.id}`, { method: "DELETE" });
+      payments.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to reverse payment");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -181,6 +198,16 @@ function PaymentsPageInner() {
             <div className="flex shrink-0 items-center gap-2">
               <span className="text-sm font-semibold">{formatINR(p.amount)}</span>
               <Badge tone="slate">{p.method}</Badge>
+              {canDelete && (
+                <button
+                  onClick={() => reverse(p)}
+                  disabled={deletingId === p.id}
+                  title="Reverse payment"
+                  className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
         ))}

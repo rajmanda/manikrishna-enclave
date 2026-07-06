@@ -86,6 +86,11 @@ class AccountCreate(APIModel):
     apartment_ids: list[str] = []
 
 
+class AccountUpdate(APIModel):
+    name: str | None = None
+    apartment_ids: list[str] | None = None
+
+
 class LegalOwner(APIModel):
     """Legal title holder for an apartment — separate from portal/billing."""
     id: str = Field(default_factory=lambda: new_id("lo"))
@@ -93,6 +98,17 @@ class LegalOwner(APIModel):
     apartment_id: str
     name: str
     ownership_percentage: float = 100.0
+
+
+class LegalOwnerCreate(APIModel):
+    apartment_id: str
+    name: str
+    ownership_percentage: float = 100.0
+
+
+class LegalOwnerUpdate(APIModel):
+    name: str | None = None
+    ownership_percentage: float | None = None
 
 
 class User(APIModel):

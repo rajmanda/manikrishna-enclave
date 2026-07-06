@@ -3,6 +3,24 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.8.0] — 2026-07-05
+
+- **Ownership console (super_admin):** new /ownership page — billing accounts
+  with multi-apartment configuration (one account per apartment enforced),
+  "who owns which flat" coverage grid with unassigned-apartment warning,
+  legal title holders CRUD (name, ownership %), portal-user linkage shown per
+  account and editable via Members → Account select. Account/LegalOwner
+  write APIs are super_admin-only; deletes guarded by linked users.
+- **Manager delete privileges (UI):** invoice delete button now shows for
+  property_manager (was super_admin-only) in both boxes and table views;
+  payments page gains a reverse button (property_manager/super_admin) that
+  deletes the payment and restores the invoice's outstanding balance. No API
+  change — both endpoints already accepted WRITE_ROLES.
+- **Cascade delete for paid invoices:** `DELETE /invoices/{id}?cascade=true`
+  deletes the invoice together with its payments (separate audit entries for
+  each). The UI confirm dialog states how many payments (and their total)
+  will be deleted; without cascade the 409 protection is unchanged.
+
 ## [0.7.0] — 2026-07-05
 
 - **Ledger clarity suite:** invoices/payments summary panels split Community

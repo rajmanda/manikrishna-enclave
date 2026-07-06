@@ -5,7 +5,7 @@ import { Pencil, PlusCircle, Trash2 } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
-import type { Apartment, Role, User } from "@/lib/types";
+import type { Account, Apartment, Role, User } from "@/lib/types";
 import { aptNumber } from "@/lib/lookup";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import {
@@ -38,14 +38,17 @@ const roleTone: Record<string, "brand" | "green" | "violet" | "slate" | "amber" 
 function MemberDialog({
   member,
   apartments,
+  accounts,
   onClose,
   onDone,
 }: {
   member: User | null;
   apartments: Apartment[] | undefined;
+  accounts: Account[] | undefined;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const [accountId, setAccountId] = useState(member?.accountId ?? "");
   const [name, setName] = useState(member?.name ?? "");
   const [email, setEmail] = useState(member?.email ?? "");
   const [role, setRole] = useState<Role>(member?.role ?? "owner");
@@ -69,6 +72,7 @@ function MemberDialog({
       name,
       email,
       role,
+      accountId,
       ...(apartmentId ? { apartmentId } : {}),
       ...(phone ? { phone } : {}),
     };
@@ -130,6 +134,17 @@ function MemberDialog({
           </div>
         </div>
         <div>
+          <label className={labelCls}>Account (multi-apartment ownership)</label>
+          <select className={inputCls} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <option value="">— none —</option>
+            {(accounts ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.apartmentIds.map((x) => x.replace("apt-", "")).join(", ")})
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label className={labelCls}>Phone (optional)</label>
           <input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
@@ -170,6 +185,7 @@ export default function MembersPage() {
   const { user: me } = useSessionUser();
   const users = useApi<User[]>("/users");
   const apartments = useApi<Apartment[]>("/apartments");
+  const accounts = useApi<Account[]>("/accounts");
   const [dialog, setDialog] = useState<{ open: boolean; member: User | null }>({
     open: false,
     member: null,
@@ -252,6 +268,7 @@ export default function MembersPage() {
         <MemberDialog
           member={dialog.member}
           apartments={apartments.data}
+          accounts={accounts.data}
           onClose={() => setDialog({ open: false, member: null })}
           onDone={users.reload}
         />

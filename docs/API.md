@@ -41,7 +41,7 @@ cross-tenant, 409 conflict).
 |---|---|---|---|
 | GET | `/users` | any member | Community-scoped |
 | POST | `/users` | manager/admin | Whitelists an email (normalized lowercase); 409 if exists |
-| PATCH | `/users/{id}` | manager/admin | name/email (re-keys whitelist, unique, normalized)/role/roles (switchable set)/apartmentId/phone |
+| PATCH | `/users/{id}` | manager/admin | name/email (re-keys whitelist)/role/roles/apartmentId/accountId ("" unlinks)/phone |
 | DELETE | `/users/{id}` | manager/admin | Revokes access immediately; cannot delete self |
 
 ## Accounts
@@ -49,6 +49,9 @@ cross-tenant, 409 conflict).
 | Method | Path | Access | Notes |
 |---|---|---|---|
 | GET | `/accounts` | manager/admin/auditor | Billing entities with their apartment_ids — powers per-client filtering |
+| POST/PATCH/DELETE | `/accounts[/{id}]` | **super_admin** | Ownership restructuring; one billing account per apartment enforced (409); delete blocked while portal users linked |
+| GET | `/accounts/legal-owners` | manager/admin/auditor | Title holders per apartment |
+| POST/PATCH/DELETE | `/accounts/legal-owners[/{id}]` | **super_admin** | Legal title holder CRUD (name, ownership %) |
 
 ## Dashboards
 
@@ -86,7 +89,7 @@ cross-tenant, 409 conflict).
 | POST | `/invoices/bill-owner` | manager/admin | Itemized reimbursement invoice for one apartment (`ledger=reimbursement`, lineItems auto-summed, owner notified) |
 | POST | `/invoices/apply-late-fees` | manager/admin | Late-fee invoice per overdue invoice of the period (idempotent, linked via `parentInvoiceId`) |
 | PATCH | `/invoices/{id}` | manager/admin | description/amount/dueDate; status recomputed |
-| DELETE | `/invoices/{id}` | manager/admin | 409 if payments exist |
+| DELETE | `/invoices/{id}` | manager/admin | 409 if payments exist; `?cascade=true` deletes the payments too (both audited) |
 | POST | `/payments` | manager/admin | Records payment (or `method: "Credit"` for waivers); recomputes invoice paid/status; rejects overpayment |
 | DELETE | `/payments/{id}` | manager/admin | Reversal; recomputes invoice |
 | POST | `/payments/report` | owner/tenant (own apartment) | Claims an offline payment → **pending** (not counted); notifies managers; one open report per invoice |

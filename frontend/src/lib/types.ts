@@ -273,6 +273,14 @@ export interface CommunitySummary {
   reserveFundBalance: number;
 }
 
+export interface LegalOwner {
+  id: string;
+  communityId: string;
+  apartmentId: string;
+  name: string;
+  ownershipPercentage: number;
+}
+
 export interface SearchResult {
   category: string;
   title: string;

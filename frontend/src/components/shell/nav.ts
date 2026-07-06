@@ -14,6 +14,7 @@ import {
   BarChart3,
   ScrollText,
   UsersRound,
+  KeyRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -39,6 +40,7 @@ export const navItems: NavItem[] = [
   { label: "Vendors", href: "/vendors", icon: Store, roles: ["property_manager", "community_admin", "auditor", "super_admin"] },
   { label: "Reserve Fund", href: "/reserve-fund", icon: PiggyBank },
   { label: "Members", href: "/members", icon: UsersRound, roles: ["property_manager", "community_admin", "super_admin"] },
+  { label: "Ownership", href: "/ownership", icon: KeyRound, roles: ["super_admin"] },
   { label: "Reports", href: "/reports", icon: BarChart3, roles: ["property_manager", "community_admin", "auditor", "super_admin"] },
   { label: "Audit Log", href: "/audit", icon: ScrollText, roles: ["property_manager", "community_admin", "auditor", "super_admin"] },
 ];

@@ -53,6 +53,8 @@ async def update_user(
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+    if updates.get("account_id") == "":
+        updates["account_id"] = None  # explicit unlink
     if "email" in updates:
         # Email IS the whitelist key — normalize and keep unique.
         updates["email"] = updates["email"].lower()
