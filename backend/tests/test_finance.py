@@ -51,6 +51,38 @@ async def test_community_summary_computed_from_real_data(client, owner_headers, 
     assert after["outstandingDues"] == 11000
 
 
+async def test_reserve_is_live_computed(client, owner_headers, manager_headers):
+    """The reserve = last manual anchor + community cash flow since. Activity
+    after the anchor month must move it; fee/reimbursement money must not."""
+    from datetime import date
+    today = date.today().isoformat()
+
+    before = (await client.get("/api/v1/finance/summary", headers=owner_headers)).json()
+    assert before["reserveFundBalance"] == 121000  # anchor, no post-June activity
+
+    await client.post(
+        "/api/v1/payments",
+        json={"invoiceId": "inv-2606-502", "amount": 1500, "date": today,
+              "method": "UPI", "reference": "RSV-1"},
+        headers=manager_headers,
+    )
+    await client.post(
+        "/api/v1/expenses",
+        json={"category": "Water", "description": "Reserve test", "amount": 400,
+              "paidDate": today},
+        headers=manager_headers,
+    )
+    after = (await client.get("/api/v1/finance/summary", headers=owner_headers)).json()
+    assert after["reserveFundBalance"] == 121000 + 1500 - 400
+
+    # History gains a derived row for the current month
+    entries = (await client.get("/api/v1/reserve-fund", headers=owner_headers)).json()
+    assert len(entries) == 7
+    assert entries[-1]["balance"] == 122100
+    assert entries[-1]["contributions"] == 1500
+    assert entries[-1]["expenses"] == 400
+
+
 async def test_reserve_fund_and_monthly_finance(client, owner_headers, manager_headers):
     reserve = await client.get("/api/v1/reserve-fund", headers=owner_headers)
     assert len(reserve.json()) == 6

@@ -8,6 +8,7 @@ Scoping rules:
 """
 
 import asyncio
+import calendar
 from datetime import date
 from typing import Annotated, Any
 
@@ -68,12 +69,87 @@ async def list_expenses(db: DB, user: CurrentUser) -> list[Expense]:
     return [Expense.model_validate(d) for d in docs]
 
 
+_MONTH_NUMBERS = {
+    "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
+    "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
+}
+
+
+def _anchor_cutoff(month_str: str) -> str | None:
+    """ISO date of the last day of an anchor month. Accepts 'YYYY-MM',
+    'Jun' and 'Jun 2026'; bare months are assumed to be the most recent
+    occurrence of that month (entries are never in the future)."""
+    s = month_str.strip()
+    year = month = None
+    if len(s) == 7 and s[:4].isdigit() and s[4] == "-" and s[5:].isdigit():
+        year, month = int(s[:4]), int(s[5:])
+    else:
+        parts = s.split()
+        month = _MONTH_NUMBERS.get(parts[0][:3].title()) if parts else None
+        if month:
+            if len(parts) > 1 and parts[1].isdigit():
+                year = int(parts[1])
+            else:
+                today = date.today()
+                year = today.year if month <= today.month else today.year - 1
+    if not (year and month):
+        return None
+    last = calendar.monthrange(year, month)[1]
+    return f"{year:04d}-{month:02d}-{last:02d}"
+
+
+async def live_reserve(db: Any, community_id: str) -> tuple[float, list[dict]]:
+    """The community reserve, computed live: the last manually-recorded entry
+    is the anchor, plus every confirmed community-ledger payment and minus
+    every expense dated after it. Also returns derived per-month rows for
+    post-anchor months that saw activity (for the history view)."""
+    entries = await db.reserve_fund.find({"community_id": community_id}).to_list(1000)
+    base, cutoff = 0.0, None
+    if entries:
+        base = entries[-1]["balance"]
+        cutoff = _anchor_cutoff(entries[-1]["month"])
+        if cutoff is None:
+            # Unparseable anchor month — fall back to the stored balance
+            # rather than silently double-counting history.
+            return base, []
+    payments, expenses = await asyncio.gather(
+        db.payments.find({"community_id": community_id}).to_list(10000),
+        db.expenses.find({"community_id": community_id}).to_list(10000),
+    )
+    by_month: dict[str, list[float]] = {}
+    for p in payments:
+        if (
+            p.get("status", "confirmed") == "confirmed"
+            and p.get("ledger", "community") == "community"
+            and (cutoff is None or p["date"] > cutoff)
+        ):
+            by_month.setdefault(p["date"][:7], [0.0, 0.0])[0] += p["amount"]
+    for e in expenses:
+        if cutoff is None or e["paid_date"] > cutoff:
+            by_month.setdefault(e["paid_date"][:7], [0.0, 0.0])[1] += e["amount"]
+    balance = base
+    derived: list[dict] = []
+    for ym in sorted(by_month):
+        inflow, outflow = by_month[ym]
+        balance += inflow - outflow
+        # Label like the manual entries ("Jul") so the page reads uniformly.
+        label = date(int(ym[:4]), int(ym[5:7]), 1).strftime("%b")
+        derived.append({
+            "month": label,
+            "contributions": inflow,
+            "expenses": outflow,
+            "balance": balance,
+        })
+    return balance, derived
+
+
 @router.get("/reserve-fund", response_model=list[ReserveFundEntry])
 async def reserve_fund(db: DB, user: CurrentUser) -> list[ReserveFundEntry]:
     docs = await db.reserve_fund.find({"community_id": user.community_id}).to_list(
         length=1000
     )
-    return [ReserveFundEntry.model_validate(d) for d in docs]
+    _, derived = await live_reserve(db, user.community_id)
+    return [ReserveFundEntry.model_validate(d) for d in [*docs, *derived]]
 
 
 def _last_month_prefixes(count: int = 6) -> list[str]:
@@ -137,11 +213,11 @@ async def community_summary(db: DB, user: CurrentUser) -> CommunitySummary:
     """Computed from real data — current calendar month."""
     cid = user.community_id
     prefix = date.today().isoformat()[:7]
-    payments, expenses, invoices, reserve = await asyncio.gather(
+    payments, expenses, invoices, (reserve_balance, _) = await asyncio.gather(
         db.payments.find({"community_id": cid}).to_list(10000),
         db.expenses.find({"community_id": cid}).to_list(10000),
         db.invoices.find({"community_id": cid}).to_list(length=10000),
-        db.reserve_fund.find({"community_id": cid}).to_list(length=1000),
+        live_reserve(db, cid),
     )
     return CommunitySummary(
         month_income=sum(
@@ -157,7 +233,7 @@ async def community_summary(db: DB, user: CurrentUser) -> CommunitySummary:
             i["amount"] - i["paid_amount"] for i in invoices
             if i.get("ledger", "community") == "community"
         ),
-        reserve_fund_balance=reserve[-1]["balance"] if reserve else 0,
+        reserve_fund_balance=reserve_balance,
     )
 
 
@@ -263,10 +339,9 @@ async def add_reserve_entry(
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail=f"Entry for {body.month} already exists"
         )
-    entries = await db.reserve_fund.find({"community_id": user.community_id}).to_list(
-        length=1000
-    )
-    prev_balance = entries[-1]["balance"] if entries else 0
+    # New manual entries anchor on the LIVE balance so a reconciliation
+    # entry absorbs the activity recorded since the previous anchor.
+    prev_balance, _ = await live_reserve(db, user.community_id)
     entry = ReserveFundEntry(
         month=body.month,
         contributions=body.contributions,

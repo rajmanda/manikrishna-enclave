@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.security import CurrentUser
 from app.db import get_db
 from app.models import ManagerDashboard, NavBadges, OwnerDashboard
+from app.routers.finance import live_reserve
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -23,10 +24,8 @@ APPROVAL_STAGES = ["Estimate Received", "Owner Approval"]
 
 
 async def _reserve_balance(db: Any, community_id: str) -> float:
-    entries = await db.reserve_fund.find({"community_id": community_id}).to_list(
-        length=100
-    )
-    return entries[-1]["balance"] if entries else 0.0
+    balance, _ = await live_reserve(db, community_id)
+    return balance
 
 
 async def _month_expenses(db: Any, community_id: str) -> float:

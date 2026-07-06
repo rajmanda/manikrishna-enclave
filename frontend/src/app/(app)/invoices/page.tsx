@@ -12,6 +12,7 @@ import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
 import { invoiceTone, ledgerAccent } from "@/lib/tones";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
+import { InvoiceSheet } from "@/components/InvoiceSheet";
 import {
   Badge,
   Card,
@@ -700,6 +701,7 @@ function InvoicesPageInner() {
   const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
   const [reportInvoice, setReportInvoice] = useState<Invoice | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const pendingInvoiceIds = new Set(
     (payments.data ?? []).filter((p) => p.status === "pending").map((p) => p.invoiceId)
@@ -730,6 +732,10 @@ function InvoicesPageInner() {
   if (invoices.loading || !invoices.data) return <PageLoading />;
 
   const allInvoices = invoices.data;
+  // Derived from the live list so the sheet updates after confirm/reverse.
+  const detailInvoice = detailId
+    ? allInvoices.find((i) => i.id === detailId) ?? null
+    : null;
   const accountApts = new Set(
     f.client === "all"
       ? []
@@ -993,7 +999,11 @@ function InvoicesPageInner() {
                   return (av < bv ? -1 : av > bv ? 1 : 0) * sort.dir;
                 })
                 .map((inv) => (
-                  <tr key={inv.id} className={`hover:bg-slate-50/60 ${ledgerAccent(inv.ledger)}`}>
+                  <tr
+                    key={inv.id}
+                    onClick={() => setDetailId(inv.id)}
+                    className={`cursor-pointer hover:bg-slate-50/60 ${ledgerAccent(inv.ledger)}`}
+                  >
                     <td className="px-3 py-2.5 font-semibold">{aptNumber(inv.apartmentId)}</td>
                     <td className="max-w-[16rem] truncate px-3 py-2.5">
                       {inv.description}{" "}
@@ -1008,7 +1018,10 @@ function InvoicesPageInner() {
                       <span className="inline-flex items-center gap-1.5">
                         {canWrite && inv.amount - inv.paidAmount > 0 && (
                           <button
-                            onClick={() => setPayInvoice(inv)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPayInvoice(inv);
+                            }}
                             className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
                           >
                             Record
@@ -1016,7 +1029,10 @@ function InvoicesPageInner() {
                         )}
                         {canDelete && (
                           <button
-                            onClick={() => handleDelete(inv)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(inv);
+                            }}
                             disabled={deletingId === inv.id}
                             title="Delete invoice"
                             className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
@@ -1060,7 +1076,11 @@ function InvoicesPageInner() {
               {items.map((inv) => {
                 const balance = inv.amount - inv.paidAmount;
           return (
-            <div key={inv.id} className={`p-4 ${ledgerAccent(inv.ledger)}`}>
+            <div
+              key={inv.id}
+              onClick={() => setDetailId(inv.id)}
+              className={`cursor-pointer p-4 hover:bg-slate-50/60 ${ledgerAccent(inv.ledger)}`}
+            >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
@@ -1085,7 +1105,10 @@ function InvoicesPageInner() {
                   <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
                   {canDelete && (
                     <button
-                      onClick={() => handleDelete(inv)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(inv);
+                      }}
                       disabled={deletingId === inv.id}
                       title="Delete invoice"
                       className="ml-1 rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
@@ -1097,7 +1120,10 @@ function InvoicesPageInner() {
               </div>
               {canWrite && balance > 0 && (
                 <button
-                  onClick={() => setPayInvoice(inv)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPayInvoice(inv);
+                  }}
                   className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
                 >
                   <Banknote className="h-3.5 w-3.5" />
@@ -1111,7 +1137,10 @@ function InvoicesPageInner() {
                   </p>
                 ) : (
                   <button
-                    onClick={() => setReportInvoice(inv)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setReportInvoice(inv);
+                    }}
                     className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700"
                   >
                     <Banknote className="h-3.5 w-3.5" />
@@ -1180,6 +1209,33 @@ function InvoicesPageInner() {
             invoices.reload();
             payments.reload();
           }}
+        />
+      )}
+      {detailInvoice && (
+        <InvoiceSheet
+          invoice={detailInvoice}
+          payments={payments.data ?? []}
+          invoices={allInvoices}
+          users={users.data}
+          apartments={apartments.data}
+          canWrite={canWrite}
+          mine={mine}
+          onClose={() => setDetailId(null)}
+          onChanged={() => {
+            invoices.reload();
+            payments.reload();
+          }}
+          onRecordPayment={setPayInvoice}
+          onReportPaid={setReportInvoice}
+          onDelete={
+            canDelete
+              ? (inv) => {
+                  setDetailId(null);
+                  handleDelete(inv);
+                }
+              : undefined
+          }
+          onOpenInvoice={(inv) => setDetailId(inv.id)}
         />
       )}
     </div>

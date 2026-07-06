@@ -1,20 +1,20 @@
 # PROJECT_STATE.md
 
-Last updated: 2026-07-05
+Last updated: 2026-07-06
 
 | Field | Value |
 |---|---|
-| Current version | 0.8.0 |
+| Current version | 0.9.0 |
 | Current milestone | **M4 Governance — complete. PRD Phases 1–4 fully shipped.** Next: M5 (AI, mobile) or hardening |
 | Current sprint | Launch readiness (real owner emails, notifications decision) |
 | Current branch | main (github.com/rajmanda/manikrishna-enclave, public) |
-| Last completed feature | Ownership console (billing accounts + legal owners), manager delete privileges with payment cascade |
+| Last completed feature | Invoice detail sheet, live-computed community reserve, month-grouped payments |
 | Current feature | — |
 | Next priority | Owner onboarding: collect real owner emails and whitelist them; then notifications provider decision |
 | Deployment status | **Live at https://community.rajmanda.com** (Cloud Run, asia-south1) |
 | Database version | Schema v6 (migrations 001-006); Atlas `hyderabad.n5kr48f` (AWS Mumbai), DB `manikrishna_enclave` |
 | Infrastructure version | Terraform applied — 35 resources (incl. GCS media bucket), state in gs://mm-owners-5b8611-tfstate |
-| Last deployment | 2026-07-05 via deploy.yml (manual dispatch) |
+| Last deployment | 2026-07-06 via deploy.yml (manual dispatch) |
 
 ## Live URLs
 

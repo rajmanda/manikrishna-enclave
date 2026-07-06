@@ -3,6 +3,29 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.9.0] — 2026-07-06
+
+- **Live-computed community reserve:** the reserve is no longer a static
+  manual snapshot. The last manual reserve entry is the anchor; confirmed
+  community-ledger payments after it add, expenses subtract (fees and
+  reimbursements excluded). Dashboards, finance summary and the reserve
+  history all share the calculation; the history view derives per-month rows
+  for post-anchor months. Manual entries now act as reconciliation anchors
+  based on the live balance.
+- **Invoice detail sheet:** tapping any invoice (invoices page, both views) or
+  any payment (payments page) opens a bottom sheet — invoice header with
+  ledger/status badges, billed/paid/balance with progress bar, reimbursement
+  line items, full payment history (pending claims with inline
+  confirm/reject, confirmed payments with reverse), late-fee parent/child
+  links, and role-appropriate actions (record payment / I've paid / delete).
+- **Payments Received grouped by month received** with per-month
+  community/personal totals in each header.
+- **Payment rows titled by the invoice they settle** (description + period)
+  instead of only apartment + member name; owner name moved to the detail
+  line.
+- Data cleanup (prod): stale couple-style member names on 402/501/502
+  replaced with one spouse per flat (Vijayaram / Rajaram / Sushma).
+
 ## [0.8.1] — 2026-07-05
 
 - **Fix — Create Community Invoices had no title field:** the form silently

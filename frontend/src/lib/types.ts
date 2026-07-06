@@ -67,6 +67,7 @@ export interface Invoice {
   status: InvoiceStatus;
   ledger?: "community" | "manager_fee" | "reimbursement";
   lineItems?: { description: string; amount: number }[];
+  parentInvoiceId?: string | null;
 }
 
 export interface Payment {
