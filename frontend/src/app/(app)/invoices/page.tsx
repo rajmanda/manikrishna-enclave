@@ -174,8 +174,21 @@ function GenerateDialog({
     <Modal title="Create Community Invoices" onClose={onClose}>
       <form className="space-y-4" onSubmit={submit}>
         <div>
-          <label className={labelCls}>Period</label>
-          <input className={inputCls} value={period} onChange={(e) => setPeriod(e.target.value)} required />
+          <label className={labelCls}>What is this invoice for?</label>
+          <input
+            className={inputCls}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Monthly Maintenance, Borewell repair…"
+            required
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Owners see this as the invoice title, e.g. &ldquo;{description.trim() || "Monthly Maintenance"} — Apt 502&rdquo;
+          </p>
+        </div>
+        <div>
+          <label className={labelCls}>Period (billing month)</label>
+          <input className={inputCls} value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="Aug 2026" required />
         </div>
         <div>
           <label className={labelCls}>Due date</label>

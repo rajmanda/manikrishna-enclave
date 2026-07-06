@@ -3,6 +3,14 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.8.1] — 2026-07-05
+
+- **Fix — Create Community Invoices had no title field:** the form silently
+  sent a hardcoded "Monthly Maintenance" description (the input was never
+  rendered), so custom titles ended up typed into Period. The dialog now
+  leads with "What is this invoice for?" (prefilled, with a live preview of
+  the owner-facing label) and Period is relabeled "Period (billing month)".
+
 ## [0.8.0] — 2026-07-05
 
 - **Ownership console (super_admin):** new /ownership page — billing accounts
