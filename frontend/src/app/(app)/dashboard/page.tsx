@@ -16,6 +16,7 @@ import {
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { ExpensesModal } from "@/components/ExpensesModal";
+import { ReserveModal } from "@/components/ReserveModal";
 import type {
   Expense,
   FeedPost,
@@ -29,9 +30,10 @@ import type {
   User,
   WorkOrder,
 } from "@/lib/types";
-import { userName } from "@/lib/lookup";
+import { aptNumber, userName } from "@/lib/lookup";
 import { currentMonthLabel, formatDate, formatINR } from "@/lib/format";
-import { stageTone } from "@/lib/tones";
+import { invoiceTone, stageTone } from "@/lib/tones";
+import { Modal } from "@/components/Modal";
 import {
   Badge,
   Card,
@@ -71,6 +73,12 @@ function OwnerDashboard() {
   const meetings = useApi<Meeting[]>("/meetings");
   const users = useApi<User[]>("/users");
   const monthly = useApi<MonthlyFinance[]>("/finance/monthly");
+  const expenses = useApi<Expense[]>("/expenses");
+  const reserve = useApi<ReserveFundEntry[]>("/reserve-fund");
+  const [expenseModal, setExpenseModal] = useState(false);
+  const [reserveModal, setReserveModal] = useState(false);
+  const [balanceModal, setBalanceModal] = useState(false);
+  const [workOrderModal, setWorkOrderModal] = useState(false);
 
   const error = summary.error ?? invoices.error ?? workOrders.error;
   if (error) return <ErrorNote message={error} onRetry={summary.reload} />;
@@ -127,23 +135,27 @@ function OwnerDashboard() {
           label="Outstanding Balance"
           value={formatINR(s.outstandingBalance)}
           tone={s.outstandingBalance > 0 ? "negative" : "positive"}
-          hint={s.outstandingBalance > 0 ? "Payment due" : "All clear"}
+          hint={s.outstandingBalance > 0 ? "Tap to see what's due" : "All clear"}
+          onClick={() => setBalanceModal(true)}
         />
-        <Stat label="Open Work Orders" value={String(s.openWorkOrders)} hint="Common areas" />
+        <Stat
+          label="Open Work Orders"
+          value={String(s.openWorkOrders)}
+          hint="Tap for the list"
+          onClick={() => setWorkOrderModal(true)}
+        />
         <Stat
           label={`Community Expenses (${currentMonthLabel()})`}
           value={formatINR(s.monthExpenses)}
-          hint={
-            monthly.data && monthly.data.length >= 2
-              ? `${monthly.data[monthly.data.length - 2].month}: ${formatINR(monthly.data[monthly.data.length - 2].expenses)}`
-              : "This month"
-          }
+          hint="Tap to see where it went"
+          onClick={() => setExpenseModal(true)}
         />
         <Stat
           label="Community Reserve"
           value={formatINR(s.reserveFundBalance)}
           tone="positive"
-          hint="Shared community fund — not your balance"
+          hint="Shared fund — tap for the story"
+          onClick={() => setReserveModal(true)}
         />
       </div>
 
@@ -261,6 +273,102 @@ function OwnerDashboard() {
           </Card>
         </section>
       </div>
+
+      {expenseModal && (
+        <ExpensesModal
+          title={`Community expenses — ${currentMonthLabel()}`}
+          expenses={(expenses.data ?? []).filter((e) =>
+            e.paidDate.startsWith(new Date().toISOString().slice(0, 7))
+          )}
+          onClose={() => setExpenseModal(false)}
+          moreHref="/community"
+          moreLabel="See all months"
+        />
+      )}
+      {reserveModal && (
+        <ReserveModal
+          entries={reserve.data ?? []}
+          onClose={() => setReserveModal(false)}
+        />
+      )}
+      {balanceModal && (
+        <Modal title="Outstanding Balance" onClose={() => setBalanceModal(false)}>
+          {(() => {
+            const due = (invoices.data ?? [])
+              .filter((i) => i.amount - i.paidAmount > 0)
+              .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+            if (due.length === 0)
+              return (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  Nothing due — you&apos;re all clear. 🎉
+                </p>
+              );
+            return (
+              <div className="divide-y divide-slate-100">
+                {due.map((inv) => (
+                  <div key={inv.id} className="flex items-start justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{inv.description}</p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                        <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
+                        {inv.ledger === "manager_fee" && <Badge tone="violet">Manager fee</Badge>}
+                        {inv.ledger === "reimbursement" && <Badge tone="amber">Reimbursement</Badge>}
+                        Due {formatDate(inv.dueDate)}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-sm font-semibold text-red-600">
+                      {formatINR(inv.amount - inv.paidAmount)}
+                    </p>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-3">
+                  <p className="text-sm font-bold">Total due</p>
+                  <p className="text-sm font-bold text-red-600">
+                    {formatINR(due.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0))}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+          <Link
+            href="/invoices"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+          >
+            Go to my invoices →
+          </Link>
+        </Modal>
+      )}
+      {workOrderModal && (
+        <Modal title="Open Work Orders" onClose={() => setWorkOrderModal(false)}>
+          {openWorkOrders.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-400">
+              No open work orders — everything&apos;s in shape.
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {openWorkOrders.map((wo) => (
+                <Link
+                  key={wo.id}
+                  href={`/work-orders/${wo.id}`}
+                  className="flex items-center justify-between gap-3 py-2.5 hover:bg-slate-50"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{wo.title}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{wo.priority} priority</p>
+                  </div>
+                  <Badge tone={stageTone(wo.stage)}>{wo.stage}</Badge>
+                </Link>
+              ))}
+            </div>
+          )}
+          <Link
+            href="/work-orders"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+          >
+            All work orders →
+          </Link>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -279,7 +387,12 @@ function ManagerDashboard() {
   const reserve = useApi<ReserveFundEntry[]>("/reserve-fund");
   const workOrders = useApi<WorkOrder[]>("/work-orders");
   const expenses = useApi<Expense[]>("/expenses");
+  const invoices = useApi<Invoice[]>("/invoices");
+  const payments = useApi<Payment[]>("/payments");
   const [monthModal, setMonthModal] = useState<{ prefix: string; label: string } | null>(null);
+  const [reserveModal, setReserveModal] = useState(false);
+  const [collectionsModal, setCollectionsModal] = useState(false);
+  const [receivedModal, setReceivedModal] = useState(false);
 
   const error = summary.error ?? monthly.error ?? reserve.error ?? workOrders.error;
   if (error) return <ErrorNote message={error} onRetry={summary.reload} />;
@@ -342,28 +455,33 @@ function ManagerDashboard() {
           label="Outstanding Collections"
           value={formatINR(s.outstandingCollections)}
           tone="negative"
-          hint={`${s.overdueInvoices} overdue invoices`}
+          hint={`${s.overdueInvoices} overdue · tap for per-flat dues`}
+          onClick={() => setCollectionsModal(true)}
         />
         <Stat
           label="Payments Received"
           value={formatINR(s.paymentsReceived)}
           tone="positive"
-          hint="All time"
+          hint="All time · tap for month-by-month"
+          onClick={() => setReceivedModal(true)}
         />
         <Stat
           label={`Expenses (${currentMonthLabel()})`}
           value={formatINR(s.monthExpenses)}
-          hint={
-            monthly.data && monthly.data.length >= 2
-              ? `${monthly.data[monthly.data.length - 2].month}: ${formatINR(monthly.data[monthly.data.length - 2].expenses)}`
-              : undefined
+          hint="Tap for line items"
+          onClick={() =>
+            setMonthModal({
+              prefix: new Date().toISOString().slice(0, 7),
+              label: currentMonthLabel(),
+            })
           }
         />
         <Stat
           label="Reserve Fund"
           value={formatINR(s.reserveFundBalance)}
           tone="positive"
-          hint="Current balance"
+          hint="Tap for the month-by-month story"
+          onClick={() => setReserveModal(true)}
         />
       </div>
 
@@ -448,7 +566,128 @@ function ManagerDashboard() {
             e.paidDate.startsWith(monthModal.prefix)
           )}
           onClose={() => setMonthModal(null)}
+          moreHref="/community"
+          moreLabel="See all months"
         />
+      )}
+      {reserveModal && (
+        <ReserveModal
+          entries={reserve.data ?? []}
+          onClose={() => setReserveModal(false)}
+        />
+      )}
+      {collectionsModal && (
+        <Modal title="Outstanding Collections" onClose={() => setCollectionsModal(false)}>
+          {(() => {
+            const perApt = new Map<string, { total: number; count: number }>();
+            for (const inv of (invoices.data ?? []).filter(
+              (i) =>
+                (i.ledger ?? "community") === "community" &&
+                i.amount - i.paidAmount > 0
+            )) {
+              const cur = perApt.get(inv.apartmentId) ?? { total: 0, count: 0 };
+              cur.total += inv.amount - inv.paidAmount;
+              cur.count += 1;
+              perApt.set(inv.apartmentId, cur);
+            }
+            const rows = [...perApt.entries()].sort((a, b) => b[1].total - a[1].total);
+            if (rows.length === 0)
+              return (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  Everything collected — no community dues.
+                </p>
+              );
+            return (
+              <div className="divide-y divide-slate-100">
+                {rows.map(([aptId, { total, count }]) => (
+                  <div key={aptId} className="flex items-center justify-between gap-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium">Apt {aptNumber(aptId)}</p>
+                      <p className="text-xs text-slate-500">
+                        {count} open invoice{count === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-red-600">{formatINR(total)}</p>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-3">
+                  <p className="text-sm font-bold">Total outstanding</p>
+                  <p className="text-sm font-bold text-red-600">
+                    {formatINR(rows.reduce((sum, [, r]) => sum + r.total, 0))}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+          <Link
+            href="/invoices?view=table"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+          >
+            Go to invoices →
+          </Link>
+        </Modal>
+      )}
+      {receivedModal && (
+        <Modal title="Payments Received" onClose={() => setReceivedModal(false)}>
+          {(() => {
+            const confirmed = (payments.data ?? []).filter(
+              (p) =>
+                p.status !== "pending" &&
+                (p.ledger ?? "community") === "community"
+            );
+            const byMonth = new Map<string, { total: number; count: number }>();
+            for (const p of [...confirmed].sort((a, b) => b.date.localeCompare(a.date))) {
+              const d = new Date(p.date + "T00:00:00");
+              const key = isNaN(d.getTime())
+                ? "Other"
+                : d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+              const cur = byMonth.get(key) ?? { total: 0, count: 0 };
+              cur.total += p.amount;
+              cur.count += 1;
+              byMonth.set(key, cur);
+            }
+            const rows = [...byMonth.entries()];
+            if (rows.length === 0)
+              return (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  No payments received yet.
+                </p>
+              );
+            return (
+              <div className="divide-y divide-slate-100">
+                {rows.map(([month, { total, count }]) => (
+                  <div key={month} className="flex items-center justify-between gap-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium">{month}</p>
+                      <p className="text-xs text-slate-500">
+                        {count} payment{count === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-emerald-600">
+                      {formatINR(total)}
+                    </p>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-3">
+                  <p className="text-sm font-bold">All time</p>
+                  <p className="text-sm font-bold text-emerald-600">
+                    {formatINR(confirmed.reduce((sum, p) => sum + p.amount, 0))}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+          <p className="mt-3 text-xs text-slate-500">
+            Community funds only — your fees and reimbursements are tracked
+            separately.
+          </p>
+          <Link
+            href="/payments"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+          >
+            Go to payments →
+          </Link>
+        </Modal>
       )}
     </div>
   );

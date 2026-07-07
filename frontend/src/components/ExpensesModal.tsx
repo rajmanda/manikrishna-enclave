@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Modal } from "@/components/Modal";
 import type { Expense } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
@@ -9,10 +10,14 @@ export function ExpensesModal({
   title,
   expenses,
   onClose,
+  moreHref,
+  moreLabel,
 }: {
   title: string;
   expenses: Expense[];
   onClose: () => void;
+  moreHref?: string;
+  moreLabel?: string;
 }) {
   const total = expenses.reduce((s, e) => s + e.amount, 0);
   return (
@@ -42,6 +47,14 @@ export function ExpensesModal({
             <p className="text-sm font-bold">{formatINR(total)}</p>
           </div>
         </div>
+      )}
+      {moreHref && (
+        <Link
+          href={moreHref}
+          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+        >
+          {moreLabel ?? "See more"} →
+        </Link>
       )}
     </Modal>
   );

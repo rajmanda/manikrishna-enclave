@@ -4,11 +4,11 @@ Last updated: 2026-07-06
 
 | Field | Value |
 |---|---|
-| Current version | 0.9.0 |
+| Current version | 0.10.0 |
 | Current milestone | **M4 Governance — complete. PRD Phases 1–4 fully shipped.** Next: M5 (AI, mobile) or hardening |
 | Current sprint | Launch readiness (real owner emails, notifications decision) |
 | Current branch | main (github.com/rajmanda/manikrishna-enclave, public) |
-| Last completed feature | Invoice detail sheet, live-computed community reserve, month-grouped payments |
+| Last completed feature | Clickable stat tiles with detail modals (all dashboards + community page), grouped collapsible expense ledger |
 | Current feature | — |
 | Next priority | Owner onboarding: collect real owner emails and whitelist them; then notifications provider decision |
 | Deployment status | **Live at https://community.rajmanda.com** (Cloud Run, asia-south1) |

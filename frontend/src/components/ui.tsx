@@ -1,16 +1,20 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { initials } from "@/lib/format";
 
 export function Card({
   children,
   className = "",
+  onClick,
 }: {
   children: ReactNode;
   className?: string;
+  onClick?: () => void;
 }) {
   return (
     <div
+      onClick={onClick}
       className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}
     >
       {children}
@@ -103,12 +107,14 @@ export function Stat({
   hint,
   tone = "default",
   icon,
+  onClick,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: "default" | "positive" | "negative";
   icon?: ReactNode;
+  onClick?: () => void;
 }) {
   const valueColor =
     tone === "positive"
@@ -117,12 +123,19 @@ export function Stat({
         ? "text-red-600"
         : "text-slate-900";
   return (
-    <Card className="p-4">
+    <Card
+      onClick={onClick}
+      className={`p-4 ${onClick ? "cursor-pointer transition hover:border-brand-300 hover:shadow-md" : ""}`}
+    >
       <div className="flex items-start justify-between">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
           {label}
         </p>
-        {icon && <span className="text-slate-400">{icon}</span>}
+        {icon ? (
+          <span className="text-slate-400">{icon}</span>
+        ) : onClick ? (
+          <ChevronRight className="h-4 w-4 text-slate-300" />
+        ) : null}
       </div>
       <p className={`mt-1.5 text-xl font-bold sm:text-2xl ${valueColor}`}>
         {value}

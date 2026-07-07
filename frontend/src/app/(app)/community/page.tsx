@@ -5,7 +5,8 @@
 // their own apartment while managers see everyone's.
 
 import { useRef, useState } from "react";
-import { Paperclip, PlusCircle, ReceiptText, Trash2, Upload } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, Paperclip, PlusCircle, ReceiptText, Trash2, Upload } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, apiBlob, ApiError, apiUpload } from "@/lib/api";
@@ -15,13 +16,15 @@ import type {
   Expense,
   Invoice,
   MonthlyFinance,
+  ReserveFundEntry,
   User,
   Vendor,
 } from "@/lib/types";
 import { currentMonthLabel, formatDate, formatINR } from "@/lib/format";
-import { vendorFor } from "@/lib/lookup";
+import { aptNumber, vendorFor } from "@/lib/lookup";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { ExpensesModal } from "@/components/ExpensesModal";
+import { ReserveModal } from "@/components/ReserveModal";
 import {
   Avatar,
   Badge,
@@ -185,6 +188,9 @@ export default function CommunityPage() {
   const canWrite = WRITER_ROLES.includes(role);
   const [addOpen, setAddOpen] = useState(false);
   const [categoryModal, setCategoryModal] = useState<string | null>(null);
+  const [ledgerView, setLedgerView] = useState<"month" | "category">("month");
+  // Keyed by view+label; unset = default (only the first group starts open).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const summary = useApi<CommunitySummary>("/finance/summary");
   const expenses = useApi<Expense[]>("/expenses");
   const apartments = useApi<Apartment[]>("/apartments");
@@ -192,6 +198,11 @@ export default function CommunityPage() {
   const invoices = useApi<Invoice[]>("/invoices");
   const vendors = useApi<Vendor[]>("/vendors");
   const monthly = useApi<MonthlyFinance[]>("/finance/monthly");
+  const reserve = useApi<ReserveFundEntry[]>("/reserve-fund");
+  const [incomeModal, setIncomeModal] = useState(false);
+  const [monthExpenseModal, setMonthExpenseModal] = useState(false);
+  const [duesModal, setDuesModal] = useState(false);
+  const [reserveModal, setReserveModal] = useState(false);
 
   const error = summary.error ?? expenses.error ?? apartments.error ?? users.error;
   if (error) return <ErrorNote message={error} onRetry={summary.reload} />;
@@ -208,6 +219,37 @@ export default function CommunityPage() {
   for (const e of expenseList) {
     byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + e.amount);
   }
+
+  // Ledger grouping: months tell "what we spent in July", categories tell
+  // "what we spend on electricity" — both stories a resident actually asks.
+  const monthLabel = (d: string) => {
+    const dt = new Date(d + "T00:00:00");
+    return isNaN(dt.getTime())
+      ? "Other"
+      : dt.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  };
+  const ledgerGroups = (() => {
+    const map = new Map<string, Expense[]>();
+    if (ledgerView === "category") {
+      for (const e of [...expenseList].sort((a, b) => b.amount - a.amount)) {
+        map.set(e.category, [...(map.get(e.category) ?? []), e]);
+      }
+      return [...map.entries()]
+        .map(([label, items]) => ({ label, items }))
+        .sort(
+          (a, b) =>
+            b.items.reduce((s, e) => s + e.amount, 0) -
+            a.items.reduce((s, e) => s + e.amount, 0)
+        );
+    }
+    for (const e of [...expenseList].sort((a, b) =>
+      b.paidDate.localeCompare(a.paidDate)
+    )) {
+      const key = monthLabel(e.paidDate);
+      map.set(key, [...(map.get(key) ?? []), e]);
+    }
+    return [...map.entries()].map(([label, items]) => ({ label, items }));
+  })();
   const pieData = [...byCategory.entries()]
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
@@ -237,24 +279,29 @@ export default function CommunityPage() {
           label={`Income (${currentMonthLabel()})`}
           value={formatINR(s.monthIncome)}
           tone="positive"
-          hint={
-            monthly.data && monthly.data.length >= 2
-              ? `${monthly.data[monthly.data.length - 2].month}: ${formatINR(monthly.data[monthly.data.length - 2].income)}`
-              : undefined
-          }
+          hint="Tap for month-by-month"
+          onClick={() => setIncomeModal(true)}
         />
         <Stat
           label={`Expenses (${currentMonthLabel()})`}
           value={formatINR(s.monthExpenses)}
           tone="negative"
-          hint={
-            monthly.data && monthly.data.length >= 2
-              ? `${monthly.data[monthly.data.length - 2].month}: ${formatINR(monthly.data[monthly.data.length - 2].expenses)}`
-              : undefined
-          }
+          hint="Tap for line items"
+          onClick={() => setMonthExpenseModal(true)}
         />
-        <Stat label="Outstanding Dues" value={formatINR(s.outstandingDues)} />
-        <Stat label="Community Reserve" value={formatINR(s.reserveFundBalance)} tone="positive" hint="Shared fund balance" />
+        <Stat
+          label="Outstanding Dues"
+          value={formatINR(s.outstandingDues)}
+          hint="Tap for the breakup"
+          onClick={() => setDuesModal(true)}
+        />
+        <Stat
+          label="Community Reserve"
+          value={formatINR(s.reserveFundBalance)}
+          tone="positive"
+          hint="Tap for the story"
+          onClick={() => setReserveModal(true)}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-5">
@@ -267,7 +314,7 @@ export default function CommunityPage() {
 
         {/* Expense ledger */}
         <section className="lg:col-span-3">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-1 flex items-center justify-between">
             <h2 className="text-base font-semibold text-slate-900">Expense Ledger</h2>
             {canWrite && (
               <button
@@ -278,50 +325,117 @@ export default function CommunityPage() {
               </button>
             )}
           </div>
-          <Card className="divide-y divide-slate-100">
-            {expenseList.map((e) => {
-              const vendor = vendorFor(vendors.data, e.vendorId);
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-xs text-slate-400">
+              Every rupee spent from community funds
+            </p>
+            <div className="flex rounded-xl border border-slate-200 p-0.5">
+              {(["month", "category"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setLedgerView(v)}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
+                    ledgerView === v
+                      ? "bg-brand-600 text-white"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {v === "month" ? "By month" : "By category"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-3" key={ledgerView}>
+            {ledgerGroups.map(({ label, items }, index) => {
+              const groupTotal = items.reduce((sum, e) => sum + e.amount, 0);
+              const groupKey = `${ledgerView}:${label}`;
+              const isOpen = openGroups[groupKey] ?? index === 0;
               return (
-                <div key={e.id} className="flex items-start justify-between gap-3 p-4">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium">{e.description}</p>
-                      <Badge tone="slate">{e.category}</Badge>
+                <div key={label} className="animate-rise">
+                  <button
+                    onClick={() =>
+                      setOpenGroups((prev) => ({ ...prev, [groupKey]: !isOpen }))
+                    }
+                    className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-xl px-1 py-1 text-left hover:bg-slate-50"
+                  >
+                    <span className="flex items-center gap-1.5 text-sm font-bold text-slate-700">
+                      <ChevronDown
+                        className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? "" : "-rotate-90"}`}
+                      />
+                      {label}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      {items.length} expense{items.length === 1 ? "" : "s"} ·{" "}
+                      <span className="font-semibold text-slate-600">
+                        {formatINR(groupTotal)}
+                      </span>
+                    </span>
+                  </button>
+                  {isOpen && (
+                  <Card className="divide-y divide-slate-100">
+                    {items.map((e) => {
+                      const vendor = vendorFor(vendors.data, e.vendorId);
+                      return (
+                        <div key={e.id} className="flex items-start justify-between gap-3 p-4">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-medium">{e.description}</p>
+                              <Badge tone="slate">
+                                {ledgerView === "category"
+                                  ? monthLabel(e.paidDate)
+                                  : e.category}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {vendor ? `${vendor.name} · ` : ""}
+                              Paid {formatDate(e.paidDate)} · Split equally across{" "}
+                              {apartmentList.length} apartments (
+                              {formatINR(Math.round(e.amount / apartmentList.length))}/apt)
+                            </p>
+                            <ReceiptActions expense={e} canWrite={canWrite} onChanged={expenses.reload} />
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1.5">
+                            <p className="text-sm font-semibold">{formatINR(e.amount)}</p>
+                            {canWrite && (
+                              <button
+                                aria-label={`Delete ${e.description}`}
+                                onClick={async () => {
+                                  if (!confirm(`Delete expense "${e.description}"?`)) return;
+                                  await api(`/expenses/${e.id}`, { method: "DELETE" });
+                                  expenses.reload();
+                                }}
+                                className="text-slate-300 hover:text-red-500"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="flex items-center justify-between bg-slate-50/60 p-4">
+                      <p className="text-sm font-semibold">{label} total</p>
+                      <p className="text-sm font-bold">{formatINR(groupTotal)}</p>
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {vendor ? `${vendor.name} · ` : ""}
-                      Paid {formatDate(e.paidDate)} · Split equally across{" "}
-                      {apartmentList.length} apartments (
-                      {formatINR(Math.round(e.amount / apartmentList.length))}/apt)
-                    </p>
-                    <ReceiptActions expense={e} canWrite={canWrite} onChanged={expenses.reload} />
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1.5">
-                    <p className="text-sm font-semibold">{formatINR(e.amount)}</p>
-                    {canWrite && (
-                      <button
-                        aria-label={`Delete ${e.description}`}
-                        onClick={async () => {
-                          if (!confirm(`Delete expense "${e.description}"?`)) return;
-                          await api(`/expenses/${e.id}`, { method: "DELETE" });
-                          expenses.reload();
-                        }}
-                        className="text-slate-300 hover:text-red-500"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  </Card>
+                  )}
                 </div>
               );
             })}
-            <div className="flex items-center justify-between bg-slate-50/60 p-4">
-              <p className="text-sm font-semibold">Total</p>
+            {expenseList.length === 0 && (
+              <Card>
+                <p className="p-5 text-center text-sm text-slate-400">
+                  No expenses recorded yet.
+                </p>
+              </Card>
+            )}
+            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+              <p className="text-sm font-semibold">All months total</p>
               <p className="text-sm font-bold">
                 {formatINR(expenseList.reduce((sum, e) => sum + e.amount, 0))}
               </p>
             </div>
-          </Card>
+          </div>
         </section>
       </div>
 
@@ -360,6 +474,92 @@ export default function CommunityPage() {
           title={`${categoryModal} expenses`}
           expenses={expenseList.filter((e) => e.category === categoryModal)}
           onClose={() => setCategoryModal(null)}
+        />
+      )}
+
+      {incomeModal && (
+        <Modal title="Community Income" onClose={() => setIncomeModal(false)}>
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <div className="grid grid-cols-2 gap-2 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <span>Month</span>
+              <span className="text-right">Collected</span>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {(monthly.data ?? []).map((m) => (
+                <div key={m.month} className="grid grid-cols-2 items-center gap-2 px-3 py-2.5 text-xs">
+                  <span className="font-medium">{m.month}</span>
+                  <span className="text-right font-semibold text-emerald-600">
+                    {formatINR(m.income)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-slate-500">
+            Money received into community funds each month — confirmed
+            maintenance payments only. Fees paid to the manager are not
+            included.
+          </p>
+        </Modal>
+      )}
+      {monthExpenseModal && (
+        <ExpensesModal
+          title={`Expenses — ${currentMonthLabel()}`}
+          expenses={expenseList.filter((e) =>
+            e.paidDate.startsWith(new Date().toISOString().slice(0, 7))
+          )}
+          onClose={() => setMonthExpenseModal(false)}
+        />
+      )}
+      {duesModal && (
+        <Modal title="Outstanding Dues" onClose={() => setDuesModal(false)}>
+          {(() => {
+            const rows = [...duesByApartment.entries()]
+              .filter(([, total]) => total > 0)
+              .sort((a, b) => b[1] - a[1]);
+            if (rows.length === 0)
+              return (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  {canWrite
+                    ? "Everything collected — no dues."
+                    : "No dues on your apartments."}
+                </p>
+              );
+            return (
+              <div className="divide-y divide-slate-100">
+                {rows.map(([aptId, total]) => (
+                  <div key={aptId} className="flex items-center justify-between gap-3 py-2.5">
+                    <p className="text-sm font-medium">Apt {aptNumber(aptId)}</p>
+                    <p className="text-sm font-semibold text-red-600">{formatINR(total)}</p>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-3">
+                  <p className="text-sm font-bold">Total</p>
+                  <p className="text-sm font-bold text-red-600">
+                    {formatINR(rows.reduce((sum, [, t]) => sum + t, 0))}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+          {!canWrite && (
+            <p className="mt-3 text-xs text-slate-500">
+              You can only see dues for your own apartment(s); the community
+              total on the tile includes all flats.
+            </p>
+          )}
+          <Link
+            href="/invoices"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+          >
+            Go to invoices →
+          </Link>
+        </Modal>
+      )}
+      {reserveModal && (
+        <ReserveModal
+          entries={reserve.data ?? []}
+          onClose={() => setReserveModal(false)}
         />
       )}
 

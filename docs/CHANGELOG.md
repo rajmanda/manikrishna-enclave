@@ -3,6 +3,29 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.10.0] — 2026-07-06
+
+- **Dashboard tiles open details:** all four owner tiles and the manager's
+  key money tiles are now tappable (chevron affordance, hover state).
+  Owner: Outstanding Balance → unpaid invoices with ledger badges + total
+  due; Open Work Orders → open list linking to each work order; Community
+  Expenses → current month's line items ("See all months →" link);
+  Community Reserve → new ReserveModal with balance, collected/spent/balance
+  month table and plain-words definition. Manager: Outstanding Collections →
+  per-apartment dues sorted largest first; Payments Received → month-by-month
+  community receipts with all-time total; Expenses and Reserve Fund same as
+  owner. Community page tiles too: Income → monthly collected table;
+  Expenses → current month line items; Outstanding Dues → per-flat breakup
+  (owners see only their own flats, with a note); Community Reserve → story
+  modal. `Stat`/`Card` gained an optional `onClick`.
+
+- **Expense Ledger made readable:** community page ledger is now grouped —
+  "By month" (default: newest first) or "By category" (biggest spend first,
+  matching the pie chart; rows show a month badge instead). Groups are
+  collapsible (newest/biggest starts open, the rest show a one-line
+  count + total summary), each open group ends with a bold total row, and
+  the all-time footer is relabeled "All months total". Empty state added.
+
 ## [0.9.0] — 2026-07-06
 
 - **Live-computed community reserve:** the reserve is no longer a static
