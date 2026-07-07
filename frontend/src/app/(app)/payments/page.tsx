@@ -15,24 +15,32 @@ import {
   Badge,
   Card,
   ErrorNote,
+  LedgerBadge,
   PageLoading,
   PageTitle,
   Stat,
 } from "@/components/ui";
 import { InvoiceSheet } from "@/components/InvoiceSheet";
+import { Modal } from "@/components/Modal";
 
 function PaymentsPageInner() {
-  const { role } = useSessionUser();
+  const { role, user } = useSessionUser();
   const canDelete = role === "super_admin" || role === "property_manager";
   const canWrite = ["property_manager", "community_admin", "super_admin"].includes(role);
   const mine = role === "owner" || role === "tenant";
+  const myApts = user.apartmentIds?.length
+    ? user.apartmentIds
+    : user.apartmentId
+      ? [user.apartmentId]
+      : [];
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [statModal, setStatModal] = useState<"community" | "personal" | null>(null);
   const payments = useApi<Payment[]>("/payments");
   const invoices = useApi<Invoice[]>("/invoices");
   const apartments = useApi<Apartment[]>("/apartments");
   const users = useApi<User[]>("/users");
-  const accounts = useApi<Account[]>("/accounts");
+  const accounts = useApi<Account[]>(mine ? null : "/accounts");
   const { values: f, set: setFilter, setMany, clearAll, activeCount } = useUrlFilters({
     client: "all", apt: "all", method: "all", ledger: "all",
   });
@@ -114,21 +122,32 @@ function PaymentsPageInner() {
 
   return (
     <div className="space-y-5">
-      <PageTitle title="Payments Received" subtitle="All payment records with references" />
+      <PageTitle
+        title={mine ? "My Payments" : "Payments Received"}
+        subtitle={mine ? "Every payment from your apartments" : "All payment records with references"}
+      />
 
       <FilterBar
         filters={[
-          { key: "client", label: "Client", options: [
-            { value: "all", label: "All clients" },
-            ...(accounts.data ?? []).map((a) => ({ value: a.id, label: a.name })),
-          ]},
-          { key: "apt", label: "Apartment", options: [
-            { value: "all", label: "All apartments" },
-            ...[...(apartments.data ?? [])]
-              .filter((a) => f.client === "all" || accountApts.has(a.id))
-              .sort((a, b) => a.number.localeCompare(b.number))
-              .map((a) => ({ value: a.id, label: `Apt ${a.number}` })),
-          ]},
+          ...(!mine
+            ? [{ key: "client", label: "Client", options: [
+                { value: "all", label: "All clients" },
+                ...(accounts.data ?? []).map((a) => ({ value: a.id, label: a.name })),
+              ]}]
+            : []),
+          ...(!mine || myApts.length > 1
+            ? [{ key: "apt", label: "Apartment", options: [
+                { value: "all", label: "All apartments" },
+                ...[...(apartments.data ?? [])]
+                  .filter((a) =>
+                    mine
+                      ? myApts.includes(a.id)
+                      : f.client === "all" || accountApts.has(a.id)
+                  )
+                  .sort((a, b) => a.number.localeCompare(b.number))
+                  .map((a) => ({ value: a.id, label: `Apt ${a.number}` })),
+              ]}]
+            : []),
           { key: "method", label: "Method", options: [
             { value: "all", label: "Any method" },
             { value: "UPI", label: "UPI" },
@@ -159,15 +178,17 @@ function PaymentsPageInner() {
 
       <div className="grid grid-cols-2 gap-3">
         <Stat
-          label="Community Funds Received"
+          label={mine ? "Maintenance Paid" : "Community Funds Received"}
           value={formatINR(communityTotal)}
           tone="positive"
-          hint="Never mixed with personal money"
+          hint="Tap for the list"
+          onClick={() => setStatModal("community")}
         />
         <Stat
-          label="Personal — Fees & Reimbursements"
+          label={mine ? "Paid to Manager" : "Personal — Fees & Reimbursements"}
           value={formatINR(personalTotal)}
-          hint="Payable to the manager"
+          hint="Tap for the list"
+          onClick={() => setStatModal("personal")}
         />
       </div>
 
@@ -184,33 +205,40 @@ function PaymentsPageInner() {
                 className={`flex cursor-pointer flex-wrap items-center justify-between gap-3 p-4 hover:bg-amber-50/40 ${ledgerAccent(p.ledger)}`}
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">{paymentTitle(p)}</p>
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                    {paymentTitle(p)}
+                    <LedgerBadge ledger={p.ledger} />
+                  </p>
                   <p className="text-xs text-slate-500">
                     {ownerNameFor(users.data, apartments.data, p.apartmentId)} ·{" "}
                     {formatINR(p.amount)} · {p.method} · {formatDate(p.date)}
                     {p.reference && ` · ref ${p.reference}`}
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      act(p, "confirm");
-                    }}
-                    className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-                  >
-                    <Check className="h-3.5 w-3.5" /> Confirm
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      act(p, "reject");
-                    }}
-                    className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
-                  >
-                    <X className="h-3.5 w-3.5" /> Reject
-                  </button>
-                </div>
+                {canWrite ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        act(p, "confirm");
+                      }}
+                      className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Confirm
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        act(p, "reject");
+                      }}
+                      className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                    >
+                      <X className="h-3.5 w-3.5" /> Reject
+                    </button>
+                  </div>
+                ) : (
+                  <Badge tone="amber">awaiting manager confirmation</Badge>
+                )}
               </div>
             ))}
           </Card>
@@ -247,7 +275,10 @@ function PaymentsPageInner() {
                         <Banknote className="h-4 w-4" />
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{paymentTitle(p)}</p>
+                        <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                          <span className="truncate">{paymentTitle(p)}</span>
+                          <LedgerBadge ledger={p.ledger} />
+                        </p>
                         <p className="truncate text-xs text-slate-500">
                           {ownerNameFor(users.data, apartments.data, p.apartmentId)} ·{" "}
                           {formatDate(p.date)}
@@ -287,6 +318,66 @@ function PaymentsPageInner() {
         )}
       </div>
 
+      {statModal && (
+        <Modal
+          title={
+            statModal === "community"
+              ? mine ? "Maintenance Paid" : "Community Funds Received"
+              : mine ? "Paid to Manager" : "Fees & Reimbursements"
+          }
+          onClose={() => setStatModal(null)}
+        >
+          {(() => {
+            const rows = confirmed.filter((p) =>
+              statModal === "community"
+                ? (p.ledger ?? "community") === "community"
+                : (p.ledger ?? "community") !== "community"
+            );
+            if (rows.length === 0)
+              return (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  No payments here yet.
+                </p>
+              );
+            return (
+              <div className="divide-y divide-slate-100">
+                {[...rows]
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setStatModal(null);
+                        setDetailId(p.invoiceId);
+                      }}
+                      className="flex w-full items-start justify-between gap-3 py-2.5 text-left hover:bg-slate-50"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{paymentTitle(p)}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {formatDate(p.date)} · {p.method}
+                          {p.reference && ` · ${p.reference}`}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-sm font-semibold text-emerald-600">
+                        {formatINR(p.amount)}
+                      </p>
+                    </button>
+                  ))}
+                <div className="flex items-center justify-between pt-3">
+                  <p className="text-sm font-bold">Total</p>
+                  <p className="text-sm font-bold text-emerald-600">
+                    {formatINR(rows.reduce((sum, p) => sum + p.amount, 0))}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+          <p className="mt-3 text-xs text-slate-400">
+            Tap a row for the invoice this payment settled.
+          </p>
+        </Modal>
+      )}
       {detailId && (() => {
         const inv = invoices.data?.find((i) => i.id === detailId);
         return inv ? (

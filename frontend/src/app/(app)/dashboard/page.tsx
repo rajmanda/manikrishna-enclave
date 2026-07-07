@@ -45,6 +45,7 @@ import {
 import {
   CashFlowChart,
   CollectionChart,
+  MyPaymentsChart,
   ReserveFundChart,
 } from "@/components/charts";
 
@@ -91,6 +92,24 @@ function OwnerDashboard() {
   const announcements = (feed.data ?? []).filter((p) => p.type === "announcement");
   const nextMeeting = (meetings.data ?? []).find((m) => m.resolutions.length === 0);
   const firstName = user.name.split(" ")[0];
+
+  // My confirmed payments bucketed into the last 6 calendar months — a gap
+  // in the bars is an unpaid month, visible at a glance.
+  const myPaymentSeries = (() => {
+    const now = new Date();
+    const out: { month: string; paid: number }[] = [];
+    for (let back = 5; back >= 0; back--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+      const prefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      out.push({
+        month: d.toLocaleDateString("en-US", { month: "short" }),
+        paid: (payments.data ?? [])
+          .filter((p) => p.status !== "pending" && p.date.startsWith(prefix))
+          .reduce((sum, p) => sum + p.amount, 0),
+      });
+    }
+    return out;
+  })();
 
   return (
     <div className="space-y-6">
@@ -157,6 +176,28 @@ function OwnerDashboard() {
           hint="Shared fund — tap for the story"
           onClick={() => setReserveModal(true)}
         />
+      </div>
+
+      {/* Community health + my own record, at a glance */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="p-4">
+          <h2 className="mb-2 text-sm font-semibold">Community Money (6 months)</h2>
+          <p className="mb-1 text-xs text-slate-400">
+            What the community collected vs spent
+          </p>
+          {monthly.data && <CashFlowChart data={monthly.data} />}
+          <div className="mt-3 border-t border-slate-100 pt-3">
+            <h3 className="mb-2 text-sm font-semibold">Community Reserve Trend</h3>
+            {reserve.data && <ReserveFundChart data={reserve.data} />}
+          </div>
+        </Card>
+        <Card className="p-4">
+          <h2 className="mb-2 text-sm font-semibold">My Payments (6 months)</h2>
+          <p className="mb-1 text-xs text-slate-400">
+            Your confirmed payments — a missing bar is an unpaid month
+          </p>
+          <MyPaymentsChart data={myPaymentSeries} />
+        </Card>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

@@ -8,13 +8,7 @@ import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
 import { invoiceTone } from "@/lib/tones";
 import { Modal } from "@/components/Modal";
-import { Badge } from "@/components/ui";
-
-function LedgerBadge({ ledger }: { ledger?: string }) {
-  if (ledger === "manager_fee") return <Badge tone="violet">Manager fee</Badge>;
-  if (ledger === "reimbursement") return <Badge tone="amber">Reimbursement</Badge>;
-  return <Badge tone="blue">Community</Badge>;
-}
+import { Badge, LedgerBadge } from "@/components/ui";
 
 /** Bottom sheet (modal on desktop) showing one invoice with its full payment
  * history — the single place where invoice and money meet. */

@@ -33,7 +33,7 @@ export const navItems: NavItem[] = [
   { label: "Work Orders", href: "/work-orders", icon: Wrench },
   { label: "Maintenance", href: "/maintenance", icon: ClipboardList },
   { label: "Invoices", href: "/invoices", icon: Receipt },
-  { label: "Payments", href: "/payments", icon: Banknote, roles: ["property_manager", "community_admin", "auditor", "super_admin"] },
+  { label: "Payments", href: "/payments", icon: Banknote, roles: ["property_manager", "community_admin", "auditor", "super_admin", "owner", "tenant"] },
   { label: "Polls", href: "/polls", icon: Vote },
   { label: "Meetings", href: "/meetings", icon: CalendarDays },
   { label: "Documents", href: "/documents", icon: FileText },

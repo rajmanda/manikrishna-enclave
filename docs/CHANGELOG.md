@@ -3,6 +3,29 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.11.0] — 2026-07-06
+
+- **Payments page opened to owners/tenants:** now in their nav as "My
+  Payments" — API was already scoped to their own apartments. Owner
+  adaptations: client filter hidden (accounts endpoint is manager-only),
+  apartment filter only for multi-flat owners, stats relabeled
+  ("Maintenance Paid" / "Paid to Manager"), pending claims show an
+  "awaiting manager confirmation" badge instead of Confirm/Reject buttons.
+- **Owner invoices aggregates:** headline Billed / Paid / Balance Due strip
+  above the per-ledger panels, following the selected apartment tab.
+- **Ledger badges on payment rows:** payments now carry the same
+  Community/Manager fee/Reimbursement badge as invoices (shared LedgerBadge
+  component in ui.tsx, also used by the invoice sheet).
+- **Clickable stat tiles on invoices & payments pages:** owner's
+  Billed/Paid/Balance Due strip opens itemized modals (rows tap through to
+  the invoice sheet); the two payment-total tiles (both roles) open the
+  matching confirmed-payment lists, each row opening the settled invoice.
+- **Owner dashboard charts:** "Community Money (6 months)" card — the
+  income-vs-expenses bars plus the reserve trend (reusing the manager's
+  chart components; both endpoints were already member-visible) — and a
+  new "My Payments (6 months)" green bar chart of the owner's own confirmed
+  payments, where a missing bar means an unpaid month.
+
 ## [0.10.0] — 2026-07-06
 
 - **Dashboard tiles open details:** all four owner tiles and the manager's

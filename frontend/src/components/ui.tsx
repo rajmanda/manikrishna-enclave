@@ -101,6 +101,14 @@ export function Badge({
   );
 }
 
+/** Which money-stream a record belongs to — used on invoices AND payments so
+ * the two ledgers stay visually separate everywhere. */
+export function LedgerBadge({ ledger }: { ledger?: string }) {
+  if (ledger === "manager_fee") return <Badge tone="violet">Manager fee</Badge>;
+  if (ledger === "reimbursement") return <Badge tone="amber">Reimbursement</Badge>;
+  return <Badge tone="blue">Community</Badge>;
+}
+
 export function Stat({
   label,
   value,

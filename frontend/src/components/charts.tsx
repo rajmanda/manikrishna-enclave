@@ -121,6 +121,24 @@ export function ReserveFundChart({ data }: { data: ReserveFundEntry[] }) {
   );
 }
 
+export function MyPaymentsChart({
+  data,
+}: {
+  data: { month: string; paid: number }[];
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={180}>
+      <BarChart data={data} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+        <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fontSize: 11 }} tickFormatter={inrTick} tickLine={false} axisLine={false} />
+        <Tooltip contentStyle={tooltipStyle} formatter={(v) => formatINR(Number(v))} />
+        <Bar dataKey="paid" name="Paid" fill="#10b981" radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 const PIE_COLORS = [
   "#6366f1",
   "#10b981",

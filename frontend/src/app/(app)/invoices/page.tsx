@@ -17,6 +17,7 @@ import {
   Badge,
   Card,
   ErrorNote,
+  LedgerBadge,
   PageLoading,
   PageTitle,
   Stat,
@@ -702,6 +703,7 @@ function InvoicesPageInner() {
   const [reportInvoice, setReportInvoice] = useState<Invoice | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [statModal, setStatModal] = useState<"billed" | "paid" | "due" | null>(null);
 
   const pendingInvoiceIds = new Set(
     (payments.data ?? []).filter((p) => p.status === "pending").map((p) => p.invoiceId)
@@ -934,6 +936,32 @@ function InvoicesPageInner() {
               {t === "all" ? "All apartments" : `Apt ${aptNumber(t)}`}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Owner headline: my totals for the selected apartment(s). */}
+      {mine && (
+        <div className="grid grid-cols-3 gap-3">
+          <Stat
+            label="Billed"
+            value={formatINR(c.billed + p.billed)}
+            hint="Tap for all charges"
+            onClick={() => setStatModal("billed")}
+          />
+          <Stat
+            label="Paid"
+            value={formatINR(c.collected + p.collected)}
+            tone="positive"
+            hint="Tap for what's covered"
+            onClick={() => setStatModal("paid")}
+          />
+          <Stat
+            label="Balance Due"
+            value={formatINR(c.due + p.due)}
+            tone={c.due + p.due > 0 ? "negative" : "positive"}
+            hint={c.due + p.due > 0 ? "Tap for what's due" : "All clear"}
+            onClick={() => setStatModal("due")}
+          />
         </div>
       )}
 
@@ -1210,6 +1238,81 @@ function InvoicesPageInner() {
             payments.reload();
           }}
         />
+      )}
+      {statModal && (
+        <Modal
+          title={
+            statModal === "billed"
+              ? "All Charges"
+              : statModal === "paid"
+                ? "What You've Paid"
+                : "Balance Due"
+          }
+          onClose={() => setStatModal(null)}
+        >
+          {(() => {
+            const rows =
+              statModal === "billed"
+                ? sorted
+                : statModal === "paid"
+                  ? sorted.filter((i) => i.paidAmount > 0)
+                  : sorted.filter((i) => i.amount - i.paidAmount > 0);
+            const amountOf = (i: Invoice) =>
+              statModal === "billed"
+                ? i.amount
+                : statModal === "paid"
+                  ? i.paidAmount
+                  : i.amount - i.paidAmount;
+            if (rows.length === 0)
+              return (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  {statModal === "due" ? "Nothing due — all clear. 🎉" : "Nothing here yet."}
+                </p>
+              );
+            return (
+              <div className="divide-y divide-slate-100">
+                {rows.map((inv) => (
+                  <button
+                    key={inv.id}
+                    onClick={() => {
+                      setStatModal(null);
+                      setDetailId(inv.id);
+                    }}
+                    className="flex w-full items-start justify-between gap-3 py-2.5 text-left hover:bg-slate-50"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{inv.description}</p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                        <LedgerBadge ledger={inv.ledger} />
+                        {inv.period} · due {formatDate(inv.dueDate)}
+                      </p>
+                    </div>
+                    <p
+                      className={`shrink-0 text-sm font-semibold ${
+                        statModal === "due"
+                          ? "text-red-600"
+                          : statModal === "paid"
+                            ? "text-emerald-600"
+                            : ""
+                      }`}
+                    >
+                      {formatINR(amountOf(inv))}
+                    </p>
+                  </button>
+                ))}
+                <div className="flex items-center justify-between pt-3">
+                  <p className="text-sm font-bold">Total</p>
+                  <p className="text-sm font-bold">
+                    {formatINR(rows.reduce((sum, i) => sum + amountOf(i), 0))}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+          <p className="mt-3 text-xs text-slate-400">
+            Tap a row for the full invoice with its payment history.
+          </p>
+        </Modal>
       )}
       {detailInvoice && (
         <InvoiceSheet
