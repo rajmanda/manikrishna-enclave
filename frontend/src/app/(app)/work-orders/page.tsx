@@ -13,12 +13,15 @@ import { vendorFor } from "@/lib/lookup";
 import { priorityTone, stageTone } from "@/lib/tones";
 import {
   Badge,
+  Button,
   Card,
   EmptyState,
   ErrorNote,
   PageLoading,
   PageTitle,
+  Skeleton,
 } from "@/components/ui";
+import { FadeIn, Stagger } from "@/components/motion";
 
 const filters = ["All", "Open", "In Progress", "Completed"] as const;
 type Filter = (typeof filters)[number];
@@ -28,6 +31,44 @@ function matchesFilter(stage: string, f: Filter): boolean {
   if (f === "Open") return ["Reported", "Estimate Received", "Owner Approval"].includes(stage);
   if (f === "In Progress") return ["In Progress", "Inspection"].includes(stage);
   return ["Completed", "Closed"].includes(stage);
+}
+
+/** The work-order lifecycle, in order. */
+const STAGE_ORDER = [
+  "Reported",
+  "Estimate Received",
+  "Owner Approval",
+  "In Progress",
+  "Inspection",
+  "Completed",
+  "Closed",
+] as const;
+
+/** A compact 7-step pipeline showing where a work order sits in its lifecycle.
+ * Steps up to the current one are filled (emerald once done, brand while open);
+ * the rest stay grey — the stage is legible at a glance without reading text. */
+function StagePipeline({ stage }: { stage: string }) {
+  const current = STAGE_ORDER.indexOf(stage as (typeof STAGE_ORDER)[number]);
+  const idx = current < 0 ? 0 : current;
+  const done = stage === "Completed" || stage === "Closed";
+  const fill = done ? "bg-emerald-500" : "bg-brand-500";
+  return (
+    <div className="mt-3">
+      <div className="flex items-center gap-1" aria-hidden>
+        {STAGE_ORDER.map((s, i) => (
+          <span
+            key={s}
+            className={`h-1.5 flex-1 rounded-full transition-colors ${
+              i <= idx ? fill : "bg-slate-100"
+            }`}
+          />
+        ))}
+      </div>
+      <p className="mt-1.5 text-2xs font-medium uppercase tracking-wide text-slate-400">
+        Step {idx + 1} of {STAGE_ORDER.length} · {stage}
+      </p>
+    </div>
+  );
 }
 
 function NewWorkOrderDialog({
@@ -118,7 +159,22 @@ export default function WorkOrdersPage() {
 
   if (workOrders.error)
     return <ErrorNote message={workOrders.error} onRetry={workOrders.reload} />;
-  if (workOrders.loading || !workOrders.data) return <PageLoading />;
+  if (workOrders.loading || !workOrders.data)
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <div className="flex gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 w-20 rounded-full" />
+          ))}
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    );
 
   const list = workOrders.data.filter((w) => matchesFilter(w.stage, filter));
   const canCreate = ["property_manager", "community_admin", "super_admin"].includes(role);
@@ -130,12 +186,9 @@ export default function WorkOrdersPage() {
         subtitle="Common-area repairs and maintenance, visible to all owners"
         actions={
           canCreate ? (
-            <button
-              onClick={() => setNewOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
-            >
+            <Button onClick={() => setNewOpen(true)}>
               <Plus className="h-4 w-4" /> New
-            </button>
+            </Button>
           ) : undefined
         }
       />
@@ -161,44 +214,47 @@ export default function WorkOrdersPage() {
         <EmptyState title="No work orders in this view" hint="Try a different filter." />
       )}
 
-      <div className="space-y-3">
+      <Stagger className="space-y-3">
         {list.map((wo) => {
           const vendor = vendorFor(vendors.data, wo.vendorId);
           return (
-            <Link key={wo.id} href={`/work-orders/${wo.id}`} className="block">
-              <Card className="p-4 transition hover:border-brand-200">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={priorityTone(wo.priority)}>{wo.priority}</Badge>
-                      <Badge tone={stageTone(wo.stage)}>{wo.stage}</Badge>
+            <FadeIn key={wo.id}>
+              <Link href={`/work-orders/${wo.id}`} className="group block">
+                <Card className="p-4 transition-all duration-200 ease-standard hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={priorityTone(wo.priority)}>{wo.priority}</Badge>
+                        <Badge tone={stageTone(wo.stage)}>{wo.stage}</Badge>
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">{wo.title}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                        {wo.description}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                        <span>Reported {formatDate(wo.reportedDate)}</span>
+                        {vendor && <span>· {vendor.name}</span>}
+                        {wo.finalCost != null ? (
+                          <span>· Final <span className="tabular font-medium text-slate-700">{formatINR(wo.finalCost)}</span></span>
+                        ) : wo.estimate != null ? (
+                          <span>· Est. <span className="tabular font-medium text-slate-700">{formatINR(wo.estimate)}</span></span>
+                        ) : null}
+                        {wo.photoCount > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            · <Camera className="h-3 w-3" /> {wo.photoCount}
+                          </span>
+                        )}
+                      </div>
+                      <StagePipeline stage={wo.stage} />
                     </div>
-                    <p className="mt-2 text-sm font-semibold">{wo.title}</p>
-                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">
-                      {wo.description}
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                      <span>Reported {formatDate(wo.reportedDate)}</span>
-                      {vendor && <span>· {vendor.name}</span>}
-                      {wo.finalCost != null ? (
-                        <span>· Final {formatINR(wo.finalCost)}</span>
-                      ) : wo.estimate != null ? (
-                        <span>· Est. {formatINR(wo.estimate)}</span>
-                      ) : null}
-                      {wo.photoCount > 0 && (
-                        <span className="inline-flex items-center gap-1">
-                          · <Camera className="h-3 w-3" /> {wo.photoCount}
-                        </span>
-                      )}
-                    </div>
+                    <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-400" />
                   </div>
-                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-300" />
-                </div>
-              </Card>
-            </Link>
+                </Card>
+              </Link>
+            </FadeIn>
           );
         })}
-      </div>
+      </Stagger>
 
       {newOpen && (
         <NewWorkOrderDialog

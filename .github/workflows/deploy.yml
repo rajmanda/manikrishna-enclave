@@ -65,6 +65,7 @@ jobs:
             --build-arg NEXT_PUBLIC_API_URL=$API_URL \
             --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }} \
             --build-arg NEXT_PUBLIC_ENABLE_DEV_LOGIN=false \
+            --build-arg NEXT_PUBLIC_APP_NAME="${{ vars.APP_NAME || 'Manikrishna Enclave' }}" \
             -t $AR_REPO/frontend:${{ github.sha }} frontend
           docker push $AR_REPO/frontend:${{ github.sha }}
 

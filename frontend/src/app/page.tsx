@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { ApiError, DEV_LOGIN_ENABLED, GOOGLE_CLIENT_ID } from "@/lib/api";
+import { APP_NAME } from "@/lib/brand";
 
 declare global {
   interface Window {
@@ -100,7 +101,7 @@ export default function LoginPage() {
           <Building2 className="h-7 w-7" />
         </span>
         <h1 className="mt-5 text-2xl font-bold tracking-tight text-slate-900">
-          CommunityHub
+          {APP_NAME}
         </h1>
         <p className="mt-2 text-sm text-slate-500">
           Your apartment community — invoices, maintenance, documents and

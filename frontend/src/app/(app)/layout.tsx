@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/shell/AppShell";
 import { PageLoading } from "@/components/ui";
@@ -11,6 +11,7 @@ export default function AppLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && !user) router.replace("/");
@@ -24,5 +25,14 @@ export default function AppLayout({
     );
   }
 
-  return <AppShell>{children}</AppShell>;
+  return (
+    <AppShell>
+      {/* Keyed on the route so the CSS entrance replays on every navigation.
+          Transform-only (see .animate-enter) → content is always visible even
+          if the animation never runs. */}
+      <div key={pathname} className="animate-enter">
+        {children}
+      </div>
+    </AppShell>
+  );
 }

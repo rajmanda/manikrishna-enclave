@@ -4,11 +4,11 @@ Last updated: 2026-07-06
 
 | Field | Value |
 |---|---|
-| Current version | 0.11.0 |
+| Current version | 0.12.0 |
 | Current milestone | **M4 Governance — complete. PRD Phases 1–4 fully shipped.** Next: M5 (AI, mobile) or hardening |
 | Current sprint | Launch readiness (real owner emails, notifications decision) |
 | Current branch | main (github.com/rajmanda/manikrishna-enclave, public) |
-| Last completed feature | Owner parity suite: dashboard charts, My Payments page, invoice aggregates, ledger badges on payments, clickable tiles everywhere |
+| Last completed feature | Design-system + UI overhaul (tokens, primitives, Framer Motion, `/home` landing, grouped nav, page transitions — see `UX_REVIEW.md`) + per-deployment branding ("Manikrishna Enclave") |
 | Current feature | — |
 | Next priority | Owner onboarding: collect real owner emails and whitelist them; then notifications provider decision |
 | Deployment status | **Live at https://community.rajmanda.com** (Cloud Run, asia-south1) |

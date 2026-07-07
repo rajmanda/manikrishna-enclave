@@ -48,6 +48,7 @@ import {
   MyPaymentsChart,
   ReserveFundChart,
 } from "@/components/charts";
+import { FadeIn, Stagger } from "@/components/motion";
 
 const quickActions = [
   { label: "Pay Invoice", icon: CreditCard, href: "/invoices" },
@@ -83,7 +84,7 @@ function OwnerDashboard() {
 
   const error = summary.error ?? invoices.error ?? workOrders.error;
   if (error) return <ErrorNote message={error} onRetry={summary.reload} />;
-  if (summary.loading || !summary.data) return <PageLoading />;
+  if (summary.loading || !summary.data) return <PageLoading variant="stats" />;
 
   const s = summary.data;
   const openWorkOrders = (workOrders.data ?? []).filter((w) =>
@@ -437,7 +438,7 @@ function ManagerDashboard() {
 
   const error = summary.error ?? monthly.error ?? reserve.error ?? workOrders.error;
   if (error) return <ErrorNote message={error} onRetry={summary.reload} />;
-  if (summary.loading || !summary.data) return <PageLoading />;
+  if (summary.loading || !summary.data) return <PageLoading variant="stats" />;
 
   const s = summary.data;
   const pendingApprovals = (workOrders.data ?? []).filter((w) =>
@@ -448,11 +449,22 @@ function ManagerDashboard() {
   );
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold sm:text-2xl">Manager Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">Live overview from the API</p>
-      </div>
+    <Stagger className="space-y-6">
+      <FadeIn className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-2xs font-semibold uppercase tracking-widest text-brand-600">
+            Mani Krishna Enclave
+          </p>
+          <h1 className="mt-1 text-display-sm text-slate-900">Manager Dashboard</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            A live overview of collections, operations and reserves.
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+          Live from the API
+        </span>
+      </FadeIn>
 
       {s.pendingPaymentConfirmations > 0 && (
         <Link
@@ -491,11 +503,12 @@ function ManagerDashboard() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <FadeIn className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           label="Outstanding Collections"
           value={formatINR(s.outstandingCollections)}
           tone="negative"
+          accent="bg-red-500"
           hint={`${s.overdueInvoices} overdue · tap for per-flat dues`}
           onClick={() => setCollectionsModal(true)}
         />
@@ -503,12 +516,14 @@ function ManagerDashboard() {
           label="Payments Received"
           value={formatINR(s.paymentsReceived)}
           tone="positive"
+          accent="bg-emerald-500"
           hint="All time · tap for month-by-month"
           onClick={() => setReceivedModal(true)}
         />
         <Stat
           label={`Expenses (${currentMonthLabel()})`}
           value={formatINR(s.monthExpenses)}
+          accent="bg-amber-500"
           hint="Tap for line items"
           onClick={() =>
             setMonthModal({
@@ -521,10 +536,11 @@ function ManagerDashboard() {
           label="Reserve Fund"
           value={formatINR(s.reserveFundBalance)}
           tone="positive"
+          accent="bg-brand-500"
           hint="Tap for the month-by-month story"
           onClick={() => setReserveModal(true)}
         />
-      </div>
+      </FadeIn>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="p-4">
@@ -730,7 +746,7 @@ function ManagerDashboard() {
           </Link>
         </Modal>
       )}
-    </div>
+    </Stagger>
   );
 }
 

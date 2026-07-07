@@ -2,12 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Surfaces (RGB channels for Tailwind alpha support) */
+  --surface-0: 248 250 252; /* app background  (slate-50)  */
+  --surface-1: 255 255 255; /* raised cards    (white)      */
+  --surface-2: 255 255 255; /* nested / popovers            */
+  --hairline: 226 232 240;  /* borders         (slate-200)  */
+  --ring: 99 102 241;       /* focus ring      (brand-500)  */
+}
+
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  /* One consistent, visible focus ring across the whole app (a11y). */
+  :where(a, button, [role="button"], input, select, textarea, [tabindex]):focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px rgb(var(--surface-0)),
+      0 0 0 4px rgb(var(--ring) / 0.65);
+    border-radius: 0.5rem;
   }
 }
 
@@ -22,6 +40,11 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+  /* Money + metrics should line up like money does. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
 }
 
 @layer utilities {
@@ -30,7 +53,20 @@
     to { opacity: 1; transform: none; }
   }
   .animate-rise { animation: rise 0.25s ease-out both; }
+
+  /* Transform-only entrance — opacity is never touched, so content stays
+     visible even if the animation never runs (backgrounded tab, no-JS, etc.). */
+  @keyframes enter-up {
+    from { transform: translateY(14px); }
+    to { transform: none; }
+  }
+  .animate-enter {
+    animation: enter-up 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .animate-rise { animation: none; }
+    .animate-rise,
+    .animate-enter,
+    .animate-fade-rise { animation: none !important; }
   }
 }

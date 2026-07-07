@@ -1,10 +1,12 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
+        // Brand — indigo, kept for equity, tuned steps.
         brand: {
           50: "#eef2ff",
           100: "#e0e7ff",
@@ -17,6 +19,14 @@ const config: Config = {
           800: "#3730a3",
           900: "#312e81",
         },
+        // Semantic surfaces / borders driven by CSS variables (dark-mode ready).
+        surface: {
+          DEFAULT: "rgb(var(--surface-1) / <alpha-value>)",
+          0: "rgb(var(--surface-0) / <alpha-value>)",
+          1: "rgb(var(--surface-1) / <alpha-value>)",
+          2: "rgb(var(--surface-2) / <alpha-value>)",
+        },
+        hairline: "rgb(var(--hairline) / <alpha-value>)",
       },
       fontFamily: {
         sans: [
@@ -27,6 +37,50 @@ const config: Config = {
           "Roboto",
           "sans-serif",
         ],
+      },
+      fontSize: {
+        // label / caption
+        "2xs": ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.02em" }],
+        // display scale for heroes + big numbers
+        "display-lg": [
+          "2.75rem",
+          { lineHeight: "1.05", letterSpacing: "-0.03em", fontWeight: "800" },
+        ],
+        display: [
+          "2.125rem",
+          { lineHeight: "1.1", letterSpacing: "-0.025em", fontWeight: "800" },
+        ],
+        "display-sm": [
+          "1.625rem",
+          { lineHeight: "1.15", letterSpacing: "-0.02em", fontWeight: "700" },
+        ],
+      },
+      borderRadius: {
+        "4xl": "1.75rem",
+      },
+      boxShadow: {
+        // Layered, low-opacity shadows (Linear/Vercel style — not material).
+        xs: "0 1px 2px 0 rgb(15 23 42 / 0.04)",
+        sm: "0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04)",
+        md: "0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.05)",
+        lg: "0 12px 32px -8px rgb(15 23 42 / 0.12), 0 6px 12px -6px rgb(15 23 42 / 0.06)",
+        "brand-glow": "0 8px 28px -6px rgb(79 70 229 / 0.35)",
+      },
+      keyframes: {
+        "fade-rise": {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "none" },
+        },
+        shimmer: {
+          "100%": { transform: "translateX(100%)" },
+        },
+      },
+      animation: {
+        "fade-rise": "fade-rise 0.35s cubic-bezier(0.2,0.8,0.2,1) both",
+        shimmer: "shimmer 1.6s infinite",
+      },
+      transitionTimingFunction: {
+        standard: "cubic-bezier(0.2, 0.8, 0.2, 1)",
       },
     },
   },

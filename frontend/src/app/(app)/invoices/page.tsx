@@ -972,7 +972,7 @@ function InvoicesPageInner() {
             <Badge tone="blue">Community funds</Badge>
           </div>
           <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
-            <div><p className="text-xs text-slate-500">Billed</p><p className="text-sm font-bold sm:text-base">{formatINR(c.billed)}</p></div>
+            <div><p className="text-xs text-slate-500">Billed</p><p className="tabular text-sm font-bold sm:text-base">{formatINR(c.billed)}</p></div>
             <div><p className="text-xs text-slate-500">Collected</p><p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(c.collected)}</p></div>
             <div><p className="text-xs text-slate-500">Due</p><p className={`text-sm font-bold sm:text-base ${c.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(c.due)}</p></div>
           </div>
@@ -982,7 +982,7 @@ function InvoicesPageInner() {
             <Badge tone="violet">{mine ? "Payable to manager" : "Personal — fees & reimbursements"}</Badge>
           </div>
           <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
-            <div><p className="text-xs text-slate-500">Billed</p><p className="text-sm font-bold sm:text-base">{formatINR(p.billed)}</p></div>
+            <div><p className="text-xs text-slate-500">Billed</p><p className="tabular text-sm font-bold sm:text-base">{formatINR(p.billed)}</p></div>
             <div><p className="text-xs text-slate-500">Collected</p><p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(p.collected)}</p></div>
             <div><p className="text-xs text-slate-500">Due</p><p className={`text-sm font-bold sm:text-base ${p.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(p.due)}</p></div>
           </div>
@@ -1129,7 +1129,7 @@ function InvoicesPageInner() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2.5">
-                  <span className="text-sm font-bold">{formatINR(inv.amount)}</span>
+                  <span className="tabular text-sm font-bold text-slate-900">{formatINR(inv.amount)}</span>
                   <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
                   {canDelete && (
                     <button

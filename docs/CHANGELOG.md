@@ -3,6 +3,33 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.12.0] — 2026-07-06
+
+- **Design system + UI overhaul (frontend):** introduced a reusable token layer
+  (type scale, layered shadow scale, surface CSS variables, motion easing) in
+  `tailwind.config.ts` + `globals.css`; added an app-wide `:focus-visible` ring
+  and a `.tabular` numerals utility for money. Upgraded shared primitives in
+  `components/ui.tsx` (new `Button`, `Skeleton`/`SkeletonCard`, skeleton
+  `PageLoading` variant, richer `EmptyState`, `Stat` delta/accent, gradient
+  `Avatar`) — all backward-compatible. Added `components/motion.tsx`
+  (`Stagger`/`FadeIn`/`Pressable`) on Framer Motion, all reduced-motion aware.
+  Redesigned the **Manager Dashboard** (hero, accent stat row, skeleton
+  loading, motion); added a **marketing landing page** at `/home` (hero +
+  animated preview, features, testimonials, pricing, FAQ, CTA) with
+  always-visible transform-only entrances; added a **Work Orders lifecycle
+  pipeline** + tabular costs; **tabular money** on Invoices; **grouped
+  sidebar navigation** (Overview/Money/Operations/Governance/Admin) with a
+  polished active state + `aria-current`; and route-keyed **page transitions**
+  via the shared `(app)` layout. Full audit, scores and before/after tracked in
+  `UX_REVIEW.md`. Adds `framer-motion` dependency.
+
+- **Deployment branding:** new `NEXT_PUBLIC_APP_NAME` (lib/brand.ts) renames
+  the app per deployment — landing page, browser tab title, sidebar brand,
+  API-unreachable error. community.rajmanda.com builds as "Manikrishna
+  Enclave" (deploy.yml build-arg, overridable via APP_NAME repo variable);
+  default stays "CommunityHub" so no community name is hardcoded in shared
+  code. Sidebar hides the community subtitle when it would repeat the brand.
+
 ## [0.11.0] — 2026-07-06
 
 - **Payments page opened to owners/tenants:** now in their nav as "My

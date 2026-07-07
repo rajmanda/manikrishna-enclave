@@ -17,7 +17,8 @@ import { api, DEV_LOGIN_ENABLED } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import type { Community, NavBadges, Notification, Role, User } from "@/lib/types";
 import { Avatar, Badge } from "@/components/ui";
-import { mobilePrimary, visibleNavItems } from "./nav";
+import { APP_NAME } from "@/lib/brand";
+import { groupedNavItems, mobilePrimary, visibleNavItems } from "./nav";
 import { GlobalSearch } from "./GlobalSearch";
 
 const roleLabels: Partial<Record<Role, string>> = {
@@ -240,7 +241,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const notifications = useApi<Notification[]>("/notifications");
   const communities = useApi<Community[]>("/communities");
   const badges = useApi<NavBadges>("/dashboard/badges");
-  const communityName = communities.data?.[0]?.name ?? "CommunityHub";
+  const communityName = communities.data?.[0]?.name ?? APP_NAME;
+  // Hide the subtitle when it would just repeat the brand ("Manikrishna
+  // Enclave / Mani Krishna Enclave").
+  const showCommunitySubtitle =
+    communityName.replace(/\s/g, "").toLowerCase() !==
+    APP_NAME.replace(/\s/g, "").toLowerCase();
 
   // Live counts per nav item — state-driven, so they clear themselves.
   const badgeFor = (href: string): number => {
@@ -282,25 +288,47 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Building2 className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-sm font-bold leading-tight">CommunityHub</p>
-            <p className="text-xs text-slate-500">{communityName}</p>
+            <p className="text-sm font-bold leading-tight">{APP_NAME}</p>
+            {showCommunitySubtitle && (
+              <p className="text-xs text-slate-500">{communityName}</p>
+            )}
           </div>
         </div>
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
-          {items.map(({ label, href, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
-                isActive(href)
-                  ? "bg-brand-50 text-brand-700"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <Icon className="h-[18px] w-[18px]" />
-              {label}
-              <NavBadge count={badgeFor(href)} />
-            </Link>
+        <nav className="flex-1 overflow-y-auto px-3 pb-4">
+          {groupedNavItems(role).map(({ group, items: groupItems }) => (
+            <div key={group} className="mb-4">
+              <p className="px-3 pb-1.5 text-2xs font-semibold uppercase tracking-widest text-slate-400">
+                {group}
+              </p>
+              <div className="space-y-0.5">
+                {groupItems.map(({ label, href, icon: Icon }) => {
+                  const active = isActive(href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      aria-current={active ? "page" : undefined}
+                      className={`group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors ${
+                        active
+                          ? "bg-brand-50 font-semibold text-brand-700"
+                          : "font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      }`}
+                    >
+                      {active && (
+                        <span className="absolute inset-y-1.5 left-0 w-1 rounded-full bg-brand-600" />
+                      )}
+                      <Icon
+                        className={`h-[18px] w-[18px] transition-colors ${
+                          active ? "text-brand-600" : "text-slate-400 group-hover:text-slate-600"
+                        }`}
+                      />
+                      {label}
+                      <NavBadge count={badgeFor(href)} />
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </nav>
         <div className="border-t border-slate-100 p-4">

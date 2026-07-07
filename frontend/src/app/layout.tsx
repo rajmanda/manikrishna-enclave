@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { AuthProvider } from "@/context/AuthContext";
+import { APP_NAME } from "@/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CommunityHub",
+  title: APP_NAME,
   description:
     "Community management platform — invoices, work orders, documents and collaboration for apartment communities.",
 };

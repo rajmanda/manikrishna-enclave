@@ -2,6 +2,7 @@
 // matches ./types.ts, so responses need no mapping.
 
 import type { User } from "./types";
+import { APP_NAME } from "./brand";
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -50,7 +51,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       },
     });
   } catch {
-    throw new ApiError(0, "Cannot reach the CommunityHub API. Is the backend running?");
+    throw new ApiError(0, `Cannot reach the ${APP_NAME} API. Is the backend running?`);
   }
   if (!resp.ok) {
     let detail = resp.statusText;
