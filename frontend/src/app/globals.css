@@ -60,8 +60,12 @@
     from { transform: translateY(14px); }
     to { transform: none; }
   }
+  /* `forwards` (not `both`): the resting state has NO transform, so the
+     wrapper never becomes a containing block for position:fixed descendants
+     once the entrance has run (or when paused in a background tab). Base
+     position is the final position, so content is always visible. */
   .animate-enter {
-    animation: enter-up 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: enter-up 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   }
 
   @media (prefers-reduced-motion: reduce) {

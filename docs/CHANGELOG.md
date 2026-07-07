@@ -22,6 +22,11 @@ begin at 0.1.0 with the first deployment (M1).
   polished active state + `aria-current`; and route-keyed **page transitions**
   via the shared `(app)` layout. Full audit, scores and before/after tracked in
   `UX_REVIEW.md`. Adds `framer-motion` dependency.
+- **Modal fix:** the shared `<Modal>` now renders through a React portal to
+  `document.body` (with background-scroll lock + Escape-to-close), so overlays
+  are always viewport-anchored. Fixes modals opening off-screen / requiring a
+  scroll — a transformed ancestor (the page-transition wrapper) had been making
+  `position: fixed` resolve against the page instead of the viewport.
 
 - **Deployment branding:** new `NEXT_PUBLIC_APP_NAME` (lib/brand.ts) renames
   the app per deployment — landing page, browser tab title, sidebar brand,

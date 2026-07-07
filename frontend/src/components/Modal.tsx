@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 export function Modal({
@@ -11,14 +13,42 @@ export function Modal({
   onClose: () => void;
   children: React.ReactNode;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+  // Portal to <body> so the overlay escapes any transformed ancestor (e.g. the
+  // page-transition wrapper). A `transform` on an ancestor makes `position:
+  // fixed` resolve against that ancestor instead of the viewport, which would
+  // otherwise drop the modal at the bottom of a tall page and force scrolling.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  // Lock background scroll and support Escape-to-close while the modal is open.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
+    >
       <button
-        className="absolute inset-0 bg-slate-900/40"
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px]"
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-3xl">
+      <div className="animate-rise relative max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-lg sm:rounded-3xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold">{title}</h2>
           <button onClick={onClose} aria-label="Close">
@@ -27,7 +57,8 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
