@@ -1,6 +1,6 @@
 # ENVIRONMENT.md
 
-Last updated: 2026-07-03
+Last updated: 2026-07-07
 
 ## Backend (`backend/.env`, from `.env.example`)
 
@@ -20,7 +20,7 @@ Last updated: 2026-07-03
 
 | Variable | Default | Notes |
 |---|---|---|
-| NEXT_PUBLIC_API_URL | http://localhost:8000/api/v1 | Backend base URL |
+| NEXT_PUBLIC_API_URL | /api/v1 | Backend base URL. Relative in dev: the Next dev server proxies /api/v1/* to localhost:8000 (rewrite in next.config.ts), so phones on an ngrok tunnel work without CORS. Prod builds bake the full LB URL. |
 | NEXT_PUBLIC_GOOGLE_CLIENT_ID | "" | Renders the Google button when set (same client ID as backend) |
 | NEXT_PUBLIC_ENABLE_DEV_LOGIN | true | **false in staging/prod** — hides quick-login & account switcher |
 
