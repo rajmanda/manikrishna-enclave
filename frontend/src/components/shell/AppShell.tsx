@@ -411,10 +411,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </div>
           </div>
-          {/* Mobile role row */}
-          <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-1.5 sm:hidden">
+          {/* Mobile role row. overflow-x-auto keeps a too-wide row (badge +
+              both switchers in dev) scrollable instead of overflowing the
+              viewport — uncontained overflow makes mobile Chrome expand the
+              layout viewport and zoom out, stranding fixed bottom sheets
+              below the visible area. */}
+          <div className="flex items-center justify-between gap-2 overflow-x-auto border-t border-slate-100 px-4 py-1.5 sm:hidden">
             <Badge tone="brand">{roleLabels[role] ?? role}</Badge>
-            <span className="flex items-center gap-2">
+            <span className="flex shrink-0 items-center gap-2">
               <ViewAsSwitcher />
               {DEV_LOGIN_ENABLED && <DevAccountSwitcher />}
             </span>
