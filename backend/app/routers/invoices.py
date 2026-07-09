@@ -21,6 +21,10 @@ from app.models import (
     PaymentReport,
 )
 from app.notify import notify_user
+from app.notification_service import (
+    enqueue_for_apartment_owners,
+    enqueue_notification,
+)
 
 router = APIRouter(tags=["invoices"])
 
@@ -78,6 +82,18 @@ async def create_invoice(body: InvoiceCreate, db: DB, user: CurrentUser) -> Invo
     )
     await db.invoices.insert_one(invoice.model_dump())
     await record_audit(db, user, "create", "invoices", invoice.id)
+    # Enqueue WhatsApp notification for apartment owners.
+    await enqueue_for_apartment_owners(
+        db,
+        community_id=user.community_id,
+        apartment_id=body.apartment_id,
+        event_type="invoice_created",
+        title="New Invoice",
+        message=f"Invoice {invoice.description}: Rs {body.amount:,.0f} due {body.due_date}",
+        payload={"invoice_id": invoice.id, "amount": body.amount},
+        exclude_user_id=user.id,
+        actor_user=user,
+    )
     return invoice
 
 
@@ -129,6 +145,24 @@ async def generate_invoices(
     await record_audit(
         db, user, "create", "invoices", f"bulk:{body.period}", {"created": created}
     )
+    # Enqueue WhatsApp notifications for each apartment that got an invoice.
+    if created > 0:
+        apt_query_for_notif: dict = {"community_id": user.community_id}
+        if body.apartment_ids is not None:
+            apt_query_for_notif["id"] = {"$in": body.apartment_ids}
+        apts_for_notif = await db.apartments.find(apt_query_for_notif).to_list(1000)
+        for apt in apts_for_notif:
+            await enqueue_for_apartment_owners(
+                db,
+                community_id=user.community_id,
+                apartment_id=apt["id"],
+                event_type="invoice_created",
+                title="New Invoice",
+                message=f"{body.description} — {body.period}: Rs {amount:,.0f} due {body.due_date}",
+                payload={"period": body.period, "amount": amount},
+                exclude_user_id=user.id,
+                actor_user=user,
+            )
     return {"created": created, "skipped": len(apartments) - created}
 
 
@@ -187,6 +221,18 @@ async def bill_owner(body: BillOwnerRequest, db: DB, user: CurrentUser) -> Invoi
             f"{user.name} billed Rs {total:,.0f} for {invoice.description}",
             "invoice", href="/invoices",
         )
+    # Enqueue WhatsApp notification for apartment owners.
+    await enqueue_for_apartment_owners(
+        db,
+        community_id=user.community_id,
+        apartment_id=body.apartment_id,
+        event_type="invoice_created",
+        title="Itemized Bill",
+        message=f"{user.name} billed Rs {total:,.0f} for {invoice.description}",
+        payload={"invoice_id": invoice.id, "amount": total, "ledger": "reimbursement"},
+        exclude_user_id=user.id,
+        actor_user=user,
+    )
     return invoice
 
 
@@ -422,6 +468,24 @@ async def confirm_payment(payment_id: str, db: DB, user: CurrentUser) -> Payment
             f"Your payment of Rs {payment['amount']:,.0f} was confirmed", "invoice",
             href="/invoices",
         )
+    # Enqueue WhatsApp notification for payment received.
+    if payment.get("reported_by"):
+        reporter = await db.users.find_one({"id": payment["reported_by"]})
+        if reporter and reporter.get("phone"):
+            await enqueue_notification(
+                db,
+                community_id=user.community_id,
+                recipient_type=reporter.get("role", "owner"),
+                recipient_name=reporter["name"],
+                recipient_phone=reporter.get("phone"),
+                recipient_user_id=reporter["id"],
+                channel="whatsapp",
+                event_type="payment_received",
+                title="Payment Confirmed",
+                message=f"Your payment of Rs {payment['amount']:,.0f} has been confirmed.",
+                payload={"payment_id": payment_id, "amount": payment["amount"]},
+                actor_user=user,
+            )
     return Payment.model_validate(result)
 
 

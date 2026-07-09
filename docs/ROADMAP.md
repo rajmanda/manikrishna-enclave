@@ -32,13 +32,16 @@ Last updated: 2026-07-03. M1 approved and executed 2026-07-03.
 
 ## Upcoming milestones
 
-### M4 — Governance module (PRD Phase 4)
-Polls/voting backend, documents with versioning (GCS), meeting minutes,
-reports (PDF), email notifications, global search endpoint, audit-log viewer.
+### M5 — Notification system (PRD Phase 5a)
+Queue-based outbound notifications (WhatsApp via OpenClaw, email, in-app).
+`notification_queue` collection, management APIs, OpenClaw polling endpoints
+(API-key secured), auto-triggers for invoices/payments/expenses/work orders/
+announcements. Store-before-send design; no auto-dispatch until audit
+logging is validated. **In progress on `feature/whatsapp-notifications`.**
 
-### M5 — Intelligence & mobile (PRD Phase 5)
+### M6 — Intelligence & mobile (PRD Phase 5b)
 Claude-powered meeting summaries & expense forecasts, invoice/receipt OCR,
-WhatsApp integration, React Native app, push notifications.
+React Native app, push notifications.
 
 ## Milestone detail
 
@@ -46,7 +49,8 @@ WhatsApp integration, React Native app, push notifications.
 |---|---|---|---|---|---|
 | M1 | Production pipeline | git+CI+Terraform+deployed app+real OAuth | 2–3 sessions | GCP project access, Atlas URI, GitHub repo | GCP IAM/domain-mapping friction; OAuth consent setup |
 | M4 | Governance & records | polls, documents, minutes, reports, email | 3–4 sessions | M3 | email deliverability; search relevance |
-| M5 | AI & mobile | AI features, RN app, WhatsApp | open-ended | M1–M4 APIs | external API dependencies |
+| M5 | Notification queue | notification_queue collection, OpenClaw integration, triggers | 1 session | M4 APIs | OpenClaw reliability; WhatsApp API limits |
+| M6 | AI & mobile | AI features, RN app, WhatsApp | open-ended | M1–M5 APIs | external API dependencies |
 
 **Recommended next: M1** — everything else compounds on a deployable,
 version-controlled foundation, and it's the Constitution's baseline

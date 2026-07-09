@@ -150,6 +150,32 @@ shows a separate fee section; manager dashboard gets a separate fee tile.
 | GET | `/reports/collection.pdf` · `/reports/expenses.pdf` · `/reports/vendor-spend.pdf` | manager/admin/auditor | fpdf2 |
 | GET | `/audit-log?limit=` | manager/admin/auditor | Newest first, max 500 |
 
+## Notification Queue (M5)
+
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| POST | `/notification-queue` | manager/admin | Manually enqueue a notification (WhatsApp/email/in-app) |
+| GET | `/notification-queue` | manager/admin | List entries; query params: `status`, `channel`, `event_type`, `limit` |
+| POST | `/notification-queue/{id}/retry` | manager/admin | Reset failed/cancelled → pending (409 if not retryable) |
+| POST | `/notification-queue/{id}/cancel` | manager/admin | Cancel pending/failed → cancelled (409 if already sent/cancelled) |
+
+Notifications are automatically enqueued by triggers on: invoice creation,
+payment confirmation, expense creation, work order creation/stage changes,
+and announcements. All enqueues are audit-logged.
+
+## OpenClaw (WhatsApp agent)
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/openclaw/notifications/pending` | `X-API-Key` header | Fetch pending notifications (default: WhatsApp); atomically marks as `processing`; query params: `channel`, `limit` (max 50) |
+| POST | `/openclaw/notifications/{id}/sent` | `X-API-Key` header | Mark as sent; body: `{sentAt?}` |
+| POST | `/openclaw/notifications/{id}/failed` | `X-API-Key` header | Mark as failed; body: `{errorMessage}`; auto-requeues if retries remain |
+
+OpenClaw is a local agent (Mac mini) that polls these endpoints. The API key
+is stored in Google Secret Manager (`OPENCLAW_API_KEY`). The Mac mini is never
+exposed to the public internet — it initiates all connections outbound to
+Cloud Run.
+
 ## Health
 
 | Method | Path | Access |

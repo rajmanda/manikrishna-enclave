@@ -18,6 +18,7 @@ from app.models import (
     ReactRequest,
 )
 from app.notify import notify_members
+from app.notification_service import enqueue_for_community_members
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -78,6 +79,17 @@ async def create_post(body: FeedPostCreate, db: DB, user: CurrentUser) -> FeedPo
             db, user.community_id,
             f"New announcement: {text[:60]}{'…' if len(text) > 60 else ''}",
             "announcement", user.id, href="/feed",
+        )
+        # Enqueue WhatsApp notification for community members.
+        await enqueue_for_community_members(
+            db,
+            community_id=user.community_id,
+            event_type="announcement_posted",
+            title="New Announcement",
+            message=text[:200],
+            payload={"post_id": post.id},
+            exclude_user_id=user.id,
+            actor_user=user,
         )
     return _to_out(post.model_dump(), user.id)
 

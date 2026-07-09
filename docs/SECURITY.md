@@ -31,6 +31,22 @@ Last updated: 2026-07-03
 
 Every create/update/delete writes an `audit_log` entry (who, what, when,
 details). Indexed by community + timestamp. Viewer UI planned (M4).
+Notification queue enqueues are audit-logged (entity: `notification_queue`);
+every outbound message is stored before delivery.
+
+## OpenClaw (WhatsApp agent)
+
+- **Machine-to-machine auth:** OpenClaw authenticates via `X-API-Key` header
+  (shared secret, not JWT). The key is stored in Google Secret Manager
+  (`OPENCLAW_API_KEY`) and injected as an env var on Cloud Run.
+- **No inbound exposure:** the Mac mini running OpenClaw polls Cloud Run —
+  it is never exposed to the public internet. All connections are outbound.
+- **Store-before-send:** every notification is persisted in `notification_queue`
+  before OpenClaw picks it up. No message can be sent without a stored record.
+- **Atomic pickup:** pending notifications are atomically marked `processing`
+  before being returned to prevent double-delivery on concurrent polls.
+- **Retry with cap:** failed deliveries auto-requeue up to `max_retries` (3);
+  after that the record stays `failed` for manual review.
 
 ## Secrets
 
@@ -52,6 +68,8 @@ details). Indexed by community + timestamp. Viewer UI planned (M4).
 3. No token refresh — 24 h expiry then re-login; fine for this audience.
 4. Frontend Google button loads GIS from Google's CDN — expected.
 5. No dependency/security scanning in CI yet — add at M1 (npm audit, pip-audit).
+6. OpenClaw API key is a simple shared secret — acceptable for a single
+   trusted agent; rotate via Secret Manager when needed.
 
 ## Reporting
 

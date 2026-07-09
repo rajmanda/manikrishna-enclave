@@ -3,6 +3,34 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [0.13.0] — 2026-07-08
+
+- **Queue-based notification system (M5):** outbound WhatsApp/email/in-app
+  notifications via a new `notification_queue` MongoDB collection. CommunityHub
+  stores every notification before delivery; an on-premise agent (OpenClaw on
+  a Mac mini) polls pending WhatsApp entries and reports delivery status.
+- **New collection:** `notification_queue` with 22 fields (notification_id,
+  community_id, recipient details, channel, event_type, status lifecycle,
+  retry tracking, timestamps). Three compound indexes for efficient polling
+  and listing.
+- **Management APIs:** `POST/GET /notification-queue` (create, list with
+  status/channel/event_type filters), `/retry` (reset failed→pending),
+  `/cancel` (prevent pickup). All manager/admin-authenticated.
+- **OpenClaw polling APIs:** `GET /openclaw/notifications/pending` (atomic
+  pickup: marks as processing to prevent double-delivery),
+  `POST /openclaw/notifications/{id}/sent` and `/failed` (auto-requeues
+  if retries remain). Secured via `X-API-Key` header (Secret Manager).
+- **Notification triggers (store only, no auto-send):** invoice created
+  (single, bulk, bill-owner), payment confirmed, common expense created,
+  work order created, work order stage changed (special case: owner approval
+  required), announcement posted. Each trigger audit-logged.
+- **Notification service module:** centralized `enqueue_notification()` with
+  fan-out helpers (`enqueue_for_community_members`,
+  `enqueue_for_apartment_owners`). Every enqueue creates an audit_log entry.
+- **Security:** OpenClaw uses a shared API key (no JWT/OAuth needed for
+  machine-to-machine). Mac mini never exposed to public internet — all
+  connections are outbound to Cloud Run.
+
 ## [0.12.0] — 2026-07-06
 
 - **Design system + UI overhaul (frontend):** introduced a reusable token layer

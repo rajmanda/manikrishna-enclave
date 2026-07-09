@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
@@ -119,3 +119,24 @@ def scoped_community_id(user: User, requested: str | None = None) -> str:
     if user.role == "super_admin" and requested:
         return requested
     return user.community_id
+
+
+# ---------- OpenClaw (WhatsApp agent) authentication ----------
+
+
+async def verify_openclaw_key(
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> str:
+    """Verify the OpenClaw polling agent's API key (X-API-Key header)."""
+    settings = get_settings()
+    if not settings.openclaw_api_key:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OpenClaw integration not configured",
+        )
+    if not x_api_key or x_api_key != settings.openclaw_api_key:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
+        )
+    return x_api_key
+

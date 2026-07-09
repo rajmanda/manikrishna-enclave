@@ -27,6 +27,10 @@ affected docs/ file with every meaningful change.
   `app/routers/`, RBAC in `app/core/security.py`, audit trail in
   `app/audit.py`, idempotent seed in `app/seed.py`. Serves camelCase JSON
   matching `frontend/src/lib/types.ts` 1:1 (snake_case internally).
+  Outbound notification queue (`app/notification_service.py`) stores
+  WhatsApp/email/in-app messages in `notification_queue` collection;
+  OpenClaw agent (Mac mini) polls pending entries via API-key-secured
+  endpoints (`app/routers/openclaw.py`).
 - `infra/terraform/`, `.github/workflows/` — **not built yet**.
 
 ## Hard rules

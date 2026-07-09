@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # GCS bucket for receipts/documents (empty = uploads disabled).
     gcs_bucket: str = ""
 
+    # Shared secret for OpenClaw (WhatsApp agent) polling — stored in Secret
+    # Manager, empty disables the integration (503 on poll attempts).
+    openclaw_api_key: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

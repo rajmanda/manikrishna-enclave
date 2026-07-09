@@ -47,6 +47,34 @@ version, size_kb, file_type, path GCS|null, uploaded_by), `meetings` (id,
 community_id, title, date, attendance, agenda[], resolutions[], has_pdf,
 minutes_path). All PRD collections now exist.
 
+M5 additions: `notification_queue` — outbound notification queue for
+WhatsApp/email/in-app delivery via OpenClaw agent.
+
+| Field | Type | Notes |
+|---|---|---|
+| notification_id | string (unique) | `ntf-<hex>` |
+| community_id | string | Tenant key |
+| recipient_type | string | owner / tenant / manager |
+| recipient_account_id | string? | Billing account |
+| recipient_user_id | string? | Portal user |
+| recipient_name | string | Display name |
+| recipient_phone | string? | WhatsApp number |
+| channel | string | `whatsapp` \| `email` \| `in_app` |
+| event_type | string | `invoice_created` \| `payment_reminder` \| `payment_received` \| `common_expense_created` \| `work_order_created` \| `work_order_status_updated` \| `owner_approval_required` \| `announcement_posted` |
+| title | string | Short title |
+| message | string | Full message body |
+| payload | dict | Event-specific structured data |
+| status | string | `pending` \| `processing` \| `sent` \| `failed` \| `cancelled` |
+| provider | string? | e.g. `openclaw`, `sendgrid` |
+| retry_count | int | Current retry attempt |
+| max_retries | int | Default 3 |
+| scheduled_at | ISO? | Deferred delivery |
+| sent_at | ISO? | Delivery timestamp |
+| failed_at | ISO? | Last failure timestamp |
+| error_message | string? | Last error |
+| created_at | ISO | Record creation |
+| updated_at | ISO | Last modification |
+
 ## Indexes (`app/db.py::ensure_indexes`, created at startup)
 
 - `users.email` unique
@@ -56,6 +84,9 @@ minutes_path). All PRD collections now exist.
 - `expenses.community_id`
 - `work_orders.community_id`
 - `audit_log (community_id, timestamp desc)`
+- `notification_queue (status, channel, scheduled_at)` — polling
+- `notification_queue (community_id, created_at desc)` — listing
+- `notification_queue.notification_id` unique
 
 ## Work order stages
 
@@ -85,6 +116,7 @@ startup; current version in `meta` ({"id": "schema", "version": N}).
 | 005 | `invoices/payments.ledger` backfilled to `community` |
 | 006 | Apartment number baked into invoice descriptions |
 
-Schema version: **6**.
+Schema version: **6**. `notification_queue` is a new collection (no migration
+needed — it starts empty and indexes are created at startup).
 
 **Policy:** update this file in the same change as any schema modification.

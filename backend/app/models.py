@@ -666,3 +666,72 @@ class SearchResult(APIModel):
     title: str
     subtitle: str
     href: str
+
+
+# ---------- Notification Queue (Outbound) ----------
+
+NotificationChannel = Literal["whatsapp", "email", "in_app"]
+NotificationStatus = Literal["pending", "processing", "sent", "failed", "cancelled"]
+
+NotificationEventType = Literal[
+    "invoice_created",
+    "payment_reminder",
+    "payment_received",
+    "common_expense_created",
+    "work_order_created",
+    "work_order_status_updated",
+    "owner_approval_required",
+    "announcement_posted",
+]
+
+
+class NotificationRecord(APIModel):
+    """Outbound notification queue entry — polled by OpenClaw for WhatsApp delivery."""
+
+    notification_id: str = Field(default_factory=lambda: new_id("ntf"))
+    community_id: str
+    recipient_type: str  # e.g. "owner", "tenant", "manager"
+    recipient_account_id: str | None = None
+    recipient_user_id: str | None = None
+    recipient_name: str
+    recipient_phone: str | None = None
+    channel: NotificationChannel
+    event_type: NotificationEventType
+    title: str
+    message: str
+    payload: dict = {}
+    status: NotificationStatus = "pending"
+    provider: str | None = None  # e.g. "openclaw", "sendgrid"
+    retry_count: int = 0
+    max_retries: int = 3
+    scheduled_at: str | None = None
+    sent_at: str | None = None
+    failed_at: str | None = None
+    error_message: str | None = None
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class NotificationRecordCreate(APIModel):
+    """API body for manually creating a notification queue entry."""
+
+    recipient_type: str
+    recipient_account_id: str | None = None
+    recipient_user_id: str | None = None
+    recipient_name: str
+    recipient_phone: str | None = None
+    channel: NotificationChannel
+    event_type: NotificationEventType
+    title: str
+    message: str
+    payload: dict = {}
+    scheduled_at: str | None = None
+
+
+class MarkSentRequest(APIModel):
+    sent_at: str | None = None
+
+
+class MarkFailedRequest(APIModel):
+    error_message: str
+
