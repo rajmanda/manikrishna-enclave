@@ -180,9 +180,11 @@ async def delete_post(post_id: str, db: DB, user: CurrentUser) -> None:
     )
     if post is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Post not found")
-    if post["author_id"] != user.id and user.role not in WRITE_ROLES:
+    # Only the author themselves, or a community/super admin can delete other people's posts.
+    # Property managers (like Vishnu) cannot delete other people's posts.
+    if post["author_id"] != user.id and user.role not in ("super_admin", "community_admin"):
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, detail="Only the author or a manager can delete"
+            status.HTTP_403_FORBIDDEN, detail="Only the author or an admin can delete"
         )
     await db.feed_posts.delete_one({"id": post_id})
     await record_audit(db, user, "delete", "feed_posts", post_id)
