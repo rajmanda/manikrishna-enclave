@@ -302,11 +302,22 @@ async def delete_invoice(
 ) -> None:
     """Without cascade, an invoice with payments is protected (409). With
     cascade=true the caller has confirmed deleting the payments too."""
-    invoice = await db.invoices.find_one(
-        {"id": invoice_id, "community_id": user.community_id}
-    )
+    query = {"id": invoice_id}
+    if user.role != "super_admin":
+        query["community_id"] = user.community_id
+        
+    invoice = await db.invoices.find_one(query)
     if invoice is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+        
+    # Prevent property managers from deleting paid off invoices
+    is_paid_off = invoice.get("status") == "paid" or invoice.get("paid_amount", 0) >= invoice.get("amount", 0)
+    if is_paid_off and user.role == "property_manager":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Property managers are not allowed to delete paid off invoices",
+        )
+
     linked = await db.payments.count_documents({"invoice_id": invoice_id})
     if linked and not cascade:
         raise HTTPException(
@@ -318,7 +329,7 @@ async def delete_invoice(
         await record_audit(
             db, user, "delete", "payments", f"cascade:{invoice_id}", {"count": linked}
         )
-    await db.invoices.delete_one({"id": invoice_id, "community_id": user.community_id})
+    await db.invoices.delete_one(query)
     await record_audit(
         db, user, "delete", "invoices", invoice_id,
         {"cascaded_payments": linked} if linked else None,
