@@ -14,6 +14,25 @@ import {
 } from "lucide-react";
 import { api, ApiError, setToken } from "@/lib/api";
 
+const TIPS = [
+  {
+    title: "🔒 Sandbox Isolation",
+    desc: "Your sandbox is generated with a unique, completely isolated community database, loaded with custom mock apartments.",
+  },
+  {
+    title: "⚡ Dual-Role Switcher",
+    desc: "Experience NivaasOS as both a Property Manager and an Apartment Owner. Toggle roles instantly in the top-right menu.",
+  },
+  {
+    title: "📊 Financial Ledger Auto-Reconciliation",
+    desc: "Record UPI, cash, and bank transfers, generate automated invoice PDFs, and reconcile balances in real time.",
+  },
+  {
+    title: "🗳️ Democratic Governance Polls",
+    desc: "Create opinion polls, let whitelisted residents vote securely, and witness automated result computations instantly.",
+  },
+];
+
 export default function GetStartedPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [formData, setFormData] = useState({
@@ -500,6 +519,27 @@ export default function GetStartedPage() {
                           </div>
                         );
                       })}
+                    </div>
+
+                    {/* Coordinated highlight tip */}
+                    <div className="relative min-h-[96px] w-full max-w-sm mx-auto overflow-hidden bg-gradient-to-br from-brand-50/50 to-indigo-50/20 border border-brand-100/40 rounded-2xl p-4 shadow-sm text-left">
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={loadingStep}
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -12 }}
+                          transition={{ duration: 0.25 }}
+                          className="space-y-1"
+                        >
+                          <h4 className="text-xs font-bold text-brand-800 flex items-center gap-1.5">
+                            {TIPS[Math.min(loadingStep, TIPS.length - 1)].title}
+                          </h4>
+                          <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                            {TIPS[Math.min(loadingStep, TIPS.length - 1)].desc}
+                          </p>
+                        </motion.div>
+                      </AnimatePresence>
                     </div>
 
                     {/* Progress bar */}
