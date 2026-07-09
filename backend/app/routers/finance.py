@@ -31,6 +31,7 @@ from app.models import (
     User,
 )
 from app import storage
+from app.notification_service import enqueue_for_community_members
 
 router = APIRouter(tags=["finance"])
 
@@ -250,6 +251,17 @@ async def create_expense(body: ExpenseCreate, db: DB, user: CurrentUser) -> Expe
     expense = Expense(community_id=user.community_id, **body.model_dump())
     await db.expenses.insert_one(expense.model_dump())
     await record_audit(db, user, "create", "expenses", expense.id)
+    # Enqueue WhatsApp notification for community members.
+    await enqueue_for_community_members(
+        db,
+        community_id=user.community_id,
+        event_type="common_expense_created",
+        title="New Community Expense",
+        message=f"Recorded by {user.display_name}. {body.category}: {body.description} — Rs {body.amount:,.0f}. View details: https://community.rajmanda.com/finance",
+        payload={"expense_id": expense.id, "amount": body.amount, "category": body.category},
+        exclude_user_id=user.id,
+        actor_user=user,
+    )
     return expense
 
 

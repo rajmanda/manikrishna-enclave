@@ -124,7 +124,7 @@ export function PageTitle({
         <h1 className="text-display-sm text-slate-900">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
-      {actions && <div className="flex gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
   );
 }
@@ -229,7 +229,7 @@ export function Stat({
       </div>
       <div className="mt-1.5 flex items-baseline gap-2">
         <p
-          className={`tabular text-2xl font-bold tracking-tight sm:text-[26px] ${valueColor}`}
+          className={`tabular min-w-0 truncate text-2xl font-bold tracking-tight sm:text-[26px] ${valueColor}`}
         >
           {value}
         </p>

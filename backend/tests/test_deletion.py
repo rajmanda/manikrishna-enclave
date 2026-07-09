@@ -88,16 +88,18 @@ async def test_manager_can_delete_unpaid_invoice(client, manager_headers, db):
     assert resp.status_code == 204
     assert await db.invoices.find_one({"id": inv["id"]}) is None
 
-async def test_delete_invoice_with_payments_requires_cascade(client, manager_headers, db):
+async def test_delete_invoice_with_payments_requires_cascade(client, super_headers, manager_headers, db):
     invoice_id, payment_id = await _create_paid_invoice(client, manager_headers)
 
-    resp = await client.delete(f"/api/v1/invoices/{invoice_id}", headers=manager_headers)
+    # Super admin tries to delete without cascade -> 409
+    resp = await client.delete(f"/api/v1/invoices/{invoice_id}", headers=super_headers)
     assert resp.status_code == 409
     assert await db.invoices.find_one({"id": invoice_id}) is not None
     assert await db.payments.find_one({"id": payment_id}) is not None
 
+    # Super admin tries to delete with cascade -> 204
     resp = await client.delete(
-        f"/api/v1/invoices/{invoice_id}?cascade=true", headers=manager_headers
+        f"/api/v1/invoices/{invoice_id}?cascade=true", headers=super_headers
     )
     assert resp.status_code == 204
     assert await db.invoices.find_one({"id": invoice_id}) is None
@@ -111,6 +113,17 @@ async def test_delete_invoice_with_payments_requires_cascade(client, manager_hea
     assert await db.audit_log.find_one(
         {"entity": "payments", "entity_id": f"cascade:{invoice_id}", "action": "delete"}
     ) is not None
+
+async def test_manager_cannot_delete_paid_invoice(client, manager_headers):
+    # Create a paid invoice
+    invoice_id, _ = await _create_paid_invoice(client, manager_headers)
+    
+    # Manager tries to delete -> 403 Forbidden
+    resp = await client.delete(
+        f"/api/v1/invoices/{invoice_id}?cascade=true", headers=manager_headers
+    )
+    assert resp.status_code == 403
+    assert "not allowed to delete paid off invoices" in resp.json()["detail"]
 
 async def test_owner_cannot_delete_invoice(client, owner_headers, manager_headers):
     invoice_id, _ = await _create_paid_invoice(client, manager_headers)

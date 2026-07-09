@@ -18,6 +18,10 @@ from app.models import (
     ReactRequest,
 )
 from app.notify import notify_members
+from app.notification_service import (
+    enqueue_for_community_members,
+    enqueue_notification,
+)
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -79,6 +83,37 @@ async def create_post(body: FeedPostCreate, db: DB, user: CurrentUser) -> FeedPo
             f"New announcement: {text[:60]}{'…' if len(text) > 60 else ''}",
             "announcement", user.id, href="/feed",
         )
+
+    # Format group message nicely with type prefix
+    type_emoji = {
+        "announcement": "📢 Announcement",
+        "question": "❓ Question",
+        "suggestion": "💡 Suggestion",
+        "photo": "🖼️ Photo post"
+    }
+    prefix = type_emoji.get(body.type, "📝 Post")
+    excerpt = text[:400] + "..." if len(text) > 400 else text
+    
+    group_message = (
+        f"{prefix} by {user.display_name}:\n"
+        f"\"{excerpt}\"\n\n"
+        f"View/Reply: https://community.rajmanda.com/feed"
+    )
+
+    # Enqueue a single WhatsApp notification for the community group
+    await enqueue_notification(
+        db,
+        community_id=user.community_id,
+        recipient_type="group",
+        recipient_name="Community Group",
+        recipient_phone="group", # Tag for OpenClaw to send to the group chat
+        channel="whatsapp",
+        event_type="announcement_posted",
+        title=f"New {body.type.capitalize()}",
+        message=group_message,
+        payload={"post_id": post.id, "post_type": body.type},
+        actor_user=user,
+    )
     return _to_out(post.model_dump(), user.id)
 
 
@@ -145,9 +180,11 @@ async def delete_post(post_id: str, db: DB, user: CurrentUser) -> None:
     )
     if post is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Post not found")
-    if post["author_id"] != user.id and user.role not in WRITE_ROLES:
+    # Only the author themselves, or a community/super admin can delete other people's posts.
+    # Property managers (like Vishnu) cannot delete other people's posts.
+    if post["author_id"] != user.id and user.role not in ("super_admin", "community_admin"):
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, detail="Only the author or a manager can delete"
+            status.HTTP_403_FORBIDDEN, detail="Only the author or an admin can delete"
         )
     await db.feed_posts.delete_one({"id": post_id})
     await record_audit(db, user, "delete", "feed_posts", post_id)

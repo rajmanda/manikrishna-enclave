@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ai.openclaw.whatsapp-manikrishna-notification-poller</string>
+
+    <key>Comment</key>
+    <string>Polls CommunityHub for pending WhatsApp notifications and relays them via the OpenClaw gateway.</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/usr/bin/python3</string>
+      <string>/Users/rajmanda/.openclaw/workspace/agents/samba/scripts/whatsapp_notification_poller.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/rajmanda/.openclaw</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>HOME</key>
+      <string>/Users/rajmanda</string>
+      <key>COMMUNITYHUB_API_URL</key>
+      <string>https://community.rajmanda.com/api/v1</string>
+      <key>COMMUNITYHUB_API_KEY</key>
+      <string>21752f2613e343d5ccd25ae684a771b60b8932ed90983dbf</string>
+      <key>OPENCLAW_POLL_INTERVAL_SEC</key>
+      <string>15</string>
+      <key>OPENCLAW_POLL_LIMIT</key>
+      <string>5</string>
+      <key>OPENCLAW_WHATSAPP_GROUP_JID</key>
+      <string>120363426724252289@g.us</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/rajmanda/.openclaw/workspace/agents/samba/logs/whatsapp_manikrishna_notification_poller.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/rajmanda/.openclaw/workspace/agents/samba/logs/whatsapp_manikrishna_notification_poller.err.log</string>
+  </dict>
+</plist>

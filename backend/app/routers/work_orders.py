@@ -16,6 +16,7 @@ from app.models import (
     WorkOrderUpdate,
 )
 from app.notify import notify_members
+from app.notification_service import enqueue_for_community_members
 
 router = APIRouter(prefix="/work-orders", tags=["work-orders"])
 
@@ -68,6 +69,17 @@ async def create_work_order(
         db, user.community_id, f"New work order: {wo.title}", "work_order", user.id,
         href=f"/work-orders/{wo.id}",
     )
+    # Enqueue WhatsApp notification for community members.
+    await enqueue_for_community_members(
+        db,
+        community_id=user.community_id,
+        event_type="work_order_created",
+        title="New Work Order",
+        message=f"Created by {user.display_name}. New work order: {wo.title} (Priority: {wo.priority}). View details: https://community.rajmanda.com/work-orders/{wo.id}",
+        payload={"work_order_id": wo.id, "priority": wo.priority},
+        exclude_user_id=user.id,
+        actor_user=user,
+    )
     return wo
 
 
@@ -118,6 +130,24 @@ async def change_stage(
         "work_order",
         user.id,
         href=f"/work-orders/{work_order_id}",
+    )
+    # Enqueue WhatsApp: status update + special case for Owner Approval.
+    event_type = "work_order_status_updated"
+    title = "Work Order Update"
+    message = f"Updated by {user.display_name}. Work order '{wo['title']}' moved to {body.stage}. View details: https://community.rajmanda.com/work-orders/{work_order_id}"
+    if body.stage == "Owner Approval":
+        event_type = "owner_approval_required"
+        title = "Approval Required"
+        message = f"Updated by {user.display_name}. Work order '{wo['title']}' needs owner approval. Review here: https://community.rajmanda.com/work-orders/{work_order_id}"
+    await enqueue_for_community_members(
+        db,
+        community_id=user.community_id,
+        event_type=event_type,
+        title=title,
+        message=message,
+        payload={"work_order_id": work_order_id, "stage": body.stage},
+        exclude_user_id=user.id,
+        actor_user=user,
     )
     return WorkOrder.model_validate(result)
 

@@ -102,12 +102,12 @@ async def test_apply_late_fees(client, manager_headers, db):
     assert fee["amount"] == 200 and "Late Fee" in fee["description"]
 
 
-async def test_invoice_delete_blocked_by_payments(client, manager_headers):
+async def test_invoice_delete_blocked_by_payments(client, super_headers):
     blocked = await client.delete(
-        "/api/v1/invoices/inv-2606-101", headers=manager_headers
+        "/api/v1/invoices/inv-2606-101", headers=super_headers
     )
     assert blocked.status_code == 409  # has a payment
-    ok = await client.delete("/api/v1/invoices/inv-2606-502", headers=manager_headers)
+    ok = await client.delete("/api/v1/invoices/inv-2606-502", headers=super_headers)
     assert ok.status_code == 204
 
 

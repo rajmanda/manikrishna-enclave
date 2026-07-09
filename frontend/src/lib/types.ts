@@ -51,6 +51,7 @@ export interface User {
   apartmentId?: string;
   apartmentIds?: string[];
   phone?: string;
+  preferredName?: string;
 }
 
 export type InvoiceStatus = "paid" | "due" | "overdue" | "partial";

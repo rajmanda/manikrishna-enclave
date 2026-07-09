@@ -21,7 +21,9 @@ from app.routers import (
     maintenance,
     manager_fees,
     meetings,
+    notification_queue,
     notifications,
+    openclaw,
     polls,
     reports,
     search,
@@ -92,6 +94,8 @@ app.include_router(reports.router, prefix=API_PREFIX)
 app.include_router(audit_log.router, prefix=API_PREFIX)
 app.include_router(work_orders.router, prefix=API_PREFIX)
 app.include_router(vendors.router, prefix=API_PREFIX)
+app.include_router(notification_queue.router, prefix=API_PREFIX)
+app.include_router(openclaw.router, prefix=API_PREFIX)
 
 
 # Note: GFE intercepts /healthz on *.run.app domains and returns its own 404,
