@@ -5,7 +5,17 @@ WARNING: This will completely delete all sandbox data from the database.
 """
 
 import asyncio
+import os
 import sys
+
+# Add parent directory to sys.path to allow running from scripts/ directory
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Programmatically load .env from the parent directory so configuration resolves correctly
+from dotenv import load_dotenv
+dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(dotenv_path)
+
 from app import db as database
 
 COLLECTIONS_WITH_COMMUNITY_ID = [
