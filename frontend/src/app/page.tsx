@@ -41,6 +41,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [customEmail, setCustomEmail] = useState("");
   const googleButtonRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -122,7 +123,7 @@ export default function LoginPage() {
         </div>
 
         {DEV_LOGIN_ENABLED && (
-          <div className="mt-6">
+          <div className="mt-6 space-y-4">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               Development sign-in
             </p>
@@ -139,6 +140,32 @@ export default function LoginPage() {
                 </button>
               ))}
             </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (customEmail.trim()) {
+                  handleDevLogin(customEmail.trim());
+                }
+              }}
+              className="flex gap-2"
+            >
+              <input
+                type="email"
+                disabled={busy}
+                placeholder="Or enter custom email (Yahoo, etc)..."
+                value={customEmail}
+                onChange={(e) => setCustomEmail(e.target.value)}
+                className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500 bg-white text-slate-800"
+              />
+              <button
+                type="submit"
+                disabled={busy || !customEmail.trim()}
+                className="rounded-xl bg-brand-600 px-4 py-2 text-xs font-bold text-white hover:bg-brand-700 disabled:opacity-50 transition-colors shrink-0"
+              >
+                Sign In
+              </button>
+            </form>
           </div>
         )}
 

@@ -75,3 +75,16 @@ resource "google_service_account_iam_member" "deployer_acts_as_frontend" {
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }
+
+# --- Cloud Scheduler permissions for Sandbox Cleanup ---
+
+resource "google_service_account" "scheduler" {
+  account_id   = "communityhub-scheduler"
+  display_name = "CommunityHub Scheduler account"
+}
+
+resource "google_project_iam_member" "scheduler_run_invoker" {
+  project = var.project_id
+  role    = "roles/run.invoker"
+  member  = "serviceAccount:${google_service_account.scheduler.email}"
+}

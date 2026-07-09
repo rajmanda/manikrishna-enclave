@@ -178,14 +178,24 @@ WORK_ORDERS = [
     },
 ]
 
-RESERVE_FUND = [
-    ("Jan", 5000, 0, 118000),
-    ("Feb", 5000, 8000, 115000),
-    ("Mar", 5000, 0, 120000),
-    ("Apr", 5000, 5500, 119500),
-    ("May", 5000, 0, 124500),
-    ("Jun", 5000, 8500, 121000),
-]
+RESERVE_OPENING_BALANCE = 113000
+# Withdrawals mirror the seeded work orders: May = generator annual service
+# (wo-4, ₹5,500), Jun = lift door sensor approved by poll-1 (₹8,500).
+RESERVE_WITHDRAWALS = {"Feb": 8000, "May": 5500, "Jun": 8500}
+RESERVE_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+
+
+def build_reserve_fund(apartment_count: int) -> list[tuple[str, int, int, int]]:
+    """Reserve entries at ₹500/apt monthly, with balances derived so the
+    ledger always chains regardless of community size."""
+    monthly = 500 * apartment_count
+    balance = RESERVE_OPENING_BALANCE
+    rows = []
+    for month in RESERVE_MONTHS:
+        withdrawal = RESERVE_WITHDRAWALS.get(month, 0)
+        balance += monthly - withdrawal
+        rows.append((month, monthly, withdrawal, balance))
+    return rows
 
 
 MAINTENANCE_REQUESTS = [
@@ -415,7 +425,7 @@ async def seed(db: Any) -> bool:
     for wo in WORK_ORDERS:
         await db.work_orders.insert_one({**wo, "community_id": CID})
 
-    for month, contributions, expenses_amt, balance in RESERVE_FUND:
+    for month, contributions, expenses_amt, balance in build_reserve_fund(10):
         await db.reserve_fund.insert_one(
             {
                 "community_id": CID,
@@ -429,6 +439,223 @@ async def seed(db: Any) -> bool:
     await seed_m3(db)
     await seed_m4(db)
     return True
+
+
+async def seed_sandbox_community(
+    db: Any,
+    community_id: str,
+    community_name: str,
+    admin_email: str,
+    admin_name: str,
+    admin_phone: str | None,
+    role: str = "property_manager",
+    unit_count: int | None = None,
+) -> None:
+    """Provisions a sandbox community loaded with realistic Indian RWA data."""
+    from datetime import datetime
+    
+    # Standardize/default unit count to 10 if not provided or less than 1
+    final_unit_count = unit_count if (unit_count and unit_count > 0) else 10
+
+    # 1. Insert Community
+    await db.communities.insert_one({
+        "id": community_id,
+        "name": community_name,
+        "address": "Mumbai, Maharashtra",
+        "apartment_count": final_unit_count,
+        "monthly_maintenance": 3500,
+        "created_at": datetime.utcnow().isoformat() + "Z",
+    })
+
+    # 2. Insert Admin User (configured to switch roles to experience both PM and Owner views)
+    user_role = role if role in ("property_manager", "community_admin") else "property_manager"
+    await db.users.insert_one({
+        "id": "u-admin",
+        "community_id": community_id,
+        "name": admin_name,
+        "email": admin_email.lower().strip(),
+        "role": user_role,
+        "roles": [user_role, "owner"],
+        "phone": admin_phone,
+        "preferred_name": admin_name.split()[0] if admin_name else "Admin",
+    })
+
+    # 3. Seed Mock Owners (flat 101 to 502, generic Indian names)
+    GENERIC_OWNERS = [
+        ("101", 1, "Aditya Rao"),
+        ("102", 1, "Rohan Malhotra"),
+        ("201", 2, "Vikram Sen"),
+        ("202", 2, "Karan Mehta"),
+        ("301", 3, "Rahul Sharma"),
+        ("302", 3, "Suresh Kumar"),
+        ("401", 4, "Rajesh Patel"),
+        ("402", 4, "Amit Patel"),
+        ("501", 5, "Dr. Ram Kumar"),
+        ("502", 5, "Sanjay Kapoor"),
+    ]
+
+    # Generate custom owners/apartments dynamically matching unit_count
+    owners = []
+    for idx in range(final_unit_count):
+        if idx < len(GENERIC_OWNERS):
+            owners.append(GENERIC_OWNERS[idx])
+        else:
+            floor = (idx // 2) + 1
+            number = f"{floor}{'01' if idx % 2 == 0 else '02'}"
+            name = f"Mock Resident {idx + 1}"
+            owners.append((number, floor, name))
+
+    valid_numbers = {owner[0] for owner in owners}
+
+    for number, floor, name in owners:
+        # Create Apartment
+        await db.apartments.insert_one({
+            "id": f"apt-{number}",
+            "community_id": community_id,
+            "number": number,
+            "floor": floor,
+            "owner_ids": [f"acct-{number}"],
+        })
+        # Create Account
+        await db.accounts.insert_one({
+            "id": f"acct-{number}",
+            "community_id": community_id,
+            "name": name,
+            "apartment_ids": [f"apt-{number}"],
+        })
+        # Create Whitelisted User
+        email_prefix = name.lower().replace(".", "").replace(" ", "")
+        await db.users.insert_one({
+            "id": f"u-{number}",
+            "community_id": community_id,
+            "name": name,
+            "email": f"{email_prefix}-{community_id}@demo.nivaasos.com",
+            "role": "owner",
+            "roles": [],
+            "apartment_id": f"apt-{number}",
+            "phone": None,
+        })
+
+    # 4. June 2026 invoices
+    for number, paid, invoice_status in JUNE_INVOICES:
+        if number in valid_numbers:
+            await db.invoices.insert_one({
+                "id": f"inv-2606-{number}-{community_id}",
+                "community_id": community_id,
+                "apartment_id": f"apt-{number}",
+                "period": "Jun 2026",
+                "description": "Monthly Maintenance",
+                "amount": 3500,
+                "paid_amount": paid,
+                "due_date": "2026-06-10",
+                "status": invoice_status,
+                "ledger": "community",
+            })
+
+    # 5. Expenses
+    for i, (category, desc, vendor_id, amount, paid_date, receipt) in enumerate(EXPENSES, 1):
+        await db.expenses.insert_one({
+            "id": f"exp-{i}-{community_id}",
+            "community_id": community_id,
+            "category": category,
+            "description": desc,
+            "vendor_id": f"{vendor_id}-{community_id}" if vendor_id else None,
+            "amount": amount,
+            "paid_date": paid_date,
+            "has_receipt": receipt,
+        })
+
+    # 6. Vendors
+    for vid, name, service, phone, gst, amc, rating, contracts in VENDORS:
+        await db.vendors.insert_one({
+            "id": f"{vid}-{community_id}",
+            "community_id": community_id,
+            "name": name,
+            "service": service,
+            "phone": phone,
+            "gst": gst,
+            "amc_expiry": amc,
+            "rating": rating,
+            "active_contracts": contracts,
+        })
+
+    # 7. Payments
+    for i, (number, amount, date, method, reference) in enumerate(PAYMENTS, 1):
+        if number in valid_numbers:
+            await db.payments.insert_one({
+                "id": f"pay-{i}-{community_id}",
+                "community_id": community_id,
+                "invoice_id": f"inv-2606-{number}-{community_id}",
+                "apartment_id": f"apt-{number}",
+                "amount": amount,
+                "date": date,
+                "method": method,
+                "reference": reference,
+            })
+
+    # 8. Work Orders
+    for wo in WORK_ORDERS:
+        assigned = "u-admin" if wo.get("assigned_to") == "u-vishnu" else None
+        await db.work_orders.insert_one({
+            **wo,
+            "id": f"{wo['id']}-{community_id}",
+            "community_id": community_id,
+            "assigned_to": assigned,
+            "vendor_id": f"{wo['vendor_id']}-{community_id}" if wo.get("vendor_id") else None,
+        })
+
+    # 9. Reserve Fund
+    for month, contributions, expenses_amt, balance in build_reserve_fund(final_unit_count):
+        await db.reserve_fund.insert_one({
+            "community_id": community_id,
+            "month": month,
+            "contributions": contributions,
+            "expenses": expenses_amt,
+            "balance": balance,
+        })
+
+    # 10. Polls
+    for pid, title, desc, op_date, cl_date, status, choices, votes in POLLS:
+        # Filter votes to only include seeded apartments to avoid orphan references
+        filtered_votes = {apt_id: vote for apt_id, vote in votes.items() if apt_id.replace("apt-", "") in valid_numbers}
+        await db.polls.insert_one({
+            "id": f"{pid}-{community_id}",
+            "community_id": community_id,
+            "title": title,
+            "description": desc,
+            "open_date": op_date,
+            "close_date": cl_date,
+            "status": status,
+            "options": choices,
+            "votes": filtered_votes,
+        })
+
+    # 11. Documents
+    for doc_id, name, cat, date, version, size, ext in DOCUMENTS:
+        await db.documents.insert_one({
+            "id": f"{doc_id}-{community_id}",
+            "community_id": community_id,
+            "name": name,
+            "category": cat,
+            "uploaded_at": date + "T10:00:00Z",
+            "uploaded_by": "u-admin",
+            "version": version,
+            "size_bytes": size * 1024,
+            "extension": ext,
+            "url": f"https://storage.googleapis.com/demo-bucket/{doc_id}.{ext}",
+        })
+
+    # 12. Meetings
+    for meet_id, title, date, attendance, agenda, resolutions in MEETINGS:
+        await db.meetings.insert_one({
+            "id": f"{meet_id}-{community_id}",
+            "community_id": community_id,
+            "title": title,
+            "date": date,
+            "agenda": agenda,
+            "resolutions": resolutions,
+            "attendees_count": min(attendance, final_unit_count), # Attendance cannot exceed unit count
+        })
 
 
 async def _main() -> None:

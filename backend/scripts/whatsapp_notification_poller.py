@@ -169,14 +169,24 @@ def send_whatsapp(phone, message):
     ]
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=SEND_TIMEOUT
+            cmd, capture_output=True, timeout=SEND_TIMEOUT
         )
     except subprocess.TimeoutExpired:
         return False, f"send timed out after {SEND_TIMEOUT}s"
+    except Exception as e:
+        return False, f"subprocess error: {e}"
+
+    stdout = ""
+    stderr = ""
+    if proc.stdout:
+        stdout = proc.stdout.decode("utf-8", errors="replace")
+    if proc.stderr:
+        stderr = proc.stderr.decode("utf-8", errors="replace")
+
     if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip()[:500]
+        detail = (stderr or stdout or "").strip()[:500]
         return False, f"openclaw exit {proc.returncode}: {detail}"
-    return True, (proc.stdout or "").strip()[:500]
+    return True, stdout.strip()[:500]
 
 
 def mark(base, api_key, nid, outcome, error_message=None):

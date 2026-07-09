@@ -82,7 +82,9 @@ async def switch_role(
             detail="Owner view needs an apartment assigned to your account",
         )
     doc = await db.users.find_one_and_update(
-        {"id": user.id}, {"$set": {"role": body.role}}, return_document=True
+        {"id": user.id, "community_id": user.community_id},
+        {"$set": {"role": body.role}},
+        return_document=True
     )
     updated = User.model_validate(doc)
     # Resolve apartment_ids from Account.

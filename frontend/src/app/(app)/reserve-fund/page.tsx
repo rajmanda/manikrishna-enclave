@@ -80,6 +80,7 @@ export default function ReserveFundPage() {
   const { role } = useSessionUser();
   const canWrite = WRITER_ROLES.includes(role);
   const [addOpen, setAddOpen] = useState(false);
+  const [statModal, setStatModal] = useState<"balance" | "contributions" | "withdrawals" | null>(null);
   const reserve = useApi<ReserveFundEntry[]>("/reserve-fund");
 
   if (reserve.error)
@@ -117,11 +118,87 @@ export default function ReserveFundPage() {
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Current Balance" value={formatINR(latest.balance)} tone="positive" />
+        <Stat
+          label="Current Balance"
+          value={formatINR(latest.balance)}
+          tone="positive"
+          hint="Tap for monthly balances"
+          onClick={() => setStatModal("balance")}
+        />
         <Stat label="Opening" value={formatINR(opening)} />
-        <Stat label="Contributions YTD" value={formatINR(totalIn)} tone="positive" hint="₹500/apt monthly" />
-        <Stat label="Withdrawals YTD" value={formatINR(totalOut)} tone="negative" />
+        <Stat
+          label="Contributions YTD"
+          value={formatINR(totalIn)}
+          tone="positive"
+          hint="₹500/apt monthly · tap for the list"
+          onClick={() => setStatModal("contributions")}
+        />
+        <Stat
+          label="Withdrawals YTD"
+          value={formatINR(totalOut)}
+          tone="negative"
+          hint="Tap for the list"
+          onClick={() => setStatModal("withdrawals")}
+        />
       </div>
+
+      {statModal && (
+        <Modal
+          title={
+            statModal === "balance"
+              ? "Monthly Balances"
+              : statModal === "contributions"
+                ? "Contributions YTD"
+                : "Withdrawals YTD"
+          }
+          onClose={() => setStatModal(null)}
+        >
+          {(() => {
+            const rows = [...entries]
+              .reverse()
+              .filter((r) => (statModal === "withdrawals" ? r.expenses > 0 : true));
+            if (rows.length === 0)
+              return (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  No withdrawals yet.
+                </p>
+              );
+            const amount = (r: ReserveFundEntry) =>
+              statModal === "balance"
+                ? r.balance
+                : statModal === "contributions"
+                  ? r.contributions
+                  : r.expenses;
+            return (
+              <div className="divide-y divide-slate-100">
+                {rows.map((r) => (
+                  <div
+                    key={r.month}
+                    className="flex items-center justify-between gap-3 py-2.5"
+                  >
+                    <p className="text-sm font-medium">{r.month}</p>
+                    <p
+                      className={`text-sm font-semibold ${
+                        statModal === "withdrawals" ? "text-red-600" : "text-emerald-600"
+                      }`}
+                    >
+                      {formatINR(amount(r))}
+                    </p>
+                  </div>
+                ))}
+                {statModal !== "balance" && (
+                  <div className="flex items-center justify-between pt-3">
+                    <p className="text-sm font-bold">Total</p>
+                    <p className="text-sm font-bold">
+                      {formatINR(statModal === "contributions" ? totalIn : totalOut)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </Modal>
+      )}
 
       <Card className="p-4">
         <h2 className="mb-2 text-sm font-semibold">Balance Trend</h2>

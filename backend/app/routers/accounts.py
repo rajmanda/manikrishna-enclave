@@ -85,7 +85,7 @@ async def update_account(
 @router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT,
                dependencies=[SuperAdmin])
 async def delete_account(account_id: str, db: DB, user: CurrentUser) -> None:
-    linked = await db.users.find_one({"account_id": account_id})
+    linked = await db.users.find_one({"account_id": account_id, "community_id": user.community_id})
     if linked:
         raise HTTPException(
             status.HTTP_409_CONFLICT,

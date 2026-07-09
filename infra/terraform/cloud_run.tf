@@ -147,3 +147,154 @@ resource "google_cloud_run_v2_service_iam_member" "frontend_public" {
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
+
+# --- Daily Sandbox Cleanup Cron Job ---
+
+resource "google_cloud_run_v2_job" "cleanup" {
+  name                = "communityhub-cleanup-sandboxes"
+  location            = var.region
+  deletion_protection = false
+
+  template {
+    template {
+      service_account = google_service_account.api_runtime.email
+
+      containers {
+        image = local.placeholder_image
+        command = ["python", "-m", "app.cron.cleanup_sandboxes"]
+
+        env {
+          name  = "ENVIRONMENT"
+          value = "production"
+        }
+        env {
+          name  = "DB_NAME"
+          value = var.db_name
+        }
+        env {
+          name = "MONGODB_URI"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.secrets["communityhub-mongodb-uri"].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+    ]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_secret_manager_secret_iam_member.api_access,
+  ]
+}
+
+resource "google_cloud_scheduler_job" "cleanup_trigger" {
+  name             = "communityhub-cleanup-trigger"
+  description      = "Triggers the sandbox cleanup job daily at 2:00 AM UTC"
+  schedule         = "0 2 * * *"
+  time_zone        = "Etc/UTC"
+  attempt_deadline = "320s"
+
+  retry_config {
+    retry_count = 1
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.cleanup.name}:run"
+
+    oauth_token {
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+
+  depends_on = [
+    google_cloud_run_v2_job.cleanup,
+  ]
+}
+
+# --- Daily Database Backup Cron Job (runs at 1:00 AM UTC, before 2:00 AM cleanup) ---
+
+resource "google_cloud_run_v2_job" "backup" {
+  name                = "communityhub-db-backup"
+  location            = var.region
+  deletion_protection = false
+
+  template {
+    template {
+      service_account = google_service_account.api_runtime.email
+
+      containers {
+        image = local.placeholder_image
+        command = ["python", "-m", "app.cron.backup_db"]
+
+        env {
+          name  = "ENVIRONMENT"
+          value = "production"
+        }
+        env {
+          name  = "DB_NAME"
+          value = var.db_name
+        }
+        env {
+          name  = "GCS_BACKUP_BUCKET"
+          value = google_storage_bucket.backups.name
+        }
+        env {
+          name = "MONGODB_URI"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.secrets["communityhub-mongodb-uri"].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+    ]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_secret_manager_secret_iam_member.api_access,
+    google_storage_bucket.backups,
+  ]
+}
+
+resource "google_cloud_scheduler_job" "backup_trigger" {
+  name             = "communityhub-backup-trigger"
+  description      = "Triggers the database backup job daily at 1:00 AM UTC"
+  schedule         = "0 1 * * *"
+  time_zone        = "Etc/UTC"
+  attempt_deadline = "320s"
+
+  retry_config {
+    retry_count = 1
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.backup.name}:run"
+
+    oauth_token {
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+
+  depends_on = [
+    google_cloud_run_v2_job.backup,
+  ]
+}

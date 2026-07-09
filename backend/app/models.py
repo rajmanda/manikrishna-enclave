@@ -711,6 +711,7 @@ NotificationEventType = Literal[
     "work_order_status_updated",
     "owner_approval_required",
     "announcement_posted",
+    "lead_captured",
 ]
 
 
@@ -763,4 +764,28 @@ class MarkSentRequest(APIModel):
 
 class MarkFailedRequest(APIModel):
     error_message: str
+
+
+# ---------- Marketing Leads ----------
+
+
+class Lead(APIModel):
+    id: str = Field(default_factory=lambda: new_id("lead"))
+    name: str
+    phone: str
+    email: EmailStr
+    community_name: str
+    unit_count: int | None = None
+    role: str | None = None  # e.g., "manager", "committee_member", "owner"
+    created_at: str = ""
+
+
+class LeadCreate(APIModel):
+    name: str
+    phone: str
+    email: EmailStr
+    community_name: str
+    unit_count: int | None = None
+    role: str | None = None
+
 

@@ -84,26 +84,19 @@ const TESTIMONIALS = [
 
 const PRICING = [
   {
-    name: "Starter",
-    price: "Free",
-    tagline: "For a single small community finding its feet.",
-    features: ["Up to 15 units", "Invoices & payments", "Community feed", "Email support"],
-    cta: "Get started",
-    highlight: false,
-  },
-  {
     name: "Community",
     price: "₹2,999",
     unit: "/ month",
-    tagline: "Everything an active association needs to run in the open.",
+    tagline: "Everything you need to run your association. 30 days free, card required.",
     features: [
+      "30-Day Free Trial",
       "Unlimited units",
       "Work orders & vendors",
       "Reserve fund & reports",
       "Polls, documents & minutes",
       "Full audit log",
     ],
-    cta: "Start free trial",
+    cta: "Start 30-Day Trial",
     highlight: true,
   },
   {
@@ -168,7 +161,7 @@ function Nav() {
             Sign in
           </Link>
           <Link
-            href="/"
+            href="/get-started"
             className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-brand-700 hover:shadow-brand-glow"
           >
             Get started <ArrowRight className="h-4 w-4" />
@@ -222,7 +215,7 @@ function Hero() {
           style={{ animationDelay: "180ms" }}
         >
           <Link
-            href="/"
+            href="/get-started"
             className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-brand-glow transition-all hover:-translate-y-0.5 hover:bg-brand-700"
           >
             Get started free <ArrowRight className="h-4 w-4" />
@@ -444,7 +437,7 @@ function Pricing() {
         </div>
       </Reveal>
 
-      <div className="mt-14 grid items-stretch gap-6 lg:grid-cols-3">
+      <div className="mt-14 grid items-stretch gap-8 md:grid-cols-2 max-w-4xl mx-auto">
         {PRICING.map((p, i) => (
           <Reveal key={p.name} delay={i * 0.06}>
             <div
@@ -478,7 +471,7 @@ function Pricing() {
                 ))}
               </ul>
               <Link
-                href="/"
+                href={p.name === "Portfolio" ? "/get-started?plan=portfolio" : "/get-started"}
                 className={`mt-7 inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${
                   p.highlight
                     ? "bg-brand-500 text-white hover:bg-brand-400"
@@ -491,6 +484,9 @@ function Pricing() {
           </Reveal>
         ))}
       </div>
+      <p className="mt-8 text-center text-xs text-slate-400">
+        * 30-day trials require card verification to prevent abuse. Cancel anytime during the trial with zero charges or obligations.
+      </p>
     </section>
   );
 }
@@ -560,7 +556,7 @@ function CtaFooter() {
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Link
-                  href="/"
+                  href="/get-started"
                   className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-6 py-3 text-sm font-semibold text-white shadow-brand-glow transition-all hover:-translate-y-0.5 hover:bg-brand-400"
                 >
                   Get started free <ArrowRight className="h-4 w-4" />

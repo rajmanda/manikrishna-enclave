@@ -39,7 +39,10 @@ async def _statement_data(db: Any, community_id: str, apartment_id: str) -> dict
     if apartment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Apartment not found")
     community = await db.communities.find_one({"id": community_id})
-    owner = await db.users.find_one({"id": {"$in": apartment.get("owner_ids", [])}})
+    owner = await db.users.find_one({
+        "id": {"$in": apartment.get("owner_ids", [])},
+        "community_id": community_id
+    })
     invoices = await db.invoices.find(
         {"community_id": community_id, "apartment_id": apartment_id}
     ).to_list(1000)

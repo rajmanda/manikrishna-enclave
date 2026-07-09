@@ -481,7 +481,7 @@ async def confirm_payment(payment_id: str, db: DB, user: CurrentUser) -> Payment
         )
     # Enqueue WhatsApp notification for payment received.
     if payment.get("reported_by"):
-        reporter = await db.users.find_one({"id": payment["reported_by"]})
+        reporter = await db.users.find_one({"id": payment["reported_by"], "community_id": user.community_id})
         if reporter and reporter.get("phone"):
             await enqueue_notification(
                 db,

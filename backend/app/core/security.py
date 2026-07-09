@@ -76,7 +76,10 @@ async def get_current_user(
             status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token"
         ) from exc
 
-    doc = await db.users.find_one({"id": payload.get("sub")})
+    doc = await db.users.find_one({
+        "id": payload.get("sub"),
+        "community_id": payload.get("community_id")
+    })
     if doc is None:
         # User removed from the whitelist since the token was issued.
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Access revoked")

@@ -18,6 +18,7 @@ from app.routers import (
     feed,
     finance,
     invoices,
+    leads,
     maintenance,
     manager_fees,
     meetings,
@@ -81,6 +82,7 @@ app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(finance.router, prefix=API_PREFIX)
 app.include_router(invoices.router, prefix=API_PREFIX)
+app.include_router(leads.router, prefix=API_PREFIX)
 app.include_router(statements.router, prefix=API_PREFIX)
 app.include_router(maintenance.router, prefix=API_PREFIX)
 app.include_router(manager_fees.router, prefix=API_PREFIX)
