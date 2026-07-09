@@ -54,12 +54,16 @@ function MemberDialog({
   const [role, setRole] = useState<Role>(member?.role ?? "owner");
   const [apartmentId, setApartmentId] = useState(member?.apartmentId ?? "");
   const [phone, setPhone] = useState(member?.phone ?? "");
+  const [preferredName, setPreferredName] = useState(member?.preferredName ?? "");
   const [dualOwner, setDualOwner] = useState(
     (member?.roles ?? []).includes("owner") && member?.role !== "owner"
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const nameParts = name.trim().split(/\s+/);
+  const derivedDisplayName =
+    nameParts.length >= 2 ? `${nameParts[0]} ${nameParts[nameParts.length - 1]}` : name.trim();
   const managerRole = role === "property_manager" || role === "community_admin";
   const customRoleSet = (member?.roles?.length ?? 0) > 2; // e.g. super user
   const sorted = [...(apartments ?? [])].sort((a, b) => a.number.localeCompare(b.number));
@@ -75,6 +79,8 @@ function MemberDialog({
       accountId,
       ...(apartmentId ? { apartmentId } : {}),
       ...(phone ? { phone } : {}),
+      // Always sent on edit so clearing the field clears the override ("" resets).
+      ...(member || preferredName.trim() ? { preferredName: preferredName.trim() } : {}),
     };
     // Custom multi-role sets (super users) are preserved, not overwritten.
     if (!customRoleSet) {
@@ -103,6 +109,19 @@ function MemberDialog({
         <div>
           <label className={labelCls}>Name</label>
           <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} required />
+        </div>
+        <div>
+          <label className={labelCls}>Display name (optional)</label>
+          <input
+            className={inputCls}
+            value={preferredName}
+            onChange={(e) => setPreferredName(e.target.value)}
+            placeholder={derivedDisplayName}
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Shown in group messages — apartment number is added automatically.
+            Leave blank to use the name above.
+          </p>
         </div>
         <div>
           <label className={labelCls}>Google email (this is the login whitelist)</label>

@@ -122,15 +122,19 @@ class User(APIModel):
     apartment_id: str | None = None  # primary apartment (legacy, derived from account)
     apartment_ids: list[str] = []  # all apartments via account — populated at login
     phone: str | None = None
+    preferred_name: str | None = None  # overrides the derived short name in messages
 
     @property
     def display_name(self) -> str:
         """Formatted short display name, e.g. 'Vijayaram Manda (401/402)' or 'Vishnu Manchala (Manager)'."""
-        parts = self.name.split()
-        if len(parts) >= 2:
-            short_name = f"{parts[0]} {parts[-1]}"
+        if self.preferred_name and self.preferred_name.strip():
+            short_name = self.preferred_name.strip()
         else:
-            short_name = self.name
+            parts = self.name.split()
+            if len(parts) >= 2:
+                short_name = f"{parts[0]} {parts[-1]}"
+            else:
+                short_name = self.name
 
         if self.role in ("property_manager", "community_admin", "super_admin"):
             return f"{short_name} (Manager)"
@@ -156,6 +160,7 @@ class UserCreate(APIModel):
     account_id: str | None = None
     apartment_id: str | None = None
     phone: str | None = None
+    preferred_name: str | None = None
 
 
 class UserUpdate(APIModel):
@@ -166,6 +171,7 @@ class UserUpdate(APIModel):
     account_id: str | None = None
     apartment_id: str | None = None
     phone: str | None = None
+    preferred_name: str | None = None  # "" clears the override
 
 
 class SwitchRoleRequest(APIModel):

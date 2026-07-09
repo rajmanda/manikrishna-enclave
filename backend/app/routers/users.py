@@ -40,6 +40,7 @@ async def create_user(body: UserCreate, db: DB, user: CurrentUser) -> User:
         role=body.role,
         apartment_id=body.apartment_id,
         phone=body.phone,
+        preferred_name=body.preferred_name,
     )
     await db.users.insert_one(new_user.model_dump())
     await record_audit(db, user, "create", "users", new_user.id, {"email": email})
