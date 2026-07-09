@@ -86,7 +86,7 @@ async def create_post(body: FeedPostCreate, db: DB, user: CurrentUser) -> FeedPo
             community_id=user.community_id,
             event_type="announcement_posted",
             title="New Announcement",
-            message=f"Announcement by {user.name}: {text[:150]}... Read more: https://community.rajmanda.com/feed",
+            message=f"Announcement by {user.display_name}: {text[:150]}... Read more: https://community.rajmanda.com/feed",
             payload={"post_id": post.id},
             exclude_user_id=user.id,
             actor_user=user,

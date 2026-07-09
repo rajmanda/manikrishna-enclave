@@ -123,6 +123,29 @@ class User(APIModel):
     apartment_ids: list[str] = []  # all apartments via account — populated at login
     phone: str | None = None
 
+    @property
+    def display_name(self) -> str:
+        """Formatted short display name, e.g. 'Vijayaram Manda (401/402)' or 'Vishnu Manchala (Manager)'."""
+        parts = self.name.split()
+        if len(parts) >= 2:
+            short_name = f"{parts[0]} {parts[-1]}"
+        else:
+            short_name = self.name
+
+        if self.role in ("property_manager", "community_admin", "super_admin"):
+            return f"{short_name} (Manager)"
+
+        apts = [a.replace("apt-", "") for a in self.apartment_ids if a]
+        if not apts and self.apartment_id:
+            apts = [self.apartment_id.replace("apt-", "")]
+
+        if apts:
+            apt_str = "/".join(apts)
+            return f"{short_name} ({apt_str})"
+
+        return short_name
+
+
 
 class UserCreate(APIModel):
     """Adding a user = whitelisting their Google account email."""
