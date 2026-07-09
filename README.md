@@ -23,7 +23,8 @@ Seed customer: **Mani Krishna Enclave**. Target: community.rajmanda.com.
 ```bash
 cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 cp .env.example .env          # set your MongoDB Atlas URI; SEED_ON_START=true first run
-.venv/bin/uvicorn app.main:app --reload
+#.venv/bin/uvicorn app.main:app --reload
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --reload
 
 cd frontend && npm install && npm run dev    # http://localhost:3000
 ```

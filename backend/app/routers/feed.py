@@ -18,7 +18,10 @@ from app.models import (
     ReactRequest,
 )
 from app.notify import notify_members
-from app.notification_service import enqueue_for_community_members
+from app.notification_service import (
+    enqueue_for_community_members,
+    enqueue_notification,
+)
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -80,17 +83,37 @@ async def create_post(body: FeedPostCreate, db: DB, user: CurrentUser) -> FeedPo
             f"New announcement: {text[:60]}{'…' if len(text) > 60 else ''}",
             "announcement", user.id, href="/feed",
         )
-        # Enqueue WhatsApp notification for community members.
-        await enqueue_for_community_members(
-            db,
-            community_id=user.community_id,
-            event_type="announcement_posted",
-            title="New Announcement",
-            message=f"Announcement by {user.display_name}: {text[:150]}... Read more: https://community.rajmanda.com/feed",
-            payload={"post_id": post.id},
-            exclude_user_id=user.id,
-            actor_user=user,
-        )
+
+    # Format group message nicely with type prefix
+    type_emoji = {
+        "announcement": "📢 Announcement",
+        "question": "❓ Question",
+        "suggestion": "💡 Suggestion",
+        "photo": "🖼️ Photo post"
+    }
+    prefix = type_emoji.get(body.type, "📝 Post")
+    excerpt = text[:400] + "..." if len(text) > 400 else text
+    
+    group_message = (
+        f"{prefix} by {user.display_name}:\n"
+        f"\"{excerpt}\"\n\n"
+        f"View/Reply: https://community.rajmanda.com/feed"
+    )
+
+    # Enqueue a single WhatsApp notification for the community group
+    await enqueue_notification(
+        db,
+        community_id=user.community_id,
+        recipient_type="group",
+        recipient_name="Community Group",
+        recipient_phone="group", # Tag for OpenClaw to send to the group chat
+        channel="whatsapp",
+        event_type="announcement_posted",
+        title=f"New {body.type.capitalize()}",
+        message=group_message,
+        payload={"post_id": post.id, "post_type": body.type},
+        actor_user=user,
+    )
     return _to_out(post.model_dump(), user.id)
 
 
