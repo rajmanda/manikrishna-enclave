@@ -208,7 +208,7 @@ export function Stat({
   return (
     <Card
       onClick={onClick}
-      className={`group relative overflow-hidden p-4 transition-all duration-200 ease-standard ${
+      className={`group relative overflow-hidden p-3 sm:p-4 transition-all duration-200 ease-standard ${
         onClick
           ? "cursor-pointer hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
           : ""
@@ -229,7 +229,7 @@ export function Stat({
       </div>
       <div className="mt-1.5 flex items-baseline gap-2">
         <p
-          className={`tabular min-w-0 truncate text-2xl font-bold tracking-tight sm:text-[26px] ${valueColor}`}
+          className={`tabular min-w-0 truncate text-[19px] font-bold tracking-tight sm:text-[26px] ${valueColor}`}
         >
           {value}
         </p>
