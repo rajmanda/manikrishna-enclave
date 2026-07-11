@@ -979,6 +979,7 @@ function InvoicesPageInner() {
           </div>
           <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
             <button
+              type="button"
               onClick={() => setFundsModal({ ledgerType: "community", metric: "billed", label: "Community Funds - Billed" })}
               className="group rounded-xl p-2 hover:bg-slate-50 transition text-center focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
@@ -986,6 +987,7 @@ function InvoicesPageInner() {
               <p className="tabular text-sm font-bold sm:text-base text-slate-800">{formatINR(c.billed)}</p>
             </button>
             <button
+              type="button"
               onClick={() => setFundsModal({ ledgerType: "community", metric: "collected", label: "Community Funds - Collected" })}
               className="group rounded-xl p-2 hover:bg-slate-50 transition text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
@@ -993,6 +995,7 @@ function InvoicesPageInner() {
               <p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(c.collected)}</p>
             </button>
             <button
+              type="button"
               onClick={() => setFundsModal({ ledgerType: "community", metric: "due", label: "Community Funds - Balance Due" })}
               className="group rounded-xl p-2 hover:bg-slate-50 transition text-center focus:outline-none focus:ring-2 focus:ring-red-500"
             >
@@ -1008,6 +1011,7 @@ function InvoicesPageInner() {
           </div>
           <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
             <button
+              type="button"
               onClick={() => setFundsModal({ ledgerType: "personal", metric: "billed", label: mine ? "Payable to Manager - Billed" : "Personal Funds - Billed" })}
               className="group rounded-xl p-2 hover:bg-violet-100/50 transition text-center focus:outline-none focus:ring-2 focus:ring-violet-500"
             >
@@ -1015,6 +1019,7 @@ function InvoicesPageInner() {
               <p className="tabular text-sm font-bold sm:text-base text-slate-800">{formatINR(p.billed)}</p>
             </button>
             <button
+              type="button"
               onClick={() => setFundsModal({ ledgerType: "personal", metric: "collected", label: mine ? "Payable to Manager - Collected" : "Personal Funds - Collected" })}
               className="group rounded-xl p-2 hover:bg-violet-100/50 transition text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
@@ -1022,6 +1027,7 @@ function InvoicesPageInner() {
               <p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(p.collected)}</p>
             </button>
             <button
+              type="button"
               onClick={() => setFundsModal({ ledgerType: "personal", metric: "due", label: mine ? "Payable to Manager - Balance Due" : "Personal Funds - Balance Due" })}
               className="group rounded-xl p-2 hover:bg-violet-100/50 transition text-center focus:outline-none focus:ring-2 focus:ring-red-500"
             >
