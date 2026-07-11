@@ -37,6 +37,7 @@ function PaymentsPageInner() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [statModal, setStatModal] = useState<"community" | "personal" | null>(null);
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
+  const [collapsedApts, setCollapsedApts] = useState<Record<string, boolean>>({});
   const payments = useApi<Payment[]>("/payments");
   const invoices = useApi<Invoice[]>("/invoices");
   const apartments = useApi<Apartment[]>("/apartments");
@@ -255,6 +256,19 @@ function PaymentsPageInner() {
             .filter((p) => (p.ledger ?? "community") !== "community")
             .reduce((s, p) => s + p.amount, 0);
           const isCollapsed = collapsedMonths[month] ?? false;
+
+          // Group items by apartment ID
+          const itemsByApt = (() => {
+            const map = new Map<string, typeof items>();
+            for (const item of items) {
+              const key = item.apartmentId;
+              const list = map.get(key) ?? [];
+              list.push(item);
+              map.set(key, list);
+            }
+            return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+          })();
+
           return (
             <section key={month} className="animate-rise">
               <button
@@ -273,49 +287,71 @@ function PaymentsPageInner() {
                 </p>
               </button>
               {!isCollapsed && (
-                <Card className="divide-y divide-slate-100">
-                {items.map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => setDetailId(p.invoiceId)}
-                    className={`flex cursor-pointer items-center justify-between gap-3 p-4 hover:bg-slate-50/60 ${ledgerAccent(p.ledger)}`}
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                        <Banknote className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                          <span className="truncate">{paymentTitle(p)}</span>
-                          <LedgerBadge ledger={p.ledger} />
-                        </p>
-                        <p className="truncate text-xs text-slate-500">
-                          {ownerNameFor(users.data, apartments.data, p.apartmentId)} ·{" "}
-                          {formatDate(p.date)}
-                          {p.reference && ` · ${p.reference}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-sm font-semibold">{formatINR(p.amount)}</span>
-                      <Badge tone="slate">{p.method}</Badge>
-                      {canDelete && (
+                <div className="space-y-4 mt-2">
+                  {itemsByApt.map(([aptId, aptItems]) => {
+                    const aptKey = `${month}_${aptId}`;
+                    const isAptCollapsed = collapsedApts[aptKey] ?? false;
+                    return (
+                      <div key={aptId} className="space-y-1">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            reverse(p);
-                          }}
-                          disabled={deletingId === p.id}
-                          title="Reverse payment"
-                          className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                          type="button"
+                          onClick={() => setCollapsedApts((prev) => ({ ...prev, [aptKey]: !prev[aptKey] }))}
+                          className="flex w-full items-center justify-between px-1 py-1 hover:bg-slate-50 rounded transition text-left focus:outline-none"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <span className="text-2xs font-semibold uppercase tracking-wider text-slate-400">
+                            Apt {aptNumber(aptId)}
+                          </span>
+                          <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${isAptCollapsed ? "-rotate-90" : ""}`} />
                         </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </Card>
+                        {!isAptCollapsed && (
+                          <Card className="divide-y divide-slate-100">
+                            {aptItems.map((p) => (
+                              <div
+                                key={p.id}
+                                onClick={() => setDetailId(p.invoiceId)}
+                                className={`flex cursor-pointer items-center justify-between gap-3 p-4 hover:bg-slate-50/60 ${ledgerAccent(p.ledger)}`}
+                              >
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                                    <Banknote className="h-4 w-4" />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                                      <span className="truncate">{paymentTitle(p)}</span>
+                                      <LedgerBadge ledger={p.ledger} />
+                                    </p>
+                                    <p className="truncate text-xs text-slate-500">
+                                      {ownerNameFor(users.data, apartments.data, p.apartmentId)} ·{" "}
+                                      {formatDate(p.date)}
+                                      {p.reference && ` · ${p.reference}`}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <span className="text-sm font-semibold">{formatINR(p.amount)}</span>
+                                  <Badge tone="slate">{p.method}</Badge>
+                                  {canDelete && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        reverse(p);
+                                      }}
+                                      disabled={deletingId === p.id}
+                                      title="Reverse payment"
+                                      className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </Card>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </section>
           );

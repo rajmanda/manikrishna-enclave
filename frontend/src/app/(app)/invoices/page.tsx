@@ -710,6 +710,7 @@ function InvoicesPageInner() {
     label: string;
   } | null>(null);
   const [collapsedPeriods, setCollapsedPeriods] = useState<Record<string, boolean>>({});
+  const [collapsedApts, setCollapsedApts] = useState<Record<string, boolean>>({});
 
   const pendingInvoiceIds = new Set(
     (payments.data ?? []).filter((p) => p.status === "pending").map((p) => p.invoiceId)
@@ -1137,6 +1138,19 @@ function InvoicesPageInner() {
         const gcDue = gc.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0);
         const gpDue = gp.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0);
         const isCollapsed = collapsedPeriods[period] ?? false;
+
+        // Group items by apartment ID
+        const itemsByApt = (() => {
+          const map = new Map<string, typeof items>();
+          for (const item of items) {
+            const key = item.apartmentId;
+            const list = map.get(key) ?? [];
+            list.push(item);
+            map.set(key, list);
+          }
+          return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+        })();
+
         return (
           <section key={period} className="animate-rise">
             <button
@@ -1159,86 +1173,108 @@ function InvoicesPageInner() {
               </p>
             </button>
             {!isCollapsed && (
-              <Card className="divide-y divide-slate-100">
-              {items.map((inv) => {
-                const balance = inv.amount - inv.paidAmount;
-          return (
-            <div
-              key={inv.id}
-              onClick={() => setDetailId(inv.id)}
-              className={`cursor-pointer p-4 hover:bg-slate-50/60 ${ledgerAccent(inv.ledger)}`}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                    {mine ? inv.description : `${inv.description} — ${inv.period}`}
-                    {(!inv.ledger || inv.ledger === "community") && (
-                      <Badge tone="blue">Community</Badge>
-                    )}
-                    {inv.ledger === "manager_fee" && (
-                      <Badge tone="violet">Manager fee</Badge>
-                    )}
-                  </p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {!mine &&
-                      `Apt ${aptNumber(inv.apartmentId)} · ${ownerNameFor(users.data, apartments.data, inv.apartmentId)} · `}
-                    Due {formatDate(inv.dueDate)}
-                    {inv.status === "partial" &&
-                      ` · Paid ${formatINR(inv.paidAmount)} of ${formatINR(inv.amount)}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <span className="tabular text-sm font-bold text-slate-900">{formatINR(inv.amount)}</span>
-                  <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
-                  {canDelete && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(inv);
-                      }}
-                      disabled={deletingId === inv.id}
-                      title="Delete invoice"
-                      className="ml-1 rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+              <div className="space-y-4 mt-2">
+                {itemsByApt.map(([aptId, aptItems]) => {
+                  const aptKey = `${period}_${aptId}`;
+                  const isAptCollapsed = collapsedApts[aptKey] ?? false;
+                  return (
+                    <div key={aptId} className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedApts((prev) => ({ ...prev, [aptKey]: !prev[aptKey] }))}
+                        className="flex w-full items-center justify-between px-1 py-1 hover:bg-slate-50 rounded transition text-left focus:outline-none"
+                      >
+                        <span className="text-2xs font-semibold uppercase tracking-wider text-slate-400">
+                          Apt {aptNumber(aptId)}
+                        </span>
+                        <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${isAptCollapsed ? "-rotate-90" : ""}`} />
+                      </button>
+                      {!isAptCollapsed && (
+                        <Card className="divide-y divide-slate-100">
+                          {aptItems.map((inv) => {
+                            const balance = inv.amount - inv.paidAmount;
+                            return (
+                              <div
+                                key={inv.id}
+                                onClick={() => setDetailId(inv.id)}
+                                className={`cursor-pointer p-4 hover:bg-slate-50/60 ${ledgerAccent(inv.ledger)}`}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                                      {mine ? inv.description : `${inv.description} — ${inv.period}`}
+                                      {(!inv.ledger || inv.ledger === "community") && (
+                                        <Badge tone="blue">Community</Badge>
+                                      )}
+                                      {inv.ledger === "manager_fee" && (
+                                        <Badge tone="violet">Manager fee</Badge>
+                                      )}
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-slate-500">
+                                      {!mine &&
+                                        `${ownerNameFor(users.data, apartments.data, inv.apartmentId)} · `}
+                                      Due {formatDate(inv.dueDate)}
+                                      {inv.status === "partial" &&
+                                        ` · Paid ${formatINR(inv.paidAmount)} of ${formatINR(inv.amount)}`}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2.5">
+                                    <span className="tabular text-sm font-bold text-slate-900">{formatINR(inv.amount)}</span>
+                                    <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
+                                    {canDelete && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDelete(inv);
+                                        }}
+                                        disabled={deletingId === inv.id}
+                                        title="Delete invoice"
+                                        className="ml-1 rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                {canWrite && balance > 0 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPayInvoice(inv);
+                                    }}
+                                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                                  >
+                                    <Banknote className="h-3.5 w-3.5" />
+                                    Record payment
+                                  </button>
+                                )}
+                                {mine && balance > 0 && (
+                                  pendingInvoiceIds.has(inv.id) ? (
+                                    <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+                                      Payment reported — awaiting confirmation from the manager
+                                    </p>
+                                  ) : (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setReportInvoice(inv);
+                                      }}
+                                      className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700"
+                                    >
+                                      <Banknote className="h-3.5 w-3.5" />
+                                      I&apos;ve paid this — report payment
+                                    </button>
+                                  )
+                                )}
+                              </div>
+                            );
+                          })}
+                        </Card>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              {canWrite && balance > 0 && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPayInvoice(inv);
-                  }}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                >
-                  <Banknote className="h-3.5 w-3.5" />
-                  Record payment
-                </button>
-              )}
-              {mine && balance > 0 && (
-                pendingInvoiceIds.has(inv.id) ? (
-                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
-                    Payment reported — awaiting confirmation from the manager
-                  </p>
-                ) : (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setReportInvoice(inv);
-                    }}
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700"
-                  >
-                    <Banknote className="h-3.5 w-3.5" />
-                    I&apos;ve paid this — report payment
-                  </button>
-                )
-              )}
-                </div>
-              );
-            })}
-              </Card>
             )}
           </section>
         );
