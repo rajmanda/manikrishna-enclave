@@ -704,11 +704,26 @@ function InvoicesPageInner() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [statModal, setStatModal] = useState<"billed" | "paid" | "due" | null>(null);
+  const [selectedStatInvoiceId, setSelectedStatInvoiceId] = useState<string | null>(null);
+  const [collapsedModalPeriods, setCollapsedModalPeriods] = useState<Record<string, boolean>>({});
+
+  const closeStatModal = () => {
+    setStatModal(null);
+    setSelectedStatInvoiceId(null);
+    setCollapsedModalPeriods({});
+  };
   const [fundsModal, setFundsModal] = useState<{
     ledgerType: "community" | "personal";
     metric: "billed" | "collected" | "due";
     label: string;
   } | null>(null);
+  const [selectedFundsInvoiceId, setSelectedFundsInvoiceId] = useState<string | null>(null);
+
+  const closeFundsModal = () => {
+    setFundsModal(null);
+    setSelectedFundsInvoiceId(null);
+    setCollapsedModalPeriods({});
+  };
   const [collapsedPeriods, setCollapsedPeriods] = useState<Record<string, boolean>>({});
   const [collapsedApts, setCollapsedApts] = useState<Record<string, boolean>>({});
 
@@ -1338,13 +1353,15 @@ function InvoicesPageInner() {
       {statModal && (
         <Modal
           title={
-            statModal === "billed"
-              ? "All Charges"
-              : statModal === "paid"
-                ? "What You've Paid"
-                : "Balance Due"
+            selectedStatInvoiceId
+              ? "Invoice Details"
+              : statModal === "billed"
+                ? "All Charges"
+                : statModal === "paid"
+                  ? "What You've Paid"
+                  : "Balance Due"
           }
-          onClose={() => setStatModal(null)}
+          onClose={selectedStatInvoiceId ? () => setSelectedStatInvoiceId(null) : closeStatModal}
         >
           {(() => {
             const rows =
@@ -1353,67 +1370,229 @@ function InvoicesPageInner() {
                 : statModal === "paid"
                   ? sorted.filter((i) => i.paidAmount > 0)
                   : sorted.filter((i) => i.amount - i.paidAmount > 0);
+
             const amountOf = (i: Invoice) =>
               statModal === "billed"
                 ? i.amount
                 : statModal === "paid"
                   ? i.paidAmount
                   : i.amount - i.paidAmount;
+
+            if (selectedStatInvoiceId) {
+              const inv = rows.find((i) => i.id === selectedStatInvoiceId);
+              if (!inv) return <p className="text-sm text-slate-500">Invoice not found.</p>;
+              const balance = inv.amount - inv.paidAmount;
+              
+              return (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => setSelectedStatInvoiceId(null)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+                  >
+                    ← Back to {statModal === "billed" ? "All Charges" : statModal === "paid" ? "What You've Paid" : "Balance Due"}
+                  </button>
+                  
+                  <div className="space-y-2 border-b border-slate-100 pb-3">
+                    <p className="text-2xs font-semibold uppercase tracking-wider text-slate-400">Invoice</p>
+                    <h3 className="text-base font-bold text-slate-800">{inv.description}</h3>
+                    <p className="text-xs text-slate-500">Period: {monthLabel(inv.dueDate)}</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-3">
+                    <div>
+                      <p className="text-[10px] uppercase font-semibold text-slate-400">Amount</p>
+                      <p className="text-sm font-semibold text-slate-700">{formatINR(inv.amount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-semibold text-slate-400">Paid Amount</p>
+                      <p className="text-sm font-semibold text-emerald-600">{formatINR(inv.paidAmount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-semibold text-slate-400">Balance Due</p>
+                      <p className="text-sm font-bold text-red-600">{formatINR(balance)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-semibold text-slate-400">Due Date</p>
+                      <p className="text-xs text-slate-600">{formatDate(inv.dueDate)}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="text-xs text-slate-500 space-y-1">
+                    <p>Ledger: <span className="font-semibold text-slate-700">{inv.ledger || "Community"}</span></p>
+                    <p>Status: <span className="font-semibold text-slate-700 uppercase">{inv.status}</span></p>
+                  </div>
+
+                  {mine && balance > 0 && (
+                    <div className="pt-2">
+                      <button
+                        onClick={() => {
+                          setSelectedStatInvoiceId(null);
+                          setStatModal(null);
+                          setReportInvoice(inv);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700"
+                      >
+                        I&apos;ve paid this — report payment
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Group by Month (period)
+            const byMonth = new Map<string, number>();
+            for (const i of rows) {
+              const month = monthLabel(i.dueDate);
+              byMonth.set(month, (byMonth.get(month) ?? 0) + amountOf(i));
+            }
+            const monthRows = [...byMonth.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+
+            // Group by Category
+            const byCategory = new Map<string, number>();
+            for (const i of rows) {
+              let cat = "Community Maintenance";
+              if (i.ledger === "manager_fee") cat = "Manager Service Fee";
+              if (i.ledger === "reimbursement") cat = "Reimbursement";
+              byCategory.set(cat, (byCategory.get(cat) ?? 0) + amountOf(i));
+            }
+            const catRows = [...byCategory.entries()].sort((a, b) => b[1] - a[1]);
+
             if (rows.length === 0)
               return (
                 <p className="py-6 text-center text-sm text-slate-400">
                   {statModal === "due" ? "Nothing due — all clear. 🎉" : "Nothing here yet."}
                 </p>
               );
+
             return (
-              <div className="divide-y divide-slate-100">
-                {rows.map((inv) => (
-                  <button
-                    key={inv.id}
-                    onClick={() => {
-                      setStatModal(null);
-                      setDetailId(inv.id);
-                    }}
-                    className="flex w-full items-start justify-between gap-3 py-2.5 text-left hover:bg-slate-50"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{inv.description}</p>
-                      <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-                        <LedgerBadge ledger={inv.ledger} />
-                        {inv.period} · due {formatDate(inv.dueDate)}
-                      </p>
-                    </div>
-                    <p
-                      className={`shrink-0 text-sm font-semibold ${
-                        statModal === "due"
-                          ? "text-red-600"
-                          : statModal === "paid"
-                            ? "text-emerald-600"
-                            : ""
-                      }`}
-                    >
-                      {formatINR(amountOf(inv))}
-                    </p>
-                  </button>
-                ))}
-                <div className="flex items-center justify-between pt-3">
-                  <p className="text-sm font-bold">Total</p>
-                  <p className="text-sm font-bold">
+              <div className="space-y-5">
+                <div>
+                  <p className="text-2xl font-bold text-slate-800">
                     {formatINR(rows.reduce((sum, i) => sum + amountOf(i), 0))}
                   </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Total {statModal === "billed" ? "charges" : statModal === "paid" ? "payments" : "balance due"}
+                  </p>
+                </div>
+
+                {/* Monthly Table */}
+                <div className="space-y-1.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">By Month</h3>
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="grid grid-cols-2 bg-slate-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 text-right">
+                      <span className="text-left">Month</span>
+                      <span>Amount</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {monthRows.map(([month, val]) => (
+                        <div key={month} className="grid grid-cols-2 items-center px-3 py-2 text-xs text-right">
+                          <span className="text-left font-medium text-slate-700">{month}</span>
+                          <span className="font-semibold text-slate-800">{formatINR(val)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category Table */}
+                <div className="space-y-1.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">By Category</h3>
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="grid grid-cols-2 bg-slate-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 text-right">
+                      <span className="text-left">Category</span>
+                      <span>Amount</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {catRows.map(([cat, val]) => (
+                        <div key={cat} className="grid grid-cols-2 items-center px-3 py-2 text-xs text-right">
+                          <span className="text-left font-medium text-slate-700">{cat}</span>
+                          <span className="font-semibold text-slate-800">{formatINR(val)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Individual invoices grouped by month */}
+                <div className="space-y-1.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Items (Tap to view details)</h3>
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {(() => {
+                      const itemsByMonth = new Map<string, Invoice[]>();
+                      for (const inv of rows) {
+                        const month = monthLabel(inv.dueDate);
+                        const list = itemsByMonth.get(month) ?? [];
+                        list.push(inv);
+                        itemsByMonth.set(month, list);
+                      }
+                      const itemsByMonthList = [...itemsByMonth.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+
+                      return itemsByMonthList.map(([month, monthItems]) => {
+                        const isCollapsed = collapsedModalPeriods[month] !== false; // collapsed by default
+                        const monthTotal = monthItems.reduce((sum, inv) => sum + amountOf(inv), 0);
+                        
+                        return (
+                          <div key={month} className="space-y-1">
+                            <button
+                              type="button"
+                              onClick={() => setCollapsedModalPeriods(prev => ({ ...prev, [month]: !isCollapsed }))}
+                              className="flex w-full items-center justify-between bg-slate-50 px-2 py-1.5 text-2xs font-semibold text-slate-500 rounded hover:bg-slate-100 transition-colors"
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-semibold text-slate-600">{month}</span>
+                                <span className="inline-flex items-center rounded-full bg-slate-200/60 px-1.5 py-0.5 text-[9px] font-medium text-slate-600">
+                                  Total: {formatINR(monthTotal)}
+                                </span>
+                              </div>
+                              <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transform transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`} />
+                            </button>
+                            
+                            {!isCollapsed && (
+                              <div className="divide-y divide-slate-100 pl-1">
+                                {monthItems.map((inv) => (
+                                  <button
+                                    key={inv.id}
+                                    type="button"
+                                    onClick={() => setSelectedStatInvoiceId(inv.id)}
+                                    className="flex justify-between items-start w-full py-2 text-xs hover:bg-slate-50 rounded px-1 transition text-left"
+                                  >
+                                    <div className="min-w-0 mr-2">
+                                      <p className="font-medium text-slate-800 hover:text-brand-600 truncate">{inv.description}</p>
+                                      <p className="text-[10px] text-slate-400 mt-0.5 font-normal">
+                                        Due {formatDate(inv.dueDate)}
+                                      </p>
+                                    </div>
+                                    <span
+                                      className={`font-semibold shrink-0 ml-2 ${
+                                        statModal === "due"
+                                          ? "text-red-600"
+                                          : statModal === "paid"
+                                            ? "text-emerald-600"
+                                            : "text-slate-800"
+                                      }`}
+                                    >
+                                      {formatINR(amountOf(inv))}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
                 </div>
               </div>
             );
           })()}
-          <p className="mt-3 text-xs text-slate-400">
-            Tap a row for the full invoice with its payment history.
-          </p>
         </Modal>
       )}
       {fundsModal && (
         <Modal
-          title={fundsModal.label}
-          onClose={() => setFundsModal(null)}
+          title={selectedFundsInvoiceId ? "Invoice Details" : fundsModal.label}
+          onClose={selectedFundsInvoiceId ? () => setSelectedFundsInvoiceId(null) : closeFundsModal}
         >
           {(() => {
             const baseInvoices = allInvoices.filter((i) => {
@@ -1432,53 +1611,213 @@ function InvoicesPageInner() {
                 : fundsModal.metric === "collected"
                   ? i.paidAmount
                   : i.amount - i.paidAmount;
-            
-            const sortedRows = [...rows].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
 
-            if (sortedRows.length === 0)
+            if (selectedFundsInvoiceId) {
+              const inv = rows.find((i) => i.id === selectedFundsInvoiceId);
+              if (!inv) return <p className="text-sm text-slate-500">Invoice not found.</p>;
+              const balance = inv.amount - inv.paidAmount;
+              
+              return (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => setSelectedFundsInvoiceId(null)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+                  >
+                    ← Back to {fundsModal.label}
+                  </button>
+                  
+                  <div className="space-y-2 border-b border-slate-100 pb-3">
+                    <p className="text-2xs font-semibold uppercase tracking-wider text-slate-400">Invoice Details</p>
+                    <h3 className="text-base font-bold text-slate-800">Apt {aptNumber(inv.apartmentId)} · {inv.description}</h3>
+                    <p className="text-xs text-slate-500">Period: {monthLabel(inv.dueDate)}</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-3">
+                    <div>
+                      <p className="text-[10px] uppercase font-semibold text-slate-400">Amount</p>
+                      <p className="text-sm font-semibold text-slate-700">{formatINR(inv.amount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-semibold text-slate-400">Paid Amount</p>
+                      <p className="text-sm font-semibold text-emerald-600">{formatINR(inv.paidAmount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-semibold text-slate-400">Balance Due</p>
+                      <p className="text-sm font-bold text-red-600">{formatINR(balance)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-semibold text-slate-400">Due Date</p>
+                      <p className="text-xs text-slate-600">{formatDate(inv.dueDate)}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="text-xs text-slate-500 space-y-1">
+                    <p>Ledger: <span className="font-semibold text-slate-700">{inv.ledger || "Community"}</span></p>
+                    <p>Status: <span className="font-semibold text-slate-700 uppercase">{inv.status}</span></p>
+                  </div>
+
+                  {mine && balance > 0 && (
+                    <div className="pt-2">
+                      <button
+                        onClick={() => {
+                          setSelectedFundsInvoiceId(null);
+                          setFundsModal(null);
+                          setReportInvoice(inv);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700"
+                      >
+                        I&apos;ve paid this — report payment
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Group by Month (using monthLabel(i.dueDate))
+            const byMonth = new Map<string, number>();
+            for (const i of rows) {
+              const month = monthLabel(i.dueDate);
+              byMonth.set(month, (byMonth.get(month) ?? 0) + amountOf(i));
+            }
+            const monthRows = [...byMonth.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+
+            // Group by Category
+            const byCategory = new Map<string, number>();
+            for (const i of rows) {
+              let cat = "Community Maintenance";
+              if (i.ledger === "manager_fee") cat = "Manager Service Fee";
+              if (i.ledger === "reimbursement") cat = "Reimbursement";
+              byCategory.set(cat, (byCategory.get(cat) ?? 0) + amountOf(i));
+            }
+            const catRows = [...byCategory.entries()].sort((a, b) => b[1] - a[1]);
+
+            if (rows.length === 0)
               return (
                 <p className="py-6 text-center text-sm text-slate-400">
                   No invoices found.
                 </p>
               );
+
+            // Group rows by month label for items list
+            const itemsByMonth = new Map<string, Invoice[]>();
+            for (const i of rows) {
+              const month = monthLabel(i.dueDate);
+              const list = itemsByMonth.get(month) ?? [];
+              list.push(i);
+              itemsByMonth.set(month, list);
+            }
+            const itemsByMonthList = [...itemsByMonth.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+
             return (
-              <div className="divide-y divide-slate-100 max-h-[60vh] overflow-y-auto pr-1">
-                {sortedRows.map((inv) => (
-                  <button
-                    key={inv.id}
-                    onClick={() => {
-                      setFundsModal(null);
-                      setDetailId(inv.id);
-                    }}
-                    className="flex w-full items-start justify-between gap-3 py-2.5 text-left hover:bg-slate-50 rounded-lg px-2 -mx-2 transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">
-                        Apt {aptNumber(inv.apartmentId)} · {inv.description}
-                      </p>
-                      <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-                        <LedgerBadge ledger={inv.ledger} />
-                        {inv.period} · due {formatDate(inv.dueDate)}
-                      </p>
-                    </div>
-                    <p
-                      className={`shrink-0 text-sm font-semibold ${
-                        fundsModal.metric === "due"
-                          ? "text-red-600"
-                          : fundsModal.metric === "collected"
-                            ? "text-emerald-600"
-                            : "text-slate-800"
-                      }`}
-                    >
-                      {formatINR(amountOf(inv))}
-                    </p>
-                  </button>
-                ))}
-                <div className="flex items-center justify-between pt-3 font-bold text-slate-800">
-                  <p className="text-sm">Total</p>
-                  <p className="text-sm">
-                    {formatINR(sortedRows.reduce((sum, i) => sum + amountOf(i), 0))}
+              <div className="space-y-5">
+                <div>
+                  <p className="text-2xl font-bold text-slate-800">
+                    {formatINR(rows.reduce((sum, i) => sum + amountOf(i), 0))}
                   </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Total
+                  </p>
+                </div>
+
+                {/* Monthly Table */}
+                <div className="space-y-1.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">By Month</h3>
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="grid grid-cols-2 bg-slate-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 text-right">
+                      <span className="text-left">Month</span>
+                      <span>Amount</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {monthRows.map(([month, val]) => (
+                        <div key={month} className="grid grid-cols-2 items-center px-3 py-2 text-xs text-right">
+                          <span className="text-left font-medium text-slate-700">{month}</span>
+                          <span className="font-semibold text-slate-800">{formatINR(val)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category Table */}
+                <div className="space-y-1.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">By Category</h3>
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="grid grid-cols-2 bg-slate-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 text-right">
+                      <span className="text-left">Category</span>
+                      <span>Amount</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {catRows.map(([cat, val]) => (
+                        <div key={cat} className="grid grid-cols-2 items-center px-3 py-2 text-xs text-right">
+                          <span className="text-left font-medium text-slate-700">{cat}</span>
+                          <span className="font-semibold text-slate-800">{formatINR(val)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Individual invoices grouped by month */}
+                <div className="space-y-1.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Items (Tap to view details)</h3>
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {itemsByMonthList.map(([month, monthItems]) => {
+                      const isCollapsed = collapsedModalPeriods[month] !== false; // collapsed by default
+                      const monthTotal = monthItems.reduce((sum, i) => sum + amountOf(i), 0);
+                      
+                      return (
+                        <div key={month} className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => setCollapsedModalPeriods(prev => ({ ...prev, [month]: !isCollapsed }))}
+                            className="flex w-full items-center justify-between bg-slate-50 px-2 py-1.5 text-2xs font-semibold text-slate-500 rounded hover:bg-slate-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-semibold text-slate-600">{month}</span>
+                              <span className="inline-flex items-center rounded-full bg-slate-200/60 px-1.5 py-0.5 text-[9px] font-medium text-slate-600">
+                                Total: {formatINR(monthTotal)}
+                              </span>
+                            </div>
+                            <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transform transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`} />
+                          </button>
+                          
+                          {!isCollapsed && (
+                            <div className="divide-y divide-slate-100 pl-1">
+                              {monthItems.map((inv) => (
+                                <button
+                                  key={inv.id}
+                                  type="button"
+                                  onClick={() => setSelectedFundsInvoiceId(inv.id)}
+                                  className="flex justify-between items-start w-full py-2 text-xs hover:bg-slate-50 rounded px-1 transition text-left"
+                                >
+                                  <div className="min-w-0 mr-2">
+                                    <p className="font-medium text-slate-800 hover:text-brand-600 truncate">
+                                      Apt {aptNumber(inv.apartmentId)} · {inv.description}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 mt-0.5 font-normal">
+                                      Due {formatDate(inv.dueDate)}
+                                    </p>
+                                  </div>
+                                  <span
+                                    className={`font-semibold shrink-0 ml-2 ${
+                                      fundsModal.metric === "due"
+                                        ? "text-red-600"
+                                        : fundsModal.metric === "collected"
+                                          ? "text-emerald-600"
+                                          : "text-slate-800"
+                                    }`}
+                                  >
+                                    {formatINR(amountOf(inv))}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             );

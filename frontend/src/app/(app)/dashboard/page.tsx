@@ -439,6 +439,12 @@ function OwnerDashboard() {
           {(() => {
             const dueInvoices = (invoices.data ?? []).filter((i) => i.amount - i.paidAmount > 0);
             
+            const monthLabel = (dueDate: string): string => {
+              const d = new Date(dueDate + "T00:00:00");
+              if (isNaN(d.getTime())) return "Other";
+              return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+            };
+
             // If an invoice is selected, render its details drilldown view!
             if (selectedInvoiceId) {
               const inv = dueInvoices.find((i) => i.id === selectedInvoiceId);
@@ -458,7 +464,7 @@ function OwnerDashboard() {
                   <div className="space-y-2 border-b border-slate-100 pb-3">
                     <p className="text-2xs font-semibold uppercase tracking-wider text-slate-400">Invoice</p>
                     <h3 className="text-base font-bold text-slate-800">{inv.description}</h3>
-                    <p className="text-xs text-slate-500">Period: {inv.period}</p>
+                    <p className="text-xs text-slate-500">Period: {monthLabel(inv.dueDate)}</p>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-3">
@@ -502,7 +508,7 @@ function OwnerDashboard() {
             // Group by Month (period)
             const byMonth = new Map<string, { community: number; personal: number }>();
             for (const i of dueInvoices) {
-              const month = i.period;
+              const month = monthLabel(i.dueDate);
               const isComm = (i.ledger ?? "community") === "community";
               const cur = byMonth.get(month) ?? { community: 0, personal: 0 };
               if (isComm) cur.community += i.amount - i.paidAmount;
