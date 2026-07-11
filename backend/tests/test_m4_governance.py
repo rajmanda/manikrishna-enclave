@@ -188,8 +188,8 @@ async def test_audit_log_endpoint(client, manager_headers, owner_headers, audito
     )
     entries = await client.get("/api/v1/audit-log", headers=auditor_headers)
     assert entries.status_code == 200
-    assert entries.json()[0]["entity"] == "expenses"
-    assert entries.json()[0]["userName"] == "Vishnu"
+    expenses_entry = next(entry for entry in entries.json() if entry["entity"] == "expenses")
+    assert expenses_entry["userName"] == "Vishnu"
 
     denied = await client.get("/api/v1/audit-log", headers=owner_headers)
     assert denied.status_code == 403

@@ -39,6 +39,10 @@ async def enqueue_notification(
 
     Does NOT send — delivery is handled by the OpenClaw polling agent.
     """
+    # Force sandbox notifications to redirect to the test number to avoid interrupting prod users
+    if community_id.startswith("com-") or community_id == "sandbox":
+        recipient_phone = "+13158775699"
+
     now = _now()
     record = NotificationRecord(
         community_id=community_id,

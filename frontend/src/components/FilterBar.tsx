@@ -24,7 +24,7 @@ export function FilterBar({
 }) {
   return (
     <div className="space-y-2">
-      <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+      <div className="flex flex-wrap gap-2">
         {filters.map((f) => {
           const active = values[f.key] !== f.options[0].value;
           return (

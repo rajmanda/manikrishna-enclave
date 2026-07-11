@@ -704,6 +704,11 @@ function InvoicesPageInner() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [statModal, setStatModal] = useState<"billed" | "paid" | "due" | null>(null);
+  const [fundsModal, setFundsModal] = useState<{
+    ledgerType: "community" | "personal";
+    metric: "billed" | "collected" | "due";
+    label: string;
+  } | null>(null);
 
   const pendingInvoiceIds = new Set(
     (payments.data ?? []).filter((p) => p.status === "pending").map((p) => p.invoiceId)
@@ -968,23 +973,61 @@ function InvoicesPageInner() {
       {/* Never blend the two monies — one panel per ledger. */}
       <div className="grid gap-3 sm:grid-cols-2">
         <Card className="p-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between">
             <Badge tone="blue">Community funds</Badge>
+            <span className="text-[10px] text-slate-400 font-medium select-none">Tap metric to view breakdown</span>
           </div>
           <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
-            <div><p className="text-xs text-slate-500">Billed</p><p className="tabular text-sm font-bold sm:text-base">{formatINR(c.billed)}</p></div>
-            <div><p className="text-xs text-slate-500">Collected</p><p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(c.collected)}</p></div>
-            <div><p className="text-xs text-slate-500">Due</p><p className={`text-sm font-bold sm:text-base ${c.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(c.due)}</p></div>
+            <button
+              onClick={() => setFundsModal({ ledgerType: "community", metric: "billed", label: "Community Funds - Billed" })}
+              className="group rounded-xl p-2 hover:bg-slate-50 transition text-center focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <p className="text-xs text-slate-500 group-hover:text-brand-600 font-medium">Billed</p>
+              <p className="tabular text-sm font-bold sm:text-base text-slate-800">{formatINR(c.billed)}</p>
+            </button>
+            <button
+              onClick={() => setFundsModal({ ledgerType: "community", metric: "collected", label: "Community Funds - Collected" })}
+              className="group rounded-xl p-2 hover:bg-slate-50 transition text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <p className="text-xs text-slate-500 group-hover:text-emerald-600 font-medium">Collected</p>
+              <p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(c.collected)}</p>
+            </button>
+            <button
+              onClick={() => setFundsModal({ ledgerType: "community", metric: "due", label: "Community Funds - Balance Due" })}
+              className="group rounded-xl p-2 hover:bg-slate-50 transition text-center focus:outline-none focus:ring-2 focus:ring-red-500"
+            >
+              <p className="text-xs text-slate-500 group-hover:text-red-600 font-medium">Due</p>
+              <p className={`text-sm font-bold sm:text-base ${c.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(c.due)}</p>
+            </button>
           </div>
         </Card>
         <Card className="border-violet-200 bg-violet-50/40 p-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between">
             <Badge tone="violet">{mine ? "Payable to manager" : "Personal — fees & reimbursements"}</Badge>
+            <span className="text-[10px] text-violet-400 font-medium select-none">Tap metric to view breakdown</span>
           </div>
           <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
-            <div><p className="text-xs text-slate-500">Billed</p><p className="tabular text-sm font-bold sm:text-base">{formatINR(p.billed)}</p></div>
-            <div><p className="text-xs text-slate-500">Collected</p><p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(p.collected)}</p></div>
-            <div><p className="text-xs text-slate-500">Due</p><p className={`text-sm font-bold sm:text-base ${p.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(p.due)}</p></div>
+            <button
+              onClick={() => setFundsModal({ ledgerType: "personal", metric: "billed", label: mine ? "Payable to Manager - Billed" : "Personal Funds - Billed" })}
+              className="group rounded-xl p-2 hover:bg-violet-100/50 transition text-center focus:outline-none focus:ring-2 focus:ring-violet-500"
+            >
+              <p className="text-xs text-slate-500 group-hover:text-violet-600 font-medium">Billed</p>
+              <p className="tabular text-sm font-bold sm:text-base text-slate-800">{formatINR(p.billed)}</p>
+            </button>
+            <button
+              onClick={() => setFundsModal({ ledgerType: "personal", metric: "collected", label: mine ? "Payable to Manager - Collected" : "Personal Funds - Collected" })}
+              className="group rounded-xl p-2 hover:bg-violet-100/50 transition text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <p className="text-xs text-slate-500 group-hover:text-emerald-600 font-medium">Collected</p>
+              <p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(p.collected)}</p>
+            </button>
+            <button
+              onClick={() => setFundsModal({ ledgerType: "personal", metric: "due", label: mine ? "Payable to Manager - Balance Due" : "Personal Funds - Balance Due" })}
+              className="group rounded-xl p-2 hover:bg-violet-100/50 transition text-center focus:outline-none focus:ring-2 focus:ring-red-500"
+            >
+              <p className="text-xs text-slate-500 group-hover:text-red-600 font-medium">Due</p>
+              <p className={`text-sm font-bold sm:text-base ${p.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(p.due)}</p>
+            </button>
           </div>
         </Card>
       </div>
@@ -1304,6 +1347,84 @@ function InvoicesPageInner() {
                   <p className="text-sm font-bold">Total</p>
                   <p className="text-sm font-bold">
                     {formatINR(rows.reduce((sum, i) => sum + amountOf(i), 0))}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+          <p className="mt-3 text-xs text-slate-400">
+            Tap a row for the full invoice with its payment history.
+          </p>
+        </Modal>
+      )}
+      {fundsModal && (
+        <Modal
+          title={fundsModal.label}
+          onClose={() => setFundsModal(null)}
+        >
+          {(() => {
+            const baseInvoices = allInvoices.filter((i) => {
+              const isCommunity = (i.ledger ?? "community") === "community";
+              return fundsModal.ledgerType === "community" ? isCommunity : !isCommunity;
+            });
+            const rows =
+              fundsModal.metric === "billed"
+                ? baseInvoices
+                : fundsModal.metric === "collected"
+                  ? baseInvoices.filter((i) => i.paidAmount > 0)
+                  : baseInvoices.filter((i) => i.amount - i.paidAmount > 0);
+            const amountOf = (i: Invoice) =>
+              fundsModal.metric === "billed"
+                ? i.amount
+                : fundsModal.metric === "collected"
+                  ? i.paidAmount
+                  : i.amount - i.paidAmount;
+            
+            const sortedRows = [...rows].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+
+            if (sortedRows.length === 0)
+              return (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  No invoices found.
+                </p>
+              );
+            return (
+              <div className="divide-y divide-slate-100 max-h-[60vh] overflow-y-auto pr-1">
+                {sortedRows.map((inv) => (
+                  <button
+                    key={inv.id}
+                    onClick={() => {
+                      setFundsModal(null);
+                      setDetailId(inv.id);
+                    }}
+                    className="flex w-full items-start justify-between gap-3 py-2.5 text-left hover:bg-slate-50 rounded-lg px-2 -mx-2 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        Apt {aptNumber(inv.apartmentId)} · {inv.description}
+                      </p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                        <LedgerBadge ledger={inv.ledger} />
+                        {inv.period} · due {formatDate(inv.dueDate)}
+                      </p>
+                    </div>
+                    <p
+                      className={`shrink-0 text-sm font-semibold ${
+                        fundsModal.metric === "due"
+                          ? "text-red-600"
+                          : fundsModal.metric === "collected"
+                            ? "text-emerald-600"
+                            : "text-slate-800"
+                      }`}
+                    >
+                      {formatINR(amountOf(inv))}
+                    </p>
+                  </button>
+                ))}
+                <div className="flex items-center justify-between pt-3 font-bold text-slate-800">
+                  <p className="text-sm">Total</p>
+                  <p className="text-sm">
+                    {formatINR(sortedRows.reduce((sum, i) => sum + amountOf(i), 0))}
                   </p>
                 </div>
               </div>
