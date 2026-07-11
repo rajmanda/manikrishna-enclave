@@ -435,6 +435,8 @@ function ManagerDashboard() {
   const [reserveModal, setReserveModal] = useState(false);
   const [collectionsModal, setCollectionsModal] = useState(false);
   const [receivedModal, setReceivedModal] = useState(false);
+  const [feeOutstandingModal, setFeeOutstandingModal] = useState(false);
+  const [feeCollectedModal, setFeeCollectedModal] = useState(false);
 
   const error = summary.error ?? monthly.error ?? reserve.error ?? workOrders.error;
   if (error) return <ErrorNote message={error} onRetry={summary.reload} />;
@@ -460,10 +462,12 @@ function ManagerDashboard() {
             A live overview of collections, operations and reserves.
           </p>
         </div>
+        {/* 
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
           Live from the API
         </span>
+        */}
       </FadeIn>
 
       {s.pendingPaymentConfirmations > 0 && (
@@ -491,16 +495,24 @@ function ManagerDashboard() {
       )}
 
       {(s.feeOutstanding > 0 || s.feeCollected > 0) && (
-        <Card className="flex flex-wrap items-center justify-between gap-2 border-violet-200 bg-violet-50/50 p-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
-              Payable to you — fees & reimbursements (separate from community funds)
-            </p>
-            <p className="mt-1 text-sm text-violet-900">
-              Collected {formatINR(s.feeCollected)} · Outstanding {formatINR(s.feeOutstanding)}
-            </p>
-          </div>
-        </Card>
+        <FadeIn className="grid grid-cols-2 gap-3 max-w-2xl">
+          <Stat
+            label="Personal Fees Due"
+            value={formatINR(s.feeOutstanding)}
+            tone="negative"
+            accent="bg-violet-500"
+            hint="Payable to you · tap for per-flat dues"
+            onClick={() => setFeeOutstandingModal(true)}
+          />
+          <Stat
+            label="Personal Fees Paid"
+            value={formatINR(s.feeCollected)}
+            tone="positive"
+            accent="bg-violet-500"
+            hint="Payable to you · tap for month-by-month"
+            onClick={() => setFeeCollectedModal(true)}
+          />
+        </FadeIn>
       )}
 
       <FadeIn className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -738,6 +750,115 @@ function ManagerDashboard() {
             Community funds only — your fees and reimbursements are tracked
             separately.
           </p>
+          <Link
+            href="/payments"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+          >
+            Go to payments →
+          </Link>
+        </Modal>
+      )}
+      {feeOutstandingModal && (
+        <Modal title="Outstanding Personal Fees" onClose={() => setFeeOutstandingModal(false)}>
+          {(() => {
+            const perApt = new Map<string, { total: number; count: number }>();
+            for (const inv of (invoices.data ?? []).filter(
+              (i) =>
+                (i.ledger ?? "community") !== "community" &&
+                i.amount - i.paidAmount > 0
+            )) {
+              const cur = perApt.get(inv.apartmentId) ?? { total: 0, count: 0 };
+              cur.total += inv.amount - inv.paidAmount;
+              cur.count += 1;
+              perApt.set(inv.apartmentId, cur);
+            }
+            const rows = [...perApt.entries()].sort((a, b) => b[1].total - a[1].total);
+            if (rows.length === 0)
+              return (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  All personal fees & reimbursements collected!
+                </p>
+              );
+            return (
+              <div className="divide-y divide-slate-100">
+                {rows.map(([aptId, { total, count }]) => (
+                  <div key={aptId} className="flex items-center justify-between gap-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium">Apt {aptNumber(aptId)}</p>
+                      <p className="text-xs text-slate-500">
+                        {count} open invoice{count === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-violet-600">{formatINR(total)}</p>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-3">
+                  <p className="text-sm font-bold">Total outstanding</p>
+                  <p className="text-sm font-bold text-violet-600">
+                    {formatINR(rows.reduce((sum, [, r]) => sum + r.total, 0))}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+          <Link
+            href="/invoices?view=table"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+          >
+            Go to invoices →
+          </Link>
+        </Modal>
+      )}
+      {feeCollectedModal && (
+        <Modal title="Personal Fees Collected" onClose={() => setFeeCollectedModal(false)}>
+          {(() => {
+            const confirmed = (payments.data ?? []).filter(
+              (p) =>
+                p.status !== "pending" &&
+                (p.ledger ?? "community") !== "community"
+            );
+            const byMonth = new Map<string, { total: number; count: number }>();
+            for (const p of [...confirmed].sort((a, b) => b.date.localeCompare(a.date))) {
+              const d = new Date(p.date + "T00:00:00");
+              const key = isNaN(d.getTime())
+                ? "Other"
+                : d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+              const cur = byMonth.get(key) ?? { total: 0, count: 0 };
+              cur.total += p.amount;
+              cur.count += 1;
+              byMonth.set(key, cur);
+            }
+            const rows = [...byMonth.entries()];
+            if (rows.length === 0)
+              return (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  No personal fees collected yet.
+                </p>
+              );
+            return (
+              <div className="divide-y divide-slate-100">
+                {rows.map(([month, { total, count }]) => (
+                  <div key={month} className="flex items-center justify-between gap-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium">{month}</p>
+                      <p className="text-xs text-slate-500">
+                        {count} payment{count === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-emerald-600">
+                      {formatINR(total)}
+                    </p>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-3">
+                  <p className="text-sm font-bold">Total collected</p>
+                  <p className="text-sm font-bold text-emerald-600">
+                    {formatINR(confirmed.reduce((sum, p) => sum + p.amount, 0))}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
           <Link
             href="/payments"
             className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
