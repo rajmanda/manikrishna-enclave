@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { Banknote, Check, Trash2, X } from "lucide-react";
+import { Banknote, Check, ChevronDown, Trash2, X } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
 import { useSessionUser } from "@/context/AuthContext";
@@ -36,6 +36,7 @@ function PaymentsPageInner() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [statModal, setStatModal] = useState<"community" | "personal" | null>(null);
+  const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
   const payments = useApi<Payment[]>("/payments");
   const invoices = useApi<Invoice[]>("/invoices");
   const apartments = useApi<Apartment[]>("/apartments");
@@ -253,17 +254,26 @@ function PaymentsPageInner() {
           const gp = items
             .filter((p) => (p.ledger ?? "community") !== "community")
             .reduce((s, p) => s + p.amount, 0);
+          const isCollapsed = collapsedMonths[month] ?? false;
           return (
             <section key={month} className="animate-rise">
-              <div className="mb-2 flex items-baseline justify-between px-1">
-                <h2 className="text-sm font-bold text-slate-700">{month}</h2>
-                <p className="text-xs text-slate-400">
+              <button
+                type="button"
+                onClick={() => setCollapsedMonths((prev) => ({ ...prev, [month]: !prev[month] }))}
+                className="mb-2 flex w-full items-baseline justify-between rounded-lg px-1 py-1 hover:bg-slate-50 transition text-left focus:outline-none focus:ring-1 focus:ring-slate-200"
+              >
+                <div className="flex items-center gap-1.5 pointer-events-none">
+                  <h2 className="text-sm font-bold text-slate-700">{month}</h2>
+                  <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                </div>
+                <p className="text-xs text-slate-400 pointer-events-none">
                   {items.length} payment{items.length === 1 ? "" : "s"}
                   {gc > 0 && <> · community <span className="font-medium text-emerald-600">{formatINR(gc)}</span></>}
                   {gp > 0 && <> · personal <span className="font-medium text-slate-600">{formatINR(gp)}</span></>}
                 </p>
-              </div>
-              <Card className="divide-y divide-slate-100">
+              </button>
+              {!isCollapsed && (
+                <Card className="divide-y divide-slate-100">
                 {items.map((p) => (
                   <div
                     key={p.id}
@@ -306,6 +316,7 @@ function PaymentsPageInner() {
                   </div>
                 ))}
               </Card>
+              )}
             </section>
           );
         })}

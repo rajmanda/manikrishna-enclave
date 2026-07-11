@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { AlarmClock, ArrowUpDown, Banknote, Download, FileDown, HandCoins, LayoutGrid, PlusCircle, ReceiptText, Table2, Trash2 } from "lucide-react";
+import { AlarmClock, ArrowUpDown, Banknote, ChevronDown, Download, FileDown, HandCoins, LayoutGrid, PlusCircle, ReceiptText, Table2, Trash2 } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError, downloadFile } from "@/lib/api";
@@ -709,6 +709,7 @@ function InvoicesPageInner() {
     metric: "billed" | "collected" | "due";
     label: string;
   } | null>(null);
+  const [collapsedPeriods, setCollapsedPeriods] = useState<Record<string, boolean>>({});
 
   const pendingInvoiceIds = new Set(
     (payments.data ?? []).filter((p) => p.status === "pending").map((p) => p.invoiceId)
@@ -1135,11 +1136,19 @@ function InvoicesPageInner() {
         const gp = items.filter((i) => (i.ledger ?? "community") !== "community");
         const gcDue = gc.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0);
         const gpDue = gp.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0);
+        const isCollapsed = collapsedPeriods[period] ?? false;
         return (
           <section key={period} className="animate-rise">
-            <div className="mb-2 flex items-baseline justify-between px-1">
-              <h2 className="text-sm font-bold text-slate-700">{period}</h2>
-              <p className="text-xs text-slate-400">
+            <button
+              type="button"
+              onClick={() => setCollapsedPeriods((prev) => ({ ...prev, [period]: !prev[period] }))}
+              className="mb-2 flex w-full items-baseline justify-between rounded-lg px-1 py-1 hover:bg-slate-50 transition text-left focus:outline-none focus:ring-1 focus:ring-slate-200"
+            >
+              <div className="flex items-center gap-1.5 pointer-events-none">
+                <h2 className="text-sm font-bold text-slate-700">{period}</h2>
+                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+              </div>
+              <p className="text-xs text-slate-400 pointer-events-none">
                 {items.length} invoice{items.length === 1 ? "" : "s"}
                 {gc.length > 0 && (
                   <> · community {gcDue > 0 ? <span className="font-medium text-red-500">{formatINR(gcDue)} due</span> : <span className="font-medium text-emerald-600">paid</span>}</>
@@ -1148,8 +1157,9 @@ function InvoicesPageInner() {
                   <> · personal {gpDue > 0 ? <span className="font-medium text-red-500">{formatINR(gpDue)} due</span> : <span className="font-medium text-emerald-600">paid</span>}</>
                 )}
               </p>
-            </div>
-            <Card className="divide-y divide-slate-100">
+            </button>
+            {!isCollapsed && (
+              <Card className="divide-y divide-slate-100">
               {items.map((inv) => {
                 const balance = inv.amount - inv.paidAmount;
           return (
@@ -1228,7 +1238,8 @@ function InvoicesPageInner() {
                 </div>
               );
             })}
-            </Card>
+              </Card>
+            )}
           </section>
         );
       })}
