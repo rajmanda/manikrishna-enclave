@@ -981,26 +981,26 @@ function InvoicesPageInner() {
             <button
               type="button"
               onClick={() => setFundsModal({ ledgerType: "community", metric: "billed", label: "Community Funds - Billed" })}
-              className="group rounded-xl p-2 hover:bg-slate-50 transition text-center focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="group rounded-xl p-2 active:bg-slate-100 transition text-center focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
-              <p className="text-xs text-slate-500 group-hover:text-brand-600 font-medium">Billed</p>
-              <p className="tabular text-sm font-bold sm:text-base text-slate-800">{formatINR(c.billed)}</p>
+              <p className="text-xs text-slate-500 font-medium pointer-events-none">Billed</p>
+              <p className="tabular text-sm font-bold sm:text-base text-slate-800 pointer-events-none">{formatINR(c.billed)}</p>
             </button>
             <button
               type="button"
               onClick={() => setFundsModal({ ledgerType: "community", metric: "collected", label: "Community Funds - Collected" })}
-              className="group rounded-xl p-2 hover:bg-slate-50 transition text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="group rounded-xl p-2 active:bg-slate-100 transition text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
-              <p className="text-xs text-slate-500 group-hover:text-emerald-600 font-medium">Collected</p>
-              <p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(c.collected)}</p>
+              <p className="text-xs text-slate-500 font-medium pointer-events-none">Collected</p>
+              <p className="text-sm font-bold text-emerald-600 sm:text-base pointer-events-none">{formatINR(c.collected)}</p>
             </button>
             <button
               type="button"
               onClick={() => setFundsModal({ ledgerType: "community", metric: "due", label: "Community Funds - Balance Due" })}
-              className="group rounded-xl p-2 hover:bg-slate-50 transition text-center focus:outline-none focus:ring-2 focus:ring-red-500"
+              className="group rounded-xl p-2 active:bg-slate-100 transition text-center focus:outline-none focus:ring-2 focus:ring-red-500"
             >
-              <p className="text-xs text-slate-500 group-hover:text-red-600 font-medium">Due</p>
-              <p className={`text-sm font-bold sm:text-base ${c.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(c.due)}</p>
+              <p className="text-xs text-slate-500 font-medium pointer-events-none">Due</p>
+              <p className={`text-sm font-bold sm:text-base pointer-events-none ${c.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(c.due)}</p>
             </button>
           </div>
         </Card>
@@ -1013,23 +1013,23 @@ function InvoicesPageInner() {
             <button
               type="button"
               onClick={() => setFundsModal({ ledgerType: "personal", metric: "billed", label: mine ? "Payable to Manager - Billed" : "Personal Funds - Billed" })}
-              className="group rounded-xl p-2 hover:bg-violet-100/50 transition text-center focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="group rounded-xl p-2 active:bg-violet-100 transition text-center focus:outline-none focus:ring-2 focus:ring-violet-500"
             >
-              <p className="text-xs text-slate-500 group-hover:text-violet-600 font-medium">Billed</p>
-              <p className="tabular text-sm font-bold sm:text-base text-slate-800">{formatINR(p.billed)}</p>
+              <p className="text-xs text-slate-500 font-medium pointer-events-none">Billed</p>
+              <p className="tabular text-sm font-bold sm:text-base text-slate-800 pointer-events-none">{formatINR(p.billed)}</p>
             </button>
             <button
               type="button"
               onClick={() => setFundsModal({ ledgerType: "personal", metric: "collected", label: mine ? "Payable to Manager - Collected" : "Personal Funds - Collected" })}
-              className="group rounded-xl p-2 hover:bg-violet-100/50 transition text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="group rounded-xl p-2 active:bg-violet-100 transition text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
-              <p className="text-xs text-slate-500 group-hover:text-emerald-600 font-medium">Collected</p>
-              <p className="text-sm font-bold text-emerald-600 sm:text-base">{formatINR(p.collected)}</p>
+              <p className="text-xs text-slate-500 font-medium pointer-events-none">Collected</p>
+              <p className="text-sm font-bold text-emerald-600 sm:text-base pointer-events-none">{formatINR(p.collected)}</p>
             </button>
             <button
               type="button"
               onClick={() => setFundsModal({ ledgerType: "personal", metric: "due", label: mine ? "Payable to Manager - Balance Due" : "Personal Funds - Balance Due" })}
-              className="group rounded-xl p-2 hover:bg-violet-100/50 transition text-center focus:outline-none focus:ring-2 focus:ring-red-500"
+              className="group rounded-xl p-2 active:bg-violet-100 transition text-center focus:outline-none focus:ring-2 focus:ring-red-500"
             >
               <p className="text-xs text-slate-500 group-hover:text-red-600 font-medium">Due</p>
               <p className={`text-sm font-bold sm:text-base ${p.due > 0 ? "text-red-600" : "text-emerald-600"}`}>{formatINR(p.due)}</p>

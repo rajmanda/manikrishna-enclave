@@ -33,7 +33,7 @@ export function FilterBar({
               <select
                 value={values[f.key]}
                 onChange={(e) => onChange(f.key, e.target.value)}
-                className={`appearance-none rounded-full py-1.5 pl-3.5 pr-8 text-sm font-medium shadow-sm transition focus:outline-none ${
+                className={`appearance-none rounded-full py-1.5 pl-3.5 pr-8 text-sm font-medium shadow-sm transition focus:outline-none max-w-[200px] truncate ${
                   active
                     ? "bg-brand-600 text-white"
                     : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
