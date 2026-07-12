@@ -5,6 +5,13 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Fix — invoice tile drill-downs ignored filters:** on `/invoices`, the
+  "Community funds" and "Personal — fees & reimbursements" breakdown modals
+  listed the whole community's invoices even when the manager had an
+  apartment (or status/client) filter applied; tiles and modals now read the
+  same filtered list. Audited every clickable stat tile across invoices,
+  payments, dashboard, reserve-fund, and community pages — this was the only
+  mismatch.
 - **Community switching (super-admin):** new `POST /auth/switch-community` —
   a super admin steps into any owned community; the issued JWT carries an
   `act_cid` claim (home community stays in `community_id`), and
