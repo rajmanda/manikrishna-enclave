@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Plus, Receipt, Wrench } from "lucide-react";
+import { ArrowRightLeft, Building2, Plus, Receipt, Trash2, Wrench } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/context/AuthContext";
 import type { PortfolioCommunityStats } from "@/lib/types";
@@ -20,12 +20,77 @@ import {
   Stat,
 } from "@/components/ui";
 
+function DeleteCommunityModal({
+  community,
+  onClose,
+  onDeleted,
+}: {
+  community: PortfolioCommunityStats;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const match = typed.trim() === community.name;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!match) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/communities/${community.id}`, { method: "DELETE" });
+      onDeleted();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete community");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`Delete ${community.name}?`} onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-relaxed text-red-800">
+          This permanently deletes <strong>{community.name}</strong> — its{" "}
+          {community.apartmentCount} flat{community.apartmentCount === 1 ? "" : "s"},
+          households, invoices, payments, documents and members.{" "}
+          <strong>This cannot be undone.</strong>
+          <br />
+          People who also belong to other communities keep those memberships.
+        </div>
+        <div>
+          <label className={labelCls}>
+            Type <span className="font-mono">{community.name}</span> to confirm
+          </label>
+          <input
+            className={inputCls}
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={community.name}
+            autoComplete="off"
+          />
+        </div>
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={busy || !match}
+          className="w-full rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy ? "Deleting…" : "Delete community permanently"}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
 function AddCommunityModal({
   onClose,
-  onSaved,
+  onCreated,
 }: {
   onClose: () => void;
-  onSaved: () => void;
+  onCreated: (communityId: string) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -37,12 +102,12 @@ function AddCommunityModal({
     setBusy(true);
     setError(null);
     try {
-      await api("/communities", {
+      const created = await api<{ id: string }>("/communities", {
         method: "POST",
         body: JSON.stringify({ name: name.trim(), address: address.trim() }),
       });
-      onSaved();
-      onClose();
+      // Straight into the Setup Assistant of the new community.
+      await onCreated(created.id);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create community");
       setBusy(false);
@@ -72,7 +137,7 @@ function AddCommunityModal({
           />
         </div>
         <p className="text-xs text-slate-500">
-          The community starts empty — apartments and members are added next.
+          Next you'll be taken to the Setup Assistant to add flats, residents and a manager.
         </p>
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button type="submit" disabled={busy} className={primaryBtnCls}>
@@ -90,9 +155,20 @@ function rateTone(rate: number): "green" | "brand" | "red" {
 }
 
 export default function PortfolioPage() {
-  const { role } = useAuth();
+  const { user, role, switchCommunity } = useAuth();
   const stats = useApi<PortfolioCommunityStats[]>("/communities/portfolio/stats");
   const [adding, setAdding] = useState(false);
+  const [switching, setSwitching] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<PortfolioCommunityStats | null>(null);
+
+  async function manage(communityId: string) {
+    setSwitching(communityId);
+    try {
+      await switchCommunity(communityId);
+    } catch {
+      setSwitching(null);
+    }
+  }
 
   if (role && role !== "super_admin")
     return (
@@ -131,7 +207,18 @@ export default function PortfolioPage() {
       />
 
       {adding && (
-        <AddCommunityModal onClose={() => setAdding(false)} onSaved={stats.reload} />
+        <AddCommunityModal
+          onClose={() => setAdding(false)}
+          onCreated={(id) => switchCommunity(id, "/setup")}
+        />
+      )}
+
+      {deleting && (
+        <DeleteCommunityModal
+          community={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={stats.reload}
+        />
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -214,6 +301,34 @@ export default function PortfolioPage() {
                 </p>
               </div>
             </div>
+
+            {user?.communityId === c.id ? (
+              <div className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-50 py-2 text-xs font-semibold text-brand-700">
+                <Building2 className="h-3.5 w-3.5" /> Currently managing
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={switching !== null}
+                  onClick={() => manage(c.id)}
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  {switching === c.id ? "Switching…" : "Manage this community"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={switching !== null}
+                  onClick={() => setDeleting(c)}
+                  className="text-slate-400 hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
           </Card>
         ))}
         {communities.length === 0 && (

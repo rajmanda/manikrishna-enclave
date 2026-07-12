@@ -28,6 +28,7 @@ from app.routers import (
     polls,
     reports,
     search,
+    setup,
     statements,
     users,
     vendors,
@@ -92,6 +93,7 @@ app.include_router(polls.router, prefix=API_PREFIX)
 app.include_router(documents.router, prefix=API_PREFIX)
 app.include_router(meetings.router, prefix=API_PREFIX)
 app.include_router(search.router, prefix=API_PREFIX)
+app.include_router(setup.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)
 app.include_router(audit_log.router, prefix=API_PREFIX)
 app.include_router(work_orders.router, prefix=API_PREFIX)

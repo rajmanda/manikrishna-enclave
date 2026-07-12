@@ -1595,7 +1595,7 @@ function InvoicesPageInner() {
           onClose={selectedFundsInvoiceId ? () => setSelectedFundsInvoiceId(null) : closeFundsModal}
         >
           {(() => {
-            const baseInvoices = allInvoices.filter((i) => {
+            const baseInvoices = list.filter((i) => {
               const isCommunity = (i.ledger ?? "community") === "community";
               return fundsModal.ledgerType === "community" ? isCommunity : !isCommunity;
             });

@@ -17,6 +17,30 @@ export interface Community {
   apartmentCount: number;
 }
 
+// Community setup progress for the guided Setup Assistant.
+export interface SetupStatus {
+  apartments: number;
+  households: number;
+  flatsWithHousehold: number;
+  owners: number;
+  tenants: number;
+  managers: number;
+}
+
+export interface SetupResidentResult {
+  apartmentId: string;
+  ok: boolean;
+  error: string | null;
+}
+
+// One community membership of the signed-in person (same email).
+export interface MembershipInfo {
+  userId: string;
+  communityId: string;
+  communityName: string;
+  role: Role;
+}
+
 // Super-admin portfolio console rollup (community ledger only).
 export interface PortfolioCommunityStats {
   id: string;

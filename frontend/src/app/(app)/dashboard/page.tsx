@@ -27,6 +27,7 @@ import type {
   OwnerDashboardData,
   Payment,
   ReserveFundEntry,
+  SetupStatus,
   User,
   WorkOrder,
 } from "@/lib/types";
@@ -1189,11 +1190,49 @@ function ManagerDashboard() {
   );
 }
 
+function SetupNudge() {
+  const status = useApi<SetupStatus>("/setup/status");
+  if (!status.data) return null;
+  const s = status.data;
+  const step1 = s.apartments > 0;
+  const step2 = step1 && s.flatsWithHousehold >= s.apartments;
+  const step3 = s.managers > 0;
+  const done = [step1, step2, step3].filter(Boolean).length;
+  if (done === 3) return null;
+  return (
+    <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 border-brand-200 bg-brand-50/60 p-4">
+      <div className="flex items-center gap-3">
+        <AlertTriangle className="h-5 w-5 shrink-0 text-brand-600" />
+        <div>
+          <p className="text-sm font-semibold text-slate-800">
+            Finish setting up this community — {done} of 3 steps done
+          </p>
+          <p className="text-xs text-slate-500">
+            {!step1
+              ? "Start by adding your flats."
+              : !step2
+                ? `${s.apartments - s.flatsWithHousehold} flat${s.apartments - s.flatsWithHousehold === 1 ? "" : "s"} still need residents.`
+                : "Add a manager to run day-to-day operations."}
+          </p>
+        </div>
+      </div>
+      <Link
+        href="/setup"
+        className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+      >
+        Continue setup <ArrowRight className="h-4 w-4" />
+      </Link>
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
   const { role } = useSessionUser();
-  return role === "owner" || role === "tenant" ? (
-    <OwnerDashboard />
-  ) : (
-    <ManagerDashboard />
+  if (role === "owner" || role === "tenant") return <OwnerDashboard />;
+  return (
+    <>
+      {role !== "auditor" && <SetupNudge />}
+      <ManagerDashboard />
+    </>
   );
 }

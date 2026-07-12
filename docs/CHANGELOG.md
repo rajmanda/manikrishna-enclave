@@ -3,6 +3,58 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [Unreleased] — feature/community-switching
+
+- **Fix — invoice tile drill-downs ignored filters:** on `/invoices`, the
+  "Community funds" and "Personal — fees & reimbursements" breakdown modals
+  listed the whole community's invoices even when the manager had an
+  apartment (or status/client) filter applied; tiles and modals now read the
+  same filtered list. Audited every clickable stat tile across invoices,
+  payments, dashboard, reserve-fund, and community pages — this was the only
+  mismatch.
+- **Community switching (super-admin):** new `POST /auth/switch-community` —
+  a super admin steps into any owned community; the issued JWT carries an
+  `act_cid` claim (home community stays in `community_id`), and
+  `get_current_user` re-validates ownership on EVERY request (revoking
+  ownership instantly drops the acting session back to home). While acting,
+  all reads and writes across every router operate in the acting community,
+  and the full portfolio scope is retained. 6 new tests (122 total).
+- **Frontend:** `switchCommunity` in AuthContext; "Manage this community"
+  button + "Currently managing" state on `/portfolio` cards; AppShell now
+  shows the acting community's name.
+- **Cascade community deletion (super-admin):** `DELETE /communities/{id}` —
+  owned communities only, never your home community; removes every
+  community-scoped document across 20 collections. Memberships are
+  per-community docs, so the same email's memberships in OTHER communities
+  survive by design. Deletion audited under the actor's home community with
+  per-collection cascade counts. Portfolio cards get a delete action behind
+  a type-the-name confirmation modal. 5 new tests (141 total).
+- **Setup Assistant (guided community onboarding):** new `/setup` page —
+  three plain-language steps (Add your flats → Who lives in each flat? →
+  Who manages this community?) with progress bar and completion screen.
+  One row per flat (owner name/email/phone, optional tenant) is sent to the
+  new `POST /setup/residents` batch endpoint, which creates the household
+  (account), whitelist user, and 100% legal-title record per flat in one
+  call with per-row error reporting. `GET /setup/status` drives progress;
+  the manager dashboard shows a "Finish setting up — n of 3 steps" card for
+  incomplete communities; creating a community from the Portfolio now lands
+  directly in the assistant. "Account" is presented as **Household**
+  everywhere user-facing (Ownership page relabeled). 5 new tests (136).
+- **Add Apartments UI (Ownership page):** bulk dialog (comma/line-separated
+  unit numbers, floor auto-derived from the number, duplicate warnings,
+  partial-failure reporting) — previously apartments only existed via the
+  seed, leaving fresh communities impossible to populate from the UI. Plus
+  an empty-state callout guiding the setup order (apartments → accounts →
+  members).
+- **Multi-community memberships (one email, many communities):** email is now
+  unique PER COMMUNITY (compound index `community_id+email`, legacy global
+  `email_1` index auto-dropped at startup) — the same person can be e.g.
+  manager of two societies, or owner in one and tenant in another, with one
+  user doc per membership. Login is deterministic across memberships; new
+  `GET /auth/memberships` and `POST /auth/switch-membership` move the session
+  between them (identity = email). AppShell gains a community dropdown when
+  more than one membership exists. 7 new tests (129 total).
+
 ## [Unreleased] — feature/multi-community
 
 - **BREAKING — super admins are no longer global:** new `owned_community_ids`
