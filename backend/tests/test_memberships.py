@@ -128,6 +128,78 @@ async def test_owner_here_tenant_there(client, manager_headers, other_manager_he
     assert me["apartmentId"] == "apt-other-1"
 
 
+async def test_owner_with_apartments_in_two_communities(
+    client, manager_headers, other_manager_headers
+):
+    """Owner owns a flat in each community — each membership shows its own
+    apartment, and the switcher moves between them."""
+    email = "twoflats@example.com"
+    assert (
+        await client.post(
+            "/api/v1/users",
+            json={"name": "Two Flats", "email": email, "role": "owner",
+                  "apartmentId": "apt-101"},
+            headers=manager_headers,
+        )
+    ).status_code == 201
+    assert (
+        await client.post(
+            "/api/v1/users",
+            json={"name": "Two Flats", "email": email, "role": "owner",
+                  "apartmentId": "apt-other-1"},
+            headers=other_manager_headers,
+        )
+    ).status_code == 201
+
+    login = await client.post(
+        "/api/v1/auth/dev-login", json={"idToken": "", "email": email}
+    )
+    assert login.json()["user"]["apartmentId"] == "apt-101"  # mke membership
+    headers = {"Authorization": f"Bearer {login.json()['accessToken']}"}
+
+    switched = await client.post(
+        "/api/v1/auth/switch-membership",
+        json={"communityId": "other"},
+        headers=headers,
+    )
+    me = switched.json()["user"]
+    assert me["role"] == "owner"
+    assert me["communityId"] == "other"
+    assert me["apartmentId"] == "apt-other-1"
+
+
+async def test_auditor_membership_switching(client, manager_headers, other_manager_headers):
+    """Auditors (and any other role) get the same membership switching."""
+    email = "sharedauditor@example.com"
+    for headers in (manager_headers, other_manager_headers):
+        resp = await client.post(
+            "/api/v1/users",
+            json={"name": "Shared Auditor", "email": email, "role": "auditor"},
+            headers=headers,
+        )
+        assert resp.status_code == 201, resp.text
+
+    login = await client.post(
+        "/api/v1/auth/dev-login", json={"idToken": "", "email": email}
+    )
+    headers = {"Authorization": f"Bearer {login.json()['accessToken']}"}
+    switched = await client.post(
+        "/api/v1/auth/switch-membership",
+        json={"communityId": "other"},
+        headers=headers,
+    )
+    acting = {"Authorization": f"Bearer {switched.json()['accessToken']}"}
+    assert switched.json()["user"]["role"] == "auditor"
+
+    # Read-only in the switched community still enforced.
+    write = await client.post(
+        "/api/v1/apartments",
+        json={"number": "O-99", "floor": 9},
+        headers=acting,
+    )
+    assert write.status_code == 403
+
+
 async def test_memberships_do_not_leak_across_emails(client, other_manager_headers):
     """Another user in the same communities sees only their own memberships."""
     memberships = await client.get(
