@@ -15,6 +15,13 @@ begin at 0.1.0 with the first deployment (M1).
 - **Frontend:** `switchCommunity` in AuthContext; "Manage this community"
   button + "Currently managing" state on `/portfolio` cards; AppShell now
   shows the acting community's name.
+- **Cascade community deletion (super-admin):** `DELETE /communities/{id}` —
+  owned communities only, never your home community; removes every
+  community-scoped document across 20 collections. Memberships are
+  per-community docs, so the same email's memberships in OTHER communities
+  survive by design. Deletion audited under the actor's home community with
+  per-collection cascade counts. Portfolio cards get a delete action behind
+  a type-the-name confirmation modal. 5 new tests (141 total).
 - **Setup Assistant (guided community onboarding):** new `/setup` page —
   three plain-language steps (Add your flats → Who lives in each flat? →
   Who manages this community?) with progress bar and completion screen.

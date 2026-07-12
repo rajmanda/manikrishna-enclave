@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.audit import record_audit
 from app.core.security import CurrentUser, owned_community_ids, require_roles
 from app.db import get_db
-from app.models import Community, CommunityCreate, PortfolioCommunityStats
+from app.models import Community, CommunityCreate, PortfolioCommunityStats, User
 
 router = APIRouter(prefix="/communities", tags=["communities"])
 
@@ -93,6 +93,73 @@ async def portfolio_stats(db: DB, user: CurrentUser) -> list[PortfolioCommunityS
     ).to_list(length=1000)
     return list(
         await asyncio.gather(*(_community_stats(db, c) for c in communities))
+    )
+
+
+# Every collection that carries community-scoped documents. Users are
+# per-community membership docs, so deleting here removes ONLY this
+# community's memberships — the same email's memberships elsewhere survive.
+CASCADE_COLLECTIONS = [
+    "apartments",
+    "accounts",
+    "legal_owners",
+    "users",
+    "invoices",
+    "payments",
+    "expenses",
+    "fee_enrollments",
+    "reserve_fund",
+    "work_orders",
+    "vendors",
+    "maintenance_requests",
+    "meetings",
+    "polls",
+    "documents",
+    "feed_posts",
+    "notifications",
+    "notification_queue",
+    "audit_log",
+    "leads",
+]
+
+
+@router.delete(
+    "/{community_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_roles())],  # super_admin only
+)
+async def delete_community(
+    community_id: str, db: DB, user: CurrentUser
+) -> None:
+    """Permanently delete an owned community and everything inside it."""
+    # Raw doc: user may currently be acting inside the community being
+    # deleted; home community must come from the source of truth.
+    home_user = User.model_validate(await db.users.find_one({"id": user.id}))
+    if community_id == home_user.community_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your home community",
+        )
+    if community_id not in owned_community_ids(home_user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, detail="Not an owner of this community"
+        )
+    community = await db.communities.find_one({"id": community_id})
+    if community is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Community not found")
+
+    deleted: dict[str, int] = {}
+    for coll in CASCADE_COLLECTIONS:
+        result = await db[coll].delete_many({"community_id": community_id})
+        if result.deleted_count:
+            deleted[coll] = result.deleted_count
+    await db.communities.delete_one({"id": community_id})
+    # Remove from every owner's portfolio list.
+    await db.users.update_many({}, {"$pull": {"community_ids": community_id}})
+    # The deletion itself is recorded under the actor's home community.
+    await record_audit(
+        db, home_user, "delete", "communities", community_id,
+        {"name": community["name"], "cascade": deleted},
     )
 
 
