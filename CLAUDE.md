@@ -41,9 +41,13 @@ affected docs/ file with every meaningful change.
   pushing** — pushes trigger CI/deploy builds. Batch doc-only changes with
   the next confirmed push.
 
-- **Multi-tenant:** every document carries `community_id`; non-super-admin
-  queries are always scoped server-side. Never hardcode Mani Krishna Enclave
-  outside `backend/app/seed.py` / `frontend/src/lib/data.ts`.
+- **Multi-tenant:** every document carries `community_id`; ALL queries are
+  scoped server-side. Super admins are NOT global — they reach only the
+  communities they own (`user.community_id` + `user.community_ids`, see
+  `owned_community_ids` in `app/core/security.py`); multiple independent
+  super admins must never see each other's communities. Never hardcode
+  Mani Krishna Enclave outside `backend/app/seed.py` /
+  `frontend/src/lib/data.ts`.
 - **Whitelist auth:** the `users` collection IS the whitelist. Unknown Google
   accounts must get 403.
 - **RBAC:** `auditor` is read-only everywhere. Writes require

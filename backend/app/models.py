@@ -53,6 +53,25 @@ class CommunityCreate(APIModel):
     address: str = ""
 
 
+class PortfolioCommunityStats(APIModel):
+    """Cross-community rollup for the super-admin portfolio console.
+
+    Financial figures cover only the "community" ledger — manager fees and
+    reimbursements are the manager's personal streams and stay excluded.
+    """
+
+    id: str
+    name: str
+    address: str = ""
+    apartment_count: int = 0
+    invoiced_total: float = 0
+    collected_total: float = 0
+    outstanding_total: float = 0
+    collection_rate: float = 0  # percentage, 0-100
+    open_invoices: int = 0
+    open_work_orders: int = 0
+
+
 class Apartment(APIModel):
     id: str = Field(default_factory=lambda: new_id("apt"))
     community_id: str
@@ -114,6 +133,10 @@ class LegalOwnerUpdate(APIModel):
 class User(APIModel):
     id: str = Field(default_factory=lambda: new_id("u"))
     community_id: str
+    # Additional communities this user owns/administers beyond community_id.
+    # Super admins are scoped to community_id + community_ids — never the
+    # whole platform (multiple independent super admins coexist).
+    community_ids: list[str] = []
     name: str
     email: EmailStr
     role: Role  # active role — all RBAC reads this

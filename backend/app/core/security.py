@@ -117,9 +117,24 @@ def require_roles(*roles: str):
     return checker
 
 
+def owned_community_ids(user: User) -> list[str]:
+    """Communities this user may administer: home community + owned list.
+
+    For non-super-admins this is always just their own community. Super
+    admins get their portfolio — but never other super admins' communities.
+    """
+    return list(dict.fromkeys([user.community_id, *user.community_ids]))
+
+
 def scoped_community_id(user: User, requested: str | None = None) -> str:
-    """Tenant isolation: non-super-admins are locked to their own community."""
+    """Tenant isolation: non-super-admins are locked to their own community.
+    Super admins may request another community only if they own it."""
     if user.role == "super_admin" and requested:
+        if requested not in owned_community_ids(user):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="Not an owner of this community",
+            )
         return requested
     return user.community_id
 

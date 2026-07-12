@@ -6,7 +6,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.audit import record_audit
-from app.core.security import CurrentUser, require_roles
+from app.core.security import CurrentUser, owned_community_ids, require_roles
 from app.db import get_db
 from app.models import (
     WRITE_ROLES,
@@ -302,10 +302,8 @@ async def delete_invoice(
 ) -> None:
     """Without cascade, an invoice with payments is protected (409). With
     cascade=true the caller has confirmed deleting the payments too."""
-    query = {"id": invoice_id}
-    if user.role != "super_admin":
-        query["community_id"] = user.community_id
-        
+    query = {"id": invoice_id, "community_id": {"$in": owned_community_ids(user)}}
+
     invoice = await db.invoices.find_one(query)
     if invoice is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invoice not found")

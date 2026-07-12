@@ -3,6 +3,43 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [Unreleased] — feature/multi-community
+
+- **BREAKING — super admins are no longer global:** new `owned_community_ids`
+  scoping (`user.community_id` + new `user.community_ids` list). Super admins
+  reach only communities they own; independent super admins are fully isolated
+  from each other. Enforced in `scoped_community_id` (403 on non-owned
+  request), `GET/POST /communities`, `GET /communities/{id}`, portfolio stats,
+  and the super-admin deletes (invoices, work orders, maintenance requests —
+  previously deletable across ANY community by id). Creating a community
+  auto-adds it to the creator's portfolio. 4 new isolation tests (116 total).
+  Existing single-super-admin data needs no migration (home community is
+  always owned).
+- **`Add Community` UI:** button + modal on `/portfolio` calling
+  `POST /communities`.
+- **Generic database names + dev/prod split:** data ported from
+  `manikrishna_enclave` to `communityhub` (prod) and `communityhub_dev`
+  (local dev) via new `backend/scripts/port_db.py` (copies collections +
+  indexes, verifies counts, non-destructive). Local `.env` now uses
+  `communityhub_dev`; terraform `db_name` default → `communityhub` (apply +
+  redeploy pending). Legacy DB retained as fallback until prod cutover is
+  verified.
+- **Portfolio console (super-admin):** new `GET /api/v1/communities/portfolio/stats`
+  returns a per-community rollup (units, invoiced/collected/outstanding on the
+  community ledger only, collection rate, open invoices, open work orders).
+  Super-admin only via `require_roles()`; verified 401 unauthenticated / 403
+  for other roles. 4 new tests (112 total).
+- **Frontend `/portfolio` page:** super-admin nav entry (Admin group) with
+  portfolio totals row and per-community cards (collection-rate progress
+  bars, outstanding, open items). E2E verified against Atlas dev data.
+- **Presentation page rebuilt as role-based marketing decks:** audience picker
+  (Property Manager, RWA Committee, Management Company/Builder, Owner, Tenant,
+  Auditor) with deep links (`?audience=`), per-audience slides, dedicated Data
+  Protection & Privacy slide, WhatsApp-alerts slide, persistent header +
+  floating CTAs feeding `/get-started` with pre-filled role, Early Access
+  badges on portfolio-tier claims. `/get-started` accepts `?role=` and adds
+  Tenant and Auditor options.
+
 ## [0.13.0] — 2026-07-08
 
 - **Queue-based notification system (M5):** outbound WhatsApp/email/in-app

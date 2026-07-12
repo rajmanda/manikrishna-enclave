@@ -17,6 +17,20 @@ export interface Community {
   apartmentCount: number;
 }
 
+// Super-admin portfolio console rollup (community ledger only).
+export interface PortfolioCommunityStats {
+  id: string;
+  name: string;
+  address: string;
+  apartmentCount: number;
+  invoicedTotal: number;
+  collectedTotal: number;
+  outstandingTotal: number;
+  collectionRate: number; // percentage, 0-100
+  openInvoices: number;
+  openWorkOrders: number;
+}
+
 export interface Apartment {
   id: string;
   communityId: string;
@@ -43,6 +57,8 @@ export interface LegalOwner {
 export interface User {
   id: string;
   communityId: string;
+  /** Extra communities a super admin owns (portfolio scope). */
+  communityIds?: string[];
   name: string;
   email: string;
   role: Role;

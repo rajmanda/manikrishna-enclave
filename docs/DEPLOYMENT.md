@@ -13,7 +13,7 @@ repo github.com/rajmanda/manikrishna-enclave (public).
 | Domain | community.rajmanda.com → **global HTTPS LB** (IP 34.120.210.248) | Domain mappings unsupported in asia-south1, so LB + managed cert + serverless NEGs |
 | API routing | Same origin: LB routes `/api/*`, `/health(z)`, `/docs`, `/openapi.json` → API; everything else → frontend | `NEXT_PUBLIC_API_URL=https://community.rajmanda.com/api/v1` |
 | Direct URLs | api: communityhub-backend-ht4p2vwsjq-el.a.run.app · frontend: communityhub-frontend-ht4p2vwsjq-el.a.run.app | Useful before DNS cutover |
-| Database | MongoDB Atlas cluster0.sod5j | `DB_NAME=manikrishna_enclave` |
+| Database | MongoDB Atlas cluster0.sod5j | `DB_NAME=communityhub` |
 | Images | Artifact Registry `asia-south1-docker.pkg.dev/mm-owners-5b8611/communityhub` | `api:<sha>`, `frontend:<sha>` |
 | Secrets | Secret Manager (`communityhub-*` prefix — shared project) | mongodb-uri, jwt-secret, google-client-id |
 
@@ -30,11 +30,11 @@ repo github.com/rajmanda/manikrishna-enclave (public).
 
 | Env | Trigger | DB_NAME | DEV_MODE |
 |---|---|---|---|
-| dev | local | manikrishna_enclave (currently same as prod — see PROJECT_STATE known issues) | true |
-| production | `gh workflow run deploy.yml` (manual for now) | manikrishna_enclave | **false** |
+| dev | local | communityhub_dev (split from prod 2026-07-11) | true |
+| production | `gh workflow run deploy.yml` (manual for now) | communityhub | **false** |
 
 Staging: deferred until needed; add a second set of Cloud Run services +
-`manikrishna_enclave_staging` DB when M2 write-features warrant it.
+`communityhub_staging` DB when M2 write-features warrant it.
 
 ## GitHub Actions (`.github/workflows/`)
 
