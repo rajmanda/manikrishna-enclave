@@ -38,7 +38,18 @@ def get_db() -> Any:
 
 
 async def ensure_indexes(db: Any) -> None:
-    await db.users.create_index("email", unique=True)
+    # Email is unique PER COMMUNITY, not platform-wide: the same person
+    # (e.g. a manager) can hold a membership in several communities, one
+    # user doc per community. Drop the legacy global-unique index first.
+    try:
+        await db.users.drop_index("email_1")
+    except Exception:
+        pass  # already dropped or never existed
+    await db.users.create_index(
+        [("community_id", 1), ("email", 1)],
+        unique=True,
+        name="community_email_unique",
+    )
     await db.users.create_index("community_id")
     await db.apartments.create_index([("community_id", 1), ("number", 1)], unique=True)
     await db.accounts.create_index("community_id")

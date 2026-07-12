@@ -205,6 +205,15 @@ class SwitchCommunityRequest(APIModel):
     community_id: str
 
 
+class MembershipInfo(APIModel):
+    """One community membership of the signed-in person (same email)."""
+
+    user_id: str
+    community_id: str
+    community_name: str
+    role: Role
+
+
 # ---------- Auth ----------
 
 

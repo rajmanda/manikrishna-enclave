@@ -30,6 +30,7 @@ interface AuthState {
   googleLogin: (idToken: string) => Promise<void>;
   switchRole: (role: Role) => Promise<void>;
   switchCommunity: (communityId: string) => Promise<void>;
+  switchMembership: (communityId: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -80,6 +81,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.assign("/dashboard");
   }, []);
 
+  const switchMembership = useCallback(async (communityId: string) => {
+    const result = await api<{ accessToken: string; user: User }>(
+      "/auth/switch-membership",
+      { method: "POST", body: JSON.stringify({ communityId }) }
+    );
+    setToken(result.accessToken);
+    // Full reload: the session now belongs to the membership in that community.
+    window.location.assign("/dashboard");
+  }, []);
+
   const logout = useCallback(() => {
     clearToken();
     setUser(null);
@@ -87,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, role: user?.role ?? null, loading, devLogin, googleLogin, switchRole, switchCommunity, logout }}
+      value={{ user, role: user?.role ?? null, loading, devLogin, googleLogin, switchRole, switchCommunity, switchMembership, logout }}
     >
       {children}
     </AuthContext.Provider>

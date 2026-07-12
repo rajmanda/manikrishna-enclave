@@ -15,6 +15,14 @@ begin at 0.1.0 with the first deployment (M1).
 - **Frontend:** `switchCommunity` in AuthContext; "Manage this community"
   button + "Currently managing" state on `/portfolio` cards; AppShell now
   shows the acting community's name.
+- **Multi-community memberships (one email, many communities):** email is now
+  unique PER COMMUNITY (compound index `community_id+email`, legacy global
+  `email_1` index auto-dropped at startup) — the same person can be e.g.
+  manager of two societies, or owner in one and tenant in another, with one
+  user doc per membership. Login is deterministic across memberships; new
+  `GET /auth/memberships` and `POST /auth/switch-membership` move the session
+  between them (identity = email). AppShell gains a community dropdown when
+  more than one membership exists. 7 new tests (129 total).
 
 ## [Unreleased] — feature/multi-community
 

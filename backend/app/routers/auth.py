@@ -14,6 +14,7 @@ from app.audit import record_audit
 from app.models import (
     DevLoginRequest,
     GoogleLoginRequest,
+    MembershipInfo,
     SwitchCommunityRequest,
     SwitchRoleRequest,
     TokenResponse,
@@ -25,16 +26,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 DB = Annotated[Any, Depends(get_db)]
 
 
-async def _login_by_email(db: Any, email: str) -> TokenResponse:
-    doc = await db.users.find_one({"email": email.lower()})
-    if doc is None:
-        # Whitelist enforcement: unknown Google accounts cannot log in.
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail="This account is not whitelisted. Contact your property manager.",
-        )
-    user = User.model_validate(doc)
-    # Resolve apartment_ids from Account for multi-apartment support.
+async def _resolve_apartments(db: Any, user: User) -> User:
+    """Resolve apartment_ids from the Account entity (multi-apartment)."""
     if user.account_id:
         account = await db.accounts.find_one({"id": user.account_id})
         if account:
@@ -43,6 +36,25 @@ async def _login_by_email(db: Any, email: str) -> TokenResponse:
                 user.apartment_id = user.apartment_ids[0]
     elif user.apartment_id:
         user.apartment_ids = [user.apartment_id]
+    return user
+
+
+async def _login_by_email(db: Any, email: str) -> TokenResponse:
+    # One person can hold memberships (one user doc each) in several
+    # communities. Log into the first by community_id for determinism —
+    # the membership switcher handles the rest.
+    docs = (
+        await db.users.find({"email": email.lower()})
+        .sort("community_id", 1)
+        .to_list(length=50)
+    )
+    if not docs:
+        # Whitelist enforcement: unknown Google accounts cannot log in.
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="This account is not whitelisted. Contact your property manager.",
+        )
+    user = await _resolve_apartments(db, User.model_validate(docs[0]))
     return TokenResponse(access_token=create_access_token(user), user=user)
 
 
@@ -135,3 +147,50 @@ async def switch_community(
         {"acting_community": body.community_id},
     )
     return TokenResponse(access_token=token, user=acting_user)
+
+
+@router.get("/memberships", response_model=list[MembershipInfo])
+async def my_memberships(db: DB, user: CurrentUser) -> list[MembershipInfo]:
+    """Every community membership held by the signed-in email."""
+    docs = (
+        await db.users.find({"email": user.email.lower()})
+        .sort("community_id", 1)
+        .to_list(length=50)
+    )
+    community_ids = [d["community_id"] for d in docs]
+    communities = await db.communities.find(
+        {"id": {"$in": community_ids}}
+    ).to_list(length=50)
+    names = {c["id"]: c["name"] for c in communities}
+    return [
+        MembershipInfo(
+            user_id=d["id"],
+            community_id=d["community_id"],
+            community_name=names.get(d["community_id"], d["community_id"]),
+            role=d["role"],
+        )
+        for d in docs
+    ]
+
+
+@router.post("/switch-membership", response_model=TokenResponse)
+async def switch_membership(
+    body: SwitchCommunityRequest, db: DB, user: CurrentUser
+) -> TokenResponse:
+    """Move the session to this person's membership in another community.
+    Identity is the email — only communities where the same email is
+    whitelisted are reachable."""
+    doc = await db.users.find_one(
+        {"email": user.email.lower(), "community_id": body.community_id}
+    )
+    if doc is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="No membership in that community",
+        )
+    target = await _resolve_apartments(db, User.model_validate(doc))
+    await record_audit(
+        db, user, "update", "users", user.id,
+        {"switched_membership_to": target.id, "community": body.community_id},
+    )
+    return TokenResponse(access_token=create_access_token(target), user=target)

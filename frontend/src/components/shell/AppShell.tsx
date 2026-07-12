@@ -15,7 +15,7 @@ import {
 import { useAuth, useSessionUser } from "@/context/AuthContext";
 import { api, DEV_LOGIN_ENABLED } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
-import type { Community, NavBadges, Notification, Role, User } from "@/lib/types";
+import type { Community, MembershipInfo, NavBadges, Notification, Role, User } from "@/lib/types";
 import { Avatar, Badge } from "@/components/ui";
 import { APP_NAME } from "@/lib/brand";
 import { groupedNavItems, mobilePrimary, visibleNavItems } from "./nav";
@@ -217,6 +217,43 @@ function ViewAsSwitcher() {
   );
 }
 
+function MembershipSwitcher() {
+  const { user, switchMembership } = useAuth();
+  const memberships = useApi<MembershipInfo[]>("/auth/memberships");
+  const [busy, setBusy] = useState(false);
+  if (!user || !memberships.data || memberships.data.length < 2) return null;
+
+  async function handle(communityId: string) {
+    if (communityId === user!.communityId) return;
+    setBusy(true);
+    try {
+      await switchMembership(communityId);
+    } catch (err) {
+      setBusy(false);
+      alert(err instanceof Error ? err.message : "Could not switch community");
+    }
+  }
+
+  return (
+    <label className="relative inline-flex items-center">
+      <span className="sr-only">Community</span>
+      <select
+        value={user.communityId}
+        disabled={busy}
+        onChange={(e) => handle(e.target.value)}
+        className="appearance-none rounded-xl border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none disabled:opacity-50"
+      >
+        {memberships.data.map((m) => (
+          <option key={m.communityId} value={m.communityId}>
+            {m.communityName} · {roleShort[m.role] ?? m.role}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-slate-400" />
+    </label>
+  );
+}
+
 function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
@@ -377,6 +414,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
 
             <div className="hidden sm:block">
+              <MembershipSwitcher />
+            </div>
+            <div className="hidden sm:block">
               <ViewAsSwitcher />
             </div>
             {DEV_LOGIN_ENABLED && (
@@ -423,6 +463,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-between gap-2 overflow-x-auto border-t border-slate-100 px-4 py-1.5 sm:hidden">
             <Badge tone="brand">{roleLabels[role] ?? role}</Badge>
             <span className="flex shrink-0 items-center gap-2">
+              <MembershipSwitcher />
               <ViewAsSwitcher />
               {DEV_LOGIN_ENABLED && <DevAccountSwitcher />}
             </span>

@@ -31,8 +31,13 @@ async def list_users(
 async def create_user(body: UserCreate, db: DB, user: CurrentUser) -> User:
     """Whitelist a Google account for this community."""
     email = body.email.lower()
-    if await db.users.find_one({"email": email}):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already whitelisted")
+    # Unique per community — the same email may exist in other communities
+    # (e.g. one manager serving several societies).
+    if await db.users.find_one({"email": email, "community_id": user.community_id}):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Email already whitelisted in this community",
+        )
     new_user = User(
         community_id=user.community_id,
         name=body.name,
@@ -60,11 +65,16 @@ async def update_user(
         # Email IS the whitelist key — normalize and keep unique.
         updates["email"] = updates["email"].lower()
         clash = await db.users.find_one(
-            {"email": updates["email"], "id": {"$ne": user_id}}
+            {
+                "email": updates["email"],
+                "community_id": user.community_id,
+                "id": {"$ne": user_id},
+            }
         )
         if clash:
             raise HTTPException(
-                status.HTTP_409_CONFLICT, detail="Email already whitelisted"
+                status.HTTP_409_CONFLICT,
+                detail="Email already whitelisted in this community",
             )
     result = await db.users.find_one_and_update(
         {"id": user_id, "community_id": user.community_id},

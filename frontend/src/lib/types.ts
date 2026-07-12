@@ -17,6 +17,14 @@ export interface Community {
   apartmentCount: number;
 }
 
+// One community membership of the signed-in person (same email).
+export interface MembershipInfo {
+  userId: string;
+  communityId: string;
+  communityName: string;
+  role: Role;
+}
+
 // Super-admin portfolio console rollup (community ledger only).
 export interface PortfolioCommunityStats {
   id: string;
