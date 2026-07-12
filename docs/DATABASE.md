@@ -40,6 +40,10 @@ visibility private/community, status, created_by, created_date), `feed_posts`
 community_id, user_id, text, date ISO, read, type). `work_orders` gained
 `photos[]` (GCS paths).
 
+Adoption tracking (2026-07-12): `users.last_login` (ISO, None = never) and
+`users.login_count` are stamped on every login for all memberships of the
+email; they power the super-admin Platform Insights dashboard.
+
 M4 additions: `polls` (id, community_id, question, description, open/close
 dates, status, option_labels[], votes_by {apartment_id→label} — one vote per
 apartment), `documents` (id, community_id, title, category, uploaded_date,

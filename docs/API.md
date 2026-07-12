@@ -84,6 +84,7 @@ cross-tenant, 409 conflict).
 
 | Method | Path | Access | Notes |
 |---|---|---|---|
+| GET | `/insights/platform` | super_admin | CEO dashboard rollup across owned communities: adoption funnel (whitelisted→logged in→active 30d/7d via `lastLogin`), daily audit activity (30d), module usage, per-community health, per-user adoption list, community-ledger billed/collected. Portfolio-scoped — independent super admins never see each other |
 | POST | `/invoices` | manager/admin | Single invoice for an apartment |
 | POST | `/invoices/generate` | manager/admin | One per apartment for a period (all, or only `apartmentIds` when provided); idempotent; amount defaults to `community.monthlyMaintenance` |
 | POST | `/invoices/bill-owner` | manager/admin | Itemized reimbursement invoice for one apartment (`ledger=reimbursement`, lineItems auto-summed, owner notified) |

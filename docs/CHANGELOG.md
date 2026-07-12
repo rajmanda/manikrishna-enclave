@@ -5,6 +5,19 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Platform Insights — the super-admin "CEO dashboard" (`/insights`):**
+  adoption funnel (whitelisted → logged in ever → active 30d → active 7d),
+  daily engagement chart from the audit trail, feature-usage breakdown by
+  module, financial pulse (community-ledger billed/collected/collection %),
+  per-community health table, and a whitelist-adoption chase list
+  (filter: never logged in / active 7d, search, login counts) — built for
+  the real-owner-onboarding push. Backed by new super-admin-only
+  `GET /insights/platform`, strictly portfolio-scoped. Login tracking added:
+  `users.last_login` + `login_count` stamped on every login across all of
+  the email's memberships (starts from this release — older accounts show
+  "never" until they next log in). Nav gets an Insights entry (Admin group,
+  super_admin). 4 new tests (149 total).
+
 - **Invoice receipts (paper receipt upload / take a picture):** every invoice
   dialog on `/invoices` (Create invoices, Bill owner, Service fees, Late
   fees) gets an optional receipt picker — choose a file or open the phone

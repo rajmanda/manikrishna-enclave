@@ -242,6 +242,50 @@ export interface Vendor {
   activeContracts: number;
 }
 
+export interface PlatformInsights {
+  generatedAt: string;
+  totals: {
+    communities: number;
+    apartments: number;
+    users: number;
+    activatedUsers: number;
+    active7d: number;
+    active30d: number;
+    actions30d: number;
+    logins: number;
+    billed: number;
+    collected: number;
+    collectionRate: number;
+  };
+  funnel: { stage: string; count: number }[];
+  roles: { role: string; count: number; activated: number }[];
+  activitySeries: { date: string; actions: number; activeUsers: number }[];
+  moduleUsage: { module: string; actions: number }[];
+  communities: {
+    id: string;
+    name: string;
+    apartments: number;
+    users: number;
+    activatedUsers: number;
+    active7d: number;
+    actions30d: number;
+    lastActivity?: string | null;
+    billed: number;
+    collected: number;
+    collectionRate: number;
+  }[];
+  userAdoption: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    communityId: string;
+    communityName: string;
+    lastLogin?: string | null;
+    loginCount: number;
+  }[];
+}
+
 export interface CommunityDocument {
   id: string;
   communityId: string;
