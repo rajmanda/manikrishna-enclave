@@ -4,7 +4,7 @@ Last updated: 2026-07-03 · MongoDB Atlas · Schema v1
 
 The app uses a dedicated Atlas M0 cluster `hyderabad`
 (hyderabad.n5kr48f.mongodb.net, AWS Mumbai ap-south-1 — co-located with Cloud
-Run; see D-020). Dev and prod share it, DB `manikrishna_enclave`. The app
+Run; see D-020). Prod uses DB `communityhub`, local dev uses `communityhub_dev` (ported from `manikrishna_enclave` 2026-07-11; old DB retained as fallback). The app
 connects as the least-privilege `rajmanda` user (readWriteAnyDatabase);
 credentials live in Secret Manager (`communityhub-atlas-mumbai-*`). The
 original `cluster0.sod5j` holds a frozen pre-migration copy (2026-07-04). Documents use string business ids in an `id` field

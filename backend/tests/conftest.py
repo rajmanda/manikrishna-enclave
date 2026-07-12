@@ -42,8 +42,27 @@ async def db():
         {
             "id": "u-super",
             "community_id": "platform",
+            # Portfolio scoping: super admins only reach communities they own.
+            "community_ids": ["mke", "other"],
             "name": "Platform Admin",
             "email": "super@communityhub.app",
+            "role": "super_admin",
+            "apartment_id": None,
+            "phone": None,
+        }
+    )
+    # A second, independent super admin who owns only their own community —
+    # must never see mke/other (multi-super-admin isolation).
+    await database.communities.insert_one(
+        {"id": "rival", "name": "Rival Residency", "address": "", "apartment_count": 0}
+    )
+    await database.users.insert_one(
+        {
+            "id": "u-super-rival",
+            "community_id": "rival",
+            "community_ids": [],
+            "name": "Rival Admin",
+            "email": "super@rival.example.com",
             "role": "super_admin",
             "apartment_id": None,
             "phone": None,
@@ -86,6 +105,11 @@ async def auditor_headers(client):
 @pytest.fixture
 async def super_headers(client):
     return await login(client, "super@communityhub.app")
+
+
+@pytest.fixture
+async def rival_super_headers(client):
+    return await login(client, "super@rival.example.com")
 
 
 @pytest.fixture

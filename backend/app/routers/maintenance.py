@@ -6,7 +6,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.audit import record_audit
-from app.core.security import CurrentUser, require_roles
+from app.core.security import CurrentUser, owned_community_ids, require_roles
 from app.db import get_db
 from app.models import (
     WRITE_ROLES,
@@ -97,9 +97,11 @@ async def update_status(
 async def delete_maintenance_request(
     request_id: str, db: DB, user: CurrentUser
 ) -> None:
-    result = await db.maintenance_requests.delete_one({"id": request_id})
+    result = await db.maintenance_requests.delete_one(
+        {"id": request_id, "community_id": {"$in": owned_community_ids(user)}}
+    )
     if result.deleted_count == 0:
-         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Request not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Request not found")
     await record_audit(db, user, "delete", "maintenance_requests", request_id)
 
 

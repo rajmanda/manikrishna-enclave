@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, sta
 
 from app import storage
 from app.audit import record_audit
-from app.core.security import CurrentUser, require_roles
+from app.core.security import CurrentUser, owned_community_ids, require_roles
 from app.db import get_db
 from app.models import (
     WRITE_ROLES,
@@ -220,7 +220,9 @@ async def get_photo(
 async def delete_work_order(
     work_order_id: str, db: DB, user: CurrentUser
 ) -> None:
-    result = await db.work_orders.delete_one({"id": work_order_id})
+    result = await db.work_orders.delete_one(
+        {"id": work_order_id, "community_id": {"$in": owned_community_ids(user)}}
+    )
     if result.deleted_count == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Work order not found")
     await record_audit(db, user, "delete", "work_orders", work_order_id)

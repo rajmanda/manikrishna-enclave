@@ -1,18 +1,18 @@
 # PROJECT_STATE.md
 
-Last updated: 2026-07-06
+Last updated: 2026-07-11
 
 | Field | Value |
 |---|---|
 | Current version | 0.12.0 |
 | Current milestone | **M4 Governance — complete. PRD Phases 1–4 fully shipped.** Next: M5 (AI, mobile) or hardening |
 | Current sprint | Launch readiness (real owner emails, notifications decision) |
-| Current branch | main (github.com/rajmanda/manikrishna-enclave, public) |
+| Current branch | feature/multi-community (off feature/presentation; main on github.com/rajmanda/manikrishna-enclave, public) |
 | Last completed feature | Design-system + UI overhaul (tokens, primitives, Framer Motion, `/home` landing, grouped nav, page transitions — see `UX_REVIEW.md`) + per-deployment branding ("Manikrishna Enclave") |
-| Current feature | — |
+| Current feature | Multi-community portfolio console (super-admin): `GET /communities/portfolio/stats` + `/portfolio` page, 4 new tests (112 total). Presentation page rebuilt as role-based decks (6 audiences) with persistent CTAs, WhatsApp-alerts slide, privacy slide, Early Access badges on portfolio claims |
 | Next priority | Owner onboarding: collect real owner emails and whitelist them; then notifications provider decision |
 | Deployment status | **Live at https://community.rajmanda.com** (Cloud Run, asia-south1) |
-| Database version | Schema v6 (migrations 001-006); Atlas `hyderabad.n5kr48f` (AWS Mumbai), DB `manikrishna_enclave` |
+| Database version | Schema v6 (migrations 001-006); Atlas `hyderabad.n5kr48f` (AWS Mumbai), DB `communityhub` (prod, live since 2026-07-12 IST) / `communityhub_dev` (local); legacy `manikrishna_enclave` in ~1-week bake before drop |
 | Infrastructure version | Terraform applied — 35 resources (incl. GCS media bucket), state in gs://mm-owners-5b8611-tfstate |
 | Last deployment | 2026-07-06 via deploy.yml (manual dispatch) |
 
@@ -50,8 +50,13 @@ None — `frontend/src/lib/data.ts` deleted in M4; every screen is API-driven.
 
 ## Known issues
 
-1. Dev and prod currently share DB `manikrishna_enclave` — consider a
-   separate dev DB name after M1 close-out.
+1. ~~Dev and prod share DB~~ ✅ 2026-07-11: data ported to generic DBs and
+   **prod cutover completed 2026-07-12 07:59 IST** (terraform apply; backend
+   revision 00041 serving `communityhub`, health 200, OpenClaw poller
+   confirmed live; jobs backup/cleanup updated too). Local dev on
+   `communityhub_dev`. Old `manikrishna_enclave` DB retained read-only for a
+   ~1-week bake (check its audit_log stays frozen), then dump + drop.
+   Pre-cutover JSON backup: backend/pre_cutover_manikrishna_enclave_2026-07-11.json.
 2. Atlas invoice `inv-2606-502` shows ₹5,500 vs seed's ₹3,500 — DB predates/
    was edited outside the seed; treat Atlas as source of truth.
 3. No staging environment yet (deliberate — add when M2 warrants).
