@@ -284,6 +284,7 @@ class Invoice(APIModel):
     # fee / flat-specific reimbursements) — never mixed into community funds.
     ledger: Literal["community", "manager_fee", "reimbursement"] = "community"
     line_items: list["InvoiceLineItem"] = []
+    work_order_id: str | None = None  # money-chain link (cost recovery)
 
 
 class InvoiceLineItem(APIModel):
@@ -307,6 +308,7 @@ class InvoiceCreate(APIModel):
     description: str
     amount: float
     due_date: str
+    work_order_id: str | None = None
 
 
 class InvoiceUpdate(APIModel):
@@ -322,6 +324,7 @@ class GenerateInvoicesRequest(APIModel):
     amount: float | None = None  # defaults to community.monthly_maintenance
     description: str = "Monthly Maintenance"
     apartment_ids: list[str] | None = None  # None = all apartments
+    work_order_id: str | None = None  # link cost-recovery invoices to the job
 
 
 class ApplyLateFeesRequest(APIModel):
@@ -374,6 +377,7 @@ class Expense(APIModel):
     paid_date: str
     has_receipt: bool = False
     receipt_path: str | None = None
+    work_order_id: str | None = None  # money-chain link
 
 
 class ExpenseCreate(APIModel):
@@ -382,6 +386,7 @@ class ExpenseCreate(APIModel):
     vendor_id: str | None = None
     amount: float
     paid_date: str
+    work_order_id: str | None = None
 
 
 class ExpenseUpdate(APIModel):
@@ -570,6 +575,9 @@ class WorkOrder(APIModel):
     photos: list[str] = []  # GCS object paths
     timeline: list[WorkOrderEvent] = []
     comments: list[WorkOrderComment] = []
+    # Money-chain link: the maintenance request this work order came from.
+    # Expenses and invoices link back via their own work_order_id.
+    maintenance_request_id: str | None = None
 
 
 class WorkOrderCreate(APIModel):
@@ -578,6 +586,7 @@ class WorkOrderCreate(APIModel):
     priority: Literal["Low", "Medium", "High", "Urgent"] = "Medium"
     vendor_id: str | None = None
     estimate: float | None = None
+    maintenance_request_id: str | None = None
 
 
 class WorkOrderUpdate(APIModel):

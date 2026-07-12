@@ -109,6 +109,7 @@ export interface Invoice {
   ledger?: "community" | "manager_fee" | "reimbursement";
   lineItems?: { description: string; amount: number }[];
   parentInvoiceId?: string | null;
+  workOrderId?: string | null;
 }
 
 export interface Payment {
@@ -144,6 +145,7 @@ export interface Expense {
   amount: number;
   paidDate: string;
   hasReceipt: boolean;
+  workOrderId?: string | null;
 }
 
 export type WorkOrderStage =
@@ -185,6 +187,25 @@ export interface WorkOrder {
   photos?: string[];
   timeline: WorkOrderEvent[];
   comments: WorkOrderComment[];
+  maintenanceRequestId?: string | null;
+}
+
+export interface ReserveReconciliation {
+  anchorMonth: string | null;
+  anchorCutoff: string | null;
+  anchoredContributions?: number;
+  anchoredExpenses?: number;
+  recordedContributions?: number;
+  recordedExpenses?: number;
+  unanchoredContributions?: number;
+  unanchoredExpenses?: number;
+  collectionsWithoutExpense?: {
+    description: string;
+    period?: string | null;
+    workOrderId?: string | null;
+    billed: number;
+    collected: number;
+  }[];
 }
 
 export interface MaintenanceRequest {

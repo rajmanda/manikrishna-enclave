@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Camera, ChevronRight, Plus } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
@@ -75,13 +76,17 @@ function NewWorkOrderDialog({
   vendors,
   onClose,
   onDone,
+  initial,
 }: {
   vendors: Vendor[] | undefined;
   onClose: () => void;
   onDone: () => void;
+  /** Prefill when created from a maintenance request — the work order links
+   * back to it and the request flips to In Progress. */
+  initial?: { title?: string; description?: string; maintenanceRequestId?: string };
 }) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
   const [priority, setPriority] = useState<Priority>("Medium");
   const [vendorId, setVendorId] = useState("");
   const [estimate, setEstimate] = useState("");
@@ -101,6 +106,9 @@ function NewWorkOrderDialog({
           priority,
           ...(vendorId ? { vendorId } : {}),
           ...(estimate ? { estimate: Number(estimate) } : {}),
+          ...(initial?.maintenanceRequestId
+            ? { maintenanceRequestId: initial.maintenanceRequestId }
+            : {}),
         }),
       });
       onDone();
@@ -114,6 +122,12 @@ function NewWorkOrderDialog({
   return (
     <Modal title="New Work Order" onClose={onClose}>
       <form className="space-y-4" onSubmit={submit}>
+        {initial?.maintenanceRequestId && (
+          <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">
+            Linked to the resident&apos;s maintenance request — it moves to
+            &ldquo;In Progress&rdquo; when this is created.
+          </p>
+        )}
         <div>
           <label className={labelCls}>Title</label>
           <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} required />
@@ -150,12 +164,34 @@ function NewWorkOrderDialog({
   );
 }
 
-export default function WorkOrdersPage() {
+function WorkOrdersPageInner() {
   const { role } = useSessionUser();
   const [filter, setFilter] = useState<Filter>("All");
   const [newOpen, setNewOpen] = useState(false);
+  const [initialWo, setInitialWo] = useState<
+    { title?: string; description?: string; maintenanceRequestId?: string } | undefined
+  >(undefined);
   const workOrders = useApi<WorkOrder[]>("/work-orders");
   const vendors = useApi<Vendor[]>("/vendors");
+  const canCreateRole = ["property_manager", "community_admin", "super_admin"].includes(role);
+
+  // Deep-link: /work-orders?create=1&mr={id}&title=…&desc=… (from a
+  // maintenance request) opens the dialog prefilled, then cleans the URL.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const consumedCreate = useRef(false);
+  useEffect(() => {
+    if (canCreateRole && !consumedCreate.current && searchParams.get("create")) {
+      consumedCreate.current = true;
+      setInitialWo({
+        title: searchParams.get("title") ?? undefined,
+        description: searchParams.get("desc") ?? undefined,
+        maintenanceRequestId: searchParams.get("mr") ?? undefined,
+      });
+      setNewOpen(true);
+      router.replace("/work-orders");
+    }
+  }, [canCreateRole, searchParams, router]);
 
   if (workOrders.error)
     return <ErrorNote message={workOrders.error} onRetry={workOrders.reload} />;
@@ -259,10 +295,22 @@ export default function WorkOrdersPage() {
       {newOpen && (
         <NewWorkOrderDialog
           vendors={vendors.data}
-          onClose={() => setNewOpen(false)}
+          onClose={() => {
+            setNewOpen(false);
+            setInitialWo(undefined);
+          }}
           onDone={workOrders.reload}
+          initial={initialWo}
         />
       )}
     </div>
+  );
+}
+
+export default function WorkOrdersPage() {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <WorkOrdersPageInner />
+    </Suspense>
   );
 }

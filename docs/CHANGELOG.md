@@ -5,6 +5,32 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Money-chain integrity (bore well discrepancy):** three-part fix after
+  ₹2,700 of June bore well collections silently vanished from the reserve.
+  (1) *Data*: June closing entry amended 20,000→22,700 contributions
+  (balance 700→3,400) in prod+dev, audited. (2) *Reconciliation*: new
+  `GET /reserve-fund/reconciliation` compares the anchor month's closing
+  figures against recorded payments/expenses and lists **collections
+  without a recorded expense** (special billing drives where owners paid
+  but the job's spend was never entered — matched by work-order link or
+  description words); Reserve Fund page shows amber warning banners, and
+  Record Payment / Add Expense dialogs warn when the date falls in an
+  already-closed month. (3) *Chain links*: `work_orders.maintenance_request_id`
+  (creating a WO from a request flips it to In Progress),
+  `expenses.work_order_id`, `invoices.work_order_id` (incl. bulk generate).
+  Work-order page gains a Money panel (estimate/final/expenses recorded/
+  billed/collected + "collected but no expense" warning) with "Record
+  expense for this job" (prefilled dialog) and "Bill owners for this job"
+  (prefilled generate dialog); maintenance requests get a "Create work
+  order" action that prefils the WO dialog. 6 new tests (155 total).
+- **Reserve fairness caveat for everyone:** wherever the reserve balance is
+  shown (owner dashboard, manager dashboard, Community page, Reserve Fund
+  page), ALL roles now see a one-line amber note when the books have known
+  gaps — "The reserve figure is provisional — money was collected for
+  'Bore well repair work' but its expense hasn't been recorded yet."
+  (`ReserveCaveat` component driven by `/reserve-fund/reconciliation`;
+  disappears automatically once the books reconcile).
+
 - **Expense entry made findable (manager feedback):** new dedicated
   `/expenses` page (Money nav group, all roles) with title-bar "Add
   expense", month/category ledger, and Spent-this-month / All-time /

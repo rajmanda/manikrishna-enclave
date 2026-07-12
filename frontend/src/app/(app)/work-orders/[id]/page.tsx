@@ -3,15 +3,16 @@
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Camera, Check, Phone, Send, Upload } from "lucide-react";
+import { ArrowLeft, ArrowRight, Camera, Check, ClipboardList, Phone, ReceiptText, Send, Upload, Wallet } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, apiBlob, ApiError, apiUpload } from "@/lib/api";
-import type { User, Vendor, WorkOrder, WorkOrderStage } from "@/lib/types";
+import type { Expense, Invoice, User, Vendor, WorkOrder, WorkOrderStage } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { userName, vendorFor } from "@/lib/lookup";
 import { priorityTone, stageTone } from "@/lib/tones";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
+import { AddExpenseDialog } from "@/components/expenses";
 import {
   Avatar,
   Badge,
@@ -147,7 +148,11 @@ export default function WorkOrderDetailPage({
   const workOrder = useApi<WorkOrder>(`/work-orders/${id}`);
   const vendors = useApi<Vendor[]>("/vendors");
   const users = useApi<User[]>("/users");
+  // Money chain (manager view): expenses/invoices linked to this job.
+  const expenses = useApi<Expense[]>(canWrite ? "/expenses" : null);
+  const invoices = useApi<Invoice[]>(canWrite ? "/invoices" : null);
   const [stageOpen, setStageOpen] = useState(false);
+  const [expenseOpen, setExpenseOpen] = useState(false);
   const [comment, setComment] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -199,6 +204,11 @@ export default function WorkOrderDetailPage({
   const vendor = vendorFor(vendors.data, wo.vendorId);
   const currentIdx = allStages.indexOf(wo.stage);
   const eventByStage = new Map(wo.timeline.map((e) => [e.stage, e]));
+  const linkedExpenses = (expenses.data ?? []).filter((e) => e.workOrderId === wo.id);
+  const linkedInvoices = (invoices.data ?? []).filter((i) => i.workOrderId === wo.id);
+  const spent = linkedExpenses.reduce((s, e) => s + e.amount, 0);
+  const billed = linkedInvoices.reduce((s, i) => s + i.amount, 0);
+  const collected = linkedInvoices.reduce((s, i) => s + i.paidAmount, 0);
 
   return (
     <div className="space-y-5">
@@ -335,7 +345,7 @@ export default function WorkOrderDetailPage({
           <Card className="divide-y divide-slate-100">
             <div className="p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                Cost
+                Money
               </p>
               <div className="mt-2 flex items-baseline justify-between">
                 <span className="text-sm text-slate-500">Estimate</span>
@@ -349,7 +359,68 @@ export default function WorkOrderDetailPage({
                   {wo.finalCost != null ? formatINR(wo.finalCost) : "Pending"}
                 </span>
               </div>
+              {canWrite && (
+                <>
+                  <div className="mt-1 flex items-baseline justify-between">
+                    <span className="text-sm text-slate-500">Expenses recorded</span>
+                    <span className={`text-sm font-semibold ${spent === 0 && collected > 0 ? "text-amber-600" : ""}`}>
+                      {linkedExpenses.length > 0 ? formatINR(spent) : "None"}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-baseline justify-between">
+                    <span className="text-sm text-slate-500">Billed to owners</span>
+                    <span className="text-sm font-semibold">
+                      {linkedInvoices.length > 0 ? formatINR(billed) : "—"}
+                    </span>
+                  </div>
+                  {linkedInvoices.length > 0 && (
+                    <div className="mt-1 flex items-baseline justify-between">
+                      <span className="text-sm text-slate-500">Collected</span>
+                      <span className={`text-sm font-semibold ${collected >= billed ? "text-emerald-600" : "text-amber-600"}`}>
+                        {formatINR(collected)}
+                        {billed > collected && (
+                          <span className="ml-1 text-xs font-normal text-slate-400">
+                            of {formatINR(billed)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {collected > 0 && linkedExpenses.length === 0 && (
+                    <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700">
+                      Money collected but no expense recorded for this job yet.
+                    </p>
+                  )}
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    <button
+                      onClick={() => setExpenseOpen(true)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      <Wallet className="h-3.5 w-3.5" /> Record expense for this job
+                    </button>
+                    <Link
+                      href={`/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}`}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      <ReceiptText className="h-3.5 w-3.5" /> Bill owners for this job
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
+            {wo.maintenanceRequestId && (
+              <div className="p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                  Origin
+                </p>
+                <Link
+                  href="/maintenance"
+                  className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+                >
+                  <ClipboardList className="h-3.5 w-3.5" /> From a resident maintenance request
+                </Link>
+              </div>
+            )}
             {vendor && (
               <div className="p-4">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -418,6 +489,20 @@ export default function WorkOrderDetailPage({
       </div>
       {stageOpen && (
         <StageDialog wo={wo} onClose={() => setStageOpen(false)} onDone={workOrder.reload} />
+      )}
+      {expenseOpen && (
+        <AddExpenseDialog
+          vendors={vendors.data}
+          onClose={() => setExpenseOpen(false)}
+          onDone={() => expenses.reload()}
+          initial={{
+            category: "Repairs",
+            description: wo.title,
+            amount: wo.finalCost ?? wo.estimate ?? undefined,
+            vendorId: wo.vendorId ?? undefined,
+            workOrderId: wo.id,
+          }}
+        />
       )}
     </div>
   );

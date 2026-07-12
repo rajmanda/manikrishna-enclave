@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, Lock, Plus } from "lucide-react";
+import Link from "next/link";
+import { Globe, Lock, Plus, Wrench } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
@@ -182,6 +183,14 @@ export default function MaintenancePage() {
             </p>
             {canManage && (
               <div className="mt-3 flex gap-1.5 border-t border-slate-100 pt-3 flex-wrap">
+                {r.status !== "Resolved" && (
+                  <Link
+                    href={`/work-orders?create=1&mr=${r.id}&title=${encodeURIComponent(r.title)}&desc=${encodeURIComponent(r.description)}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-700"
+                  >
+                    <Wrench className="h-3 w-3" /> Create work order
+                  </Link>
+                )}
                 {STATUSES.filter((s) => s !== r.status).map((s) => (
                   <button
                     key={s}

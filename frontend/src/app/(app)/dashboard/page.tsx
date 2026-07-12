@@ -20,6 +20,7 @@ import {
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { ExpensesModal } from "@/components/ExpensesModal";
+import { ReserveCaveat } from "@/components/ReserveCaveat";
 import { ReserveModal } from "@/components/ReserveModal";
 import type {
   Expense,
@@ -189,6 +190,7 @@ function OwnerDashboard() {
           onClick={() => setReserveModal(true)}
         />
       </div>
+      <ReserveCaveat />
 
       {/* Community health + my own record, at a glance */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -897,6 +899,7 @@ function ManagerDashboard() {
           onClick={() => setReserveModal(true)}
         />
       </FadeIn>
+      <ReserveCaveat />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="p-4">

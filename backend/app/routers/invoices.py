@@ -142,6 +142,7 @@ async def generate_invoices(
             amount=amount,
             due_date=body.due_date,
             status=compute_status(amount, 0, body.due_date),
+            work_order_id=body.work_order_id,
         )
         await db.invoices.insert_one(invoice.model_dump())
         created += 1

@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronDown, Paperclip, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ChevronDown, Paperclip, Trash2, Upload } from "lucide-react";
 import { api, ApiError, apiBlob } from "@/lib/api";
 import { uploadFileTo } from "@/lib/upload";
-import type { Expense, Vendor } from "@/lib/types";
+import { useApi } from "@/hooks/useApi";
+import type { Expense, ReserveReconciliation, Vendor } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { ReceiptPicker } from "@/components/ReceiptPicker";
@@ -19,22 +20,52 @@ export function vendorFor(vendors: Vendor[] | undefined, id?: string) {
   return id ? vendors?.find((v) => v.id === id) : undefined;
 }
 
+/** Warns when a payment/expense date falls inside a month already closed in
+ * the reserve ledger — such entries don't move the live reserve until the
+ * closing entry is amended (how the June bore well money went missing). */
+export function ClosedMonthNote({ date }: { date: string }) {
+  const recon = useApi<ReserveReconciliation>("/reserve-fund/reconciliation");
+  const cutoff = recon.data?.anchorCutoff;
+  if (!cutoff || !date || date.slice(0, 10) > cutoff) return null;
+  return (
+    <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span>
+        This date falls in {recon.data?.anchorMonth}, a month already closed in
+        the reserve ledger. The amount won&apos;t change the live reserve — the
+        Reserve Fund page will flag it so the {recon.data?.anchorMonth} closing
+        entry can be amended.
+      </span>
+    </p>
+  );
+}
+
 export function AddExpenseDialog({
   vendors,
   onClose,
   onDone,
+  initial,
 }: {
   vendors: Vendor[] | undefined;
   onClose: () => void;
   onDone: () => void;
+  /** Prefill (e.g. "Record expense" from a work order); workOrderId links
+   * the expense into the money chain. */
+  initial?: {
+    category?: string;
+    description?: string;
+    amount?: number;
+    vendorId?: string;
+    workOrderId?: string;
+  };
 }) {
   // No default category — "Miscellaneous" as a default turns the ledger
   // into a dumping ground.
-  const [category, setCategory] = useState("");
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState(initial?.category ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [amount, setAmount] = useState(initial?.amount ? String(initial.amount) : "");
   const [paidDate, setPaidDate] = useState(new Date().toISOString().slice(0, 10));
-  const [vendorId, setVendorId] = useState("");
+  const [vendorId, setVendorId] = useState(initial?.vendorId ?? "");
   const [receipts, setReceipts] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +83,7 @@ export function AddExpenseDialog({
           amount: Number(amount),
           paidDate,
           ...(vendorId ? { vendorId } : {}),
+          ...(initial?.workOrderId ? { workOrderId: initial.workOrderId } : {}),
         }),
       });
       if (receipts[0]) {
@@ -122,6 +154,7 @@ export function AddExpenseDialog({
           onChange={(f) => setReceipts(f.slice(-1))}
           label="Receipt (optional — photo or PDF)"
         />
+        <ClosedMonthNote date={paidDate} />
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button type="submit" disabled={busy || !category} className={primaryBtnCls}>
           {busy ? "Saving…" : `Add ${formatINR(Number(amount) || 0)} expense`}
