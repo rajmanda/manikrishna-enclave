@@ -15,6 +15,12 @@ begin at 0.1.0 with the first deployment (M1).
 - **Frontend:** `switchCommunity` in AuthContext; "Manage this community"
   button + "Currently managing" state on `/portfolio` cards; AppShell now
   shows the acting community's name.
+- **Add Apartments UI (Ownership page):** bulk dialog (comma/line-separated
+  unit numbers, floor auto-derived from the number, duplicate warnings,
+  partial-failure reporting) — previously apartments only existed via the
+  seed, leaving fresh communities impossible to populate from the UI. Plus
+  an empty-state callout guiding the setup order (apartments → accounts →
+  members).
 - **Multi-community memberships (one email, many communities):** email is now
   unique PER COMMUNITY (compound index `community_id+email`, legacy global
   `email_1` index auto-dropped at startup) — the same person can be e.g.

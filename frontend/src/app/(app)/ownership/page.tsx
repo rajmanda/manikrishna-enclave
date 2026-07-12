@@ -12,6 +12,95 @@ import { aptNumber } from "@/lib/lookup";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { Avatar, Badge, Card, ErrorNote, PageLoading, PageTitle } from "@/components/ui";
 
+function AddApartmentsDialog({
+  existing,
+  onClose,
+  onDone,
+}: {
+  existing: Apartment[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [numbers, setNumbers] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Floor derived from numeric unit numbers ("302" → floor 3); otherwise 0.
+  const deriveFloor = (num: string) =>
+    /^\d{3,}$/.test(num) ? Math.floor(parseInt(num, 10) / 100) : 0;
+
+  const parsed = [
+    ...new Set(
+      numbers
+        .split(/[\n,]+/)
+        .map((n) => n.trim())
+        .filter(Boolean)
+    ),
+  ];
+  const taken = new Set(existing.map((a) => a.number));
+  const duplicates = parsed.filter((n) => taken.has(n));
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const failed: string[] = [];
+    for (const number of parsed) {
+      try {
+        await api("/apartments", {
+          method: "POST",
+          body: JSON.stringify({ number, floor: deriveFloor(number) }),
+        });
+      } catch (err) {
+        failed.push(
+          `${number} (${err instanceof ApiError ? err.message : "failed"})`
+        );
+      }
+    }
+    if (failed.length) {
+      setError(`Not created: ${failed.join(", ")}`);
+      setBusy(false);
+      onDone(); // partial success — refresh what did get created
+      return;
+    }
+    onDone();
+    onClose();
+  }
+
+  return (
+    <Modal title="Add Apartments" onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <div>
+          <label className={labelCls}>Unit numbers (comma or line separated)</label>
+          <textarea
+            className={`${inputCls} min-h-24`}
+            value={numbers}
+            onChange={(e) => setNumbers(e.target.value)}
+            placeholder={"101, 102, 103\n201, 202, 203"}
+            required
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Floor is derived from the number (302 → floor 3). {parsed.length > 0 && `${parsed.length} unit${parsed.length === 1 ? "" : "s"} to create.`}
+          </p>
+          {duplicates.length > 0 && (
+            <p className="mt-1 text-xs font-medium text-amber-600">
+              Already exist and will fail: {duplicates.join(", ")}
+            </p>
+          )}
+        </div>
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={busy || parsed.length === 0}
+          className={primaryBtnCls}
+        >
+          {busy ? "Creating…" : `Create ${parsed.length || ""} apartment${parsed.length === 1 ? "" : "s"}`}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
 function AccountDialog({
   account,
   apartments,
@@ -160,6 +249,7 @@ export default function OwnershipPage() {
   const users = useApi<User[]>("/users");
   const [accountDialog, setAccountDialog] = useState<{ open: boolean; account: Account | null }>({ open: false, account: null });
   const [legalDialog, setLegalDialog] = useState<string | null>(null);
+  const [aptDialog, setAptDialog] = useState(false);
 
   if (accounts.error) return <ErrorNote message={accounts.error} onRetry={accounts.reload} />;
   if (accounts.loading || !accounts.data || !apartments.data) return <PageLoading />;
@@ -198,14 +288,40 @@ export default function OwnershipPage() {
         title="Ownership"
         subtitle="Billing accounts, multi-apartment configuration and legal title holders"
         actions={
-          <button
-            onClick={() => setAccountDialog({ open: true, account: null })}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
-          >
-            <PlusCircle className="h-4 w-4" /> New account
-          </button>
+          <>
+            <button
+              onClick={() => setAptDialog(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-xs hover:bg-slate-50"
+            >
+              <Home className="h-4 w-4" /> Add apartments
+            </button>
+            <button
+              onClick={() => setAccountDialog({ open: true, account: null })}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+            >
+              <PlusCircle className="h-4 w-4" /> New account
+            </button>
+          </>
         }
       />
+
+      {apartments.data.length === 0 && (
+        <Card className="border-brand-200 bg-brand-50/50 p-4 text-sm text-brand-800">
+          This community has no apartments yet — start with{" "}
+          <button className="font-semibold underline" onClick={() => setAptDialog(true)}>
+            Add apartments
+          </button>
+          , then group them into billing accounts and whitelist members.
+        </Card>
+      )}
+
+      {aptDialog && (
+        <AddApartmentsDialog
+          existing={apartments.data}
+          onClose={() => setAptDialog(false)}
+          onDone={apartments.reload}
+        />
+      )}
 
       {unassigned.length > 0 && (
         <Card className="border-amber-200 bg-amber-50/60 p-4 text-sm text-amber-800">
