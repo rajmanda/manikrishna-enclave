@@ -21,9 +21,9 @@ begin at 0.1.0 with the first deployment (M1).
   `manikrishna_enclave` to `communityhub` (prod) and `communityhub_dev`
   (local dev) via new `backend/scripts/port_db.py` (copies collections +
   indexes, verifies counts, non-destructive). Local `.env` now uses
-  `communityhub_dev`; terraform `db_name` default → `communityhub` (apply +
-  redeploy pending). Legacy DB retained as fallback until prod cutover is
-  verified.
+  `communityhub_dev`; terraform `db_name` default → `communityhub`, applied
+  to prod 2026-07-12 IST (zero-downtime revision roll, verified via health +
+  OpenClaw poller traffic). Legacy DB in ~1-week bake before drop.
 - **Portfolio console (super-admin):** new `GET /api/v1/communities/portfolio/stats`
   returns a per-community rollup (units, invoiced/collected/outstanding on the
   community ledger only, collection rate, open invoices, open work orders).
