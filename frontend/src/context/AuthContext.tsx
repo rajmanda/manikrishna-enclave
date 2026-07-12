@@ -29,7 +29,7 @@ interface AuthState {
   devLogin: (email: string) => Promise<void>;
   googleLogin: (idToken: string) => Promise<void>;
   switchRole: (role: Role) => Promise<void>;
-  switchCommunity: (communityId: string) => Promise<void>;
+  switchCommunity: (communityId: string, redirectTo?: string) => Promise<void>;
   switchMembership: (communityId: string) => Promise<void>;
   logout: () => void;
 }
@@ -71,14 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.assign("/dashboard");
   }, []);
 
-  const switchCommunity = useCallback(async (communityId: string) => {
+  const switchCommunity = useCallback(async (communityId: string, redirectTo = "/dashboard") => {
     const result = await api<{ accessToken: string; user: User }>(
       "/auth/switch-community",
       { method: "POST", body: JSON.stringify({ communityId }) }
     );
     setToken(result.accessToken);
     // Full reload: every page and badge re-fetches in the new community.
-    window.location.assign("/dashboard");
+    window.location.assign(redirectTo);
   }, []);
 
   const switchMembership = useCallback(async (communityId: string) => {

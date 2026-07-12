@@ -15,6 +15,17 @@ begin at 0.1.0 with the first deployment (M1).
 - **Frontend:** `switchCommunity` in AuthContext; "Manage this community"
   button + "Currently managing" state on `/portfolio` cards; AppShell now
   shows the acting community's name.
+- **Setup Assistant (guided community onboarding):** new `/setup` page —
+  three plain-language steps (Add your flats → Who lives in each flat? →
+  Who manages this community?) with progress bar and completion screen.
+  One row per flat (owner name/email/phone, optional tenant) is sent to the
+  new `POST /setup/residents` batch endpoint, which creates the household
+  (account), whitelist user, and 100% legal-title record per flat in one
+  call with per-row error reporting. `GET /setup/status` drives progress;
+  the manager dashboard shows a "Finish setting up — n of 3 steps" card for
+  incomplete communities; creating a community from the Portfolio now lands
+  directly in the assistant. "Account" is presented as **Household**
+  everywhere user-facing (Ownership page relabeled). 5 new tests (136).
 - **Add Apartments UI (Ownership page):** bulk dialog (comma/line-separated
   unit numbers, floor auto-derived from the number, duplicate warnings,
   partial-failure reporting) — previously apartments only existed via the

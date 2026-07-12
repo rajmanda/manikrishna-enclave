@@ -143,14 +143,14 @@ function AccountDialog({
   }
 
   return (
-    <Modal title={account ? `Edit ${account.name}` : "New Account"} onClose={onClose}>
+    <Modal title={account ? `Edit ${account.name}` : "New Household"} onClose={onClose}>
       <form className="space-y-4" onSubmit={submit}>
         <div>
-          <label className={labelCls}>Account name (family / entity)</label>
+          <label className={labelCls}>Household name (family / entity)</label>
           <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} required />
         </div>
         <div>
-          <label className={labelCls}>Apartments owned (one billing account per apartment)</label>
+          <label className={labelCls}>Flats this household owns</label>
           <div className="grid max-h-52 grid-cols-2 gap-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
             {[...apartments]
               .sort((a, b) => a.number.localeCompare(b.number))
@@ -184,7 +184,7 @@ function AccountDialog({
         </div>
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button type="submit" disabled={busy || !name.trim() || selected.size === 0} className={primaryBtnCls}>
-          {busy ? "Saving…" : account ? "Save changes" : `Create account (${selected.size} apt)`}
+          {busy ? "Saving…" : account ? "Save changes" : `Create household (${selected.size} flat${selected.size === 1 ? "" : "s"})`}
         </button>
       </form>
     </Modal>
@@ -267,7 +267,7 @@ export default function OwnershipPage() {
   const unassigned = apartments.data.filter((a) => !accountByApt.has(a.id));
 
   async function removeAccount(a: Account) {
-    if (!confirm(`Delete account "${a.name}"?`)) return;
+    if (!confirm(`Delete household "${a.name}"?`)) return;
     try {
       await api(`/accounts/${a.id}`, { method: "DELETE" });
       accounts.reload();
@@ -286,7 +286,7 @@ export default function OwnershipPage() {
     <div className="space-y-6">
       <PageTitle
         title="Ownership"
-        subtitle="Billing accounts, multi-apartment configuration and legal title holders"
+        subtitle="Households (billing), multi-flat owners and legal title holders"
         actions={
           <>
             <button
@@ -299,7 +299,7 @@ export default function OwnershipPage() {
               onClick={() => setAccountDialog({ open: true, account: null })}
               className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
             >
-              <PlusCircle className="h-4 w-4" /> New account
+              <PlusCircle className="h-4 w-4" /> New household
             </button>
           </>
         }
@@ -325,7 +325,7 @@ export default function OwnershipPage() {
 
       {unassigned.length > 0 && (
         <Card className="border-amber-200 bg-amber-50/60 p-4 text-sm text-amber-800">
-          ⚠ Apartments without a billing account:{" "}
+          ⚠ Flats without a household yet:{" "}
           {unassigned.map((a) => a.number).join(", ")}
         </Card>
       )}
@@ -403,7 +403,7 @@ export default function OwnershipPage() {
                         <Badge tone="green">{acct.name}</Badge>
                       </span>
                     ) : (
-                      <Badge tone="amber">no billing account</Badge>
+                      <Badge tone="amber">no household</Badge>
                     )}
                   </div>
                   <div className="mt-2.5">

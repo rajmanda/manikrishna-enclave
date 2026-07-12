@@ -22,10 +22,10 @@ import {
 
 function AddCommunityModal({
   onClose,
-  onSaved,
+  onCreated,
 }: {
   onClose: () => void;
-  onSaved: () => void;
+  onCreated: (communityId: string) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -37,12 +37,12 @@ function AddCommunityModal({
     setBusy(true);
     setError(null);
     try {
-      await api("/communities", {
+      const created = await api<{ id: string }>("/communities", {
         method: "POST",
         body: JSON.stringify({ name: name.trim(), address: address.trim() }),
       });
-      onSaved();
-      onClose();
+      // Straight into the Setup Assistant of the new community.
+      await onCreated(created.id);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create community");
       setBusy(false);
@@ -72,7 +72,7 @@ function AddCommunityModal({
           />
         </div>
         <p className="text-xs text-slate-500">
-          The community starts empty — apartments and members are added next.
+          Next you'll be taken to the Setup Assistant to add flats, residents and a manager.
         </p>
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button type="submit" disabled={busy} className={primaryBtnCls}>
@@ -141,7 +141,10 @@ export default function PortfolioPage() {
       />
 
       {adding && (
-        <AddCommunityModal onClose={() => setAdding(false)} onSaved={stats.reload} />
+        <AddCommunityModal
+          onClose={() => setAdding(false)}
+          onCreated={(id) => switchCommunity(id, "/setup")}
+        />
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

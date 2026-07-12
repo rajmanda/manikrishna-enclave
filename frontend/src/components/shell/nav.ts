@@ -43,6 +43,7 @@ export const navItems: NavItem[] = [
   { label: "Polls", href: "/polls", icon: Vote, group: "Governance" },
   { label: "Meetings", href: "/meetings", icon: CalendarDays, group: "Governance" },
   { label: "Documents", href: "/documents", icon: FileText, group: "Governance" },
+  { label: "Setup", href: "/setup", icon: ClipboardList, group: "Admin", roles: ["property_manager", "community_admin", "super_admin"] },
   { label: "Portfolio", href: "/portfolio", icon: LayoutGrid, group: "Admin", roles: ["super_admin"] },
   { label: "Members", href: "/members", icon: UsersRound, group: "Admin", roles: ["property_manager", "community_admin", "super_admin"] },
   { label: "Ownership", href: "/ownership", icon: KeyRound, group: "Admin", roles: ["super_admin"] },

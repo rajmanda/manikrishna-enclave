@@ -205,6 +205,36 @@ class SwitchCommunityRequest(APIModel):
     community_id: str
 
 
+class SetupStatus(APIModel):
+    """Community setup progress for the guided Setup Assistant."""
+
+    apartments: int = 0
+    households: int = 0  # billing accounts
+    flats_with_household: int = 0
+    owners: int = 0
+    tenants: int = 0
+    managers: int = 0
+
+
+class SetupResident(APIModel):
+    """One Setup Assistant row: the people of one flat. Creates the owner's
+    whitelist user, a household (account) named after them, a 100% legal
+    title record, and optionally a tenant user — in one call."""
+
+    apartment_id: str
+    owner_name: str
+    owner_email: EmailStr
+    owner_phone: str | None = None
+    tenant_name: str | None = None
+    tenant_email: EmailStr | None = None
+
+
+class SetupResidentResult(APIModel):
+    apartment_id: str
+    ok: bool
+    error: str | None = None
+
+
 class MembershipInfo(APIModel):
     """One community membership of the signed-in person (same email)."""
 
