@@ -20,6 +20,12 @@ begin at 0.1.0 with the first deployment (M1).
   enrolled apartments, bill-owner → that apartment, late fees → only the
   charged apartments (who paid late is private; `apply-late-fees` now
   returns `apartmentIds` for this). 4 new tests (145 total).
+- **Multi-file receipts + delete:** the receipt picker in all four invoice
+  dialogs now holds any number of files (per-file remove, "Add another
+  file", multi-select file dialog, numbered titles `#2 #3…`), and the
+  invoice sheet's Receipts section gets a manager-only delete button
+  (confirm dialog; removes the document from Documents too) alongside the
+  existing attach buttons.
 - **Dev-mode local file storage:** with `DEV_MODE` on and no `GCS_BUCKET`,
   `app/storage.py` now reads/writes `backend/.local_media/` (gitignored,
   path-traversal-guarded) instead of returning 503, so upload/download flows

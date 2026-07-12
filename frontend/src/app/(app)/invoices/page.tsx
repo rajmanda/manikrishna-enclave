@@ -14,7 +14,7 @@ import { invoiceTone, ledgerAccent } from "@/lib/tones";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { InvoiceSheet } from "@/components/InvoiceSheet";
 import { ReceiptPicker } from "@/components/ReceiptPicker";
-import { uploadFileTo } from "@/lib/upload";
+import { uploadEach, uploadFileTo } from "@/lib/upload";
 import {
   Badge,
   Card,
@@ -128,7 +128,7 @@ function GenerateDialog({
   const [description, setDescription] = useState("Monthly Maintenance");
   const [scope, setScope] = useState<"all" | "selected">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [receipt, setReceipt] = useState<File | null>(null);
+  const [receipts, setReceipts] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -167,18 +167,18 @@ function GenerateDialog({
           }),
         }
       );
-      if (receipt) {
-        // Community-wide charge → community-visible receipt in Documents
+      if (receipts.length > 0) {
+        // Community-wide charge → community-visible receipts in Documents
         // (scoped to the selected apartments when not billing everyone).
-        try {
-          await uploadFileTo("/documents", receipt, {
-            title: `Receipt — ${description.trim()} (${period})`,
+        const failed = await uploadEach(receipts, (f, i) =>
+          uploadFileTo("/documents", f, {
+            title: `Receipt — ${description.trim()} (${period})${receipts.length > 1 ? ` #${i + 1}` : ""}`,
             category: "Receipts",
             apartment_ids: scope === "selected" ? [...selected].join(",") : "",
-          });
-        } catch {
-          alert("Invoices created, but the receipt upload failed — you can add it from the Documents view.");
-        }
+          })
+        );
+        if (failed > 0)
+          alert(`Invoices created, but ${failed} receipt upload${failed > 1 ? "s" : ""} failed — you can add them from the Documents view.`);
       }
       onDone();
       onClose();
@@ -267,7 +267,7 @@ function GenerateDialog({
               </div>
             )}
           </div>
-          <ReceiptPicker file={receipt} onChange={setReceipt} />
+          <ReceiptPicker files={receipts} onChange={setReceipts} />
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
           <button type="submit" disabled={busy || !dueDate} className={primaryBtnCls}>
             {busy
@@ -375,7 +375,7 @@ function BillOwnerDialog({
   const [items, setItems] = useState<{ description: string; amount: string }[]>([
     { description: "", amount: "" },
   ]);
-  const [receipt, setReceipt] = useState<File | null>(null);
+  const [receipts, setReceipts] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -402,13 +402,18 @@ function BillOwnerDialog({
             .map((i) => ({ description: i.description.trim(), amount: Number(i.amount) })),
         }),
       });
-      if (receipt) {
-        // Personal charge → receipt visible only to this apartment's owners.
-        try {
-          await uploadFileTo(`/invoices/${invoice.id}/receipt`, receipt);
-        } catch {
-          alert("Invoice created, but the receipt upload failed — you can attach it from the invoice details.");
-        }
+      if (receipts.length > 0) {
+        // Personal charge → receipts visible only to this apartment's owners.
+        const failed = await uploadEach(receipts, (f, i) =>
+          uploadFileTo(`/invoices/${invoice.id}/receipt`, f, {
+            title:
+              receipts.length > 1
+                ? `Receipt — ${invoice.description} (${period}) #${i + 1}`
+                : "",
+          })
+        );
+        if (failed > 0)
+          alert(`Invoice created, but ${failed} receipt upload${failed > 1 ? "s" : ""} failed — you can attach them from the invoice details.`);
       }
       onDone();
       onClose();
@@ -490,9 +495,9 @@ function BillOwnerDialog({
           <input className={inputCls} value={period} onChange={(e) => setPeriod(e.target.value)} required />
         </div>
         <ReceiptPicker
-          file={receipt}
-          onChange={setReceipt}
-          label="Paper receipt (optional — only this apartment's owners can see it)"
+          files={receipts}
+          onChange={setReceipts}
+          label="Paper receipts (optional — only this apartment's owners can see them)"
         />
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button
@@ -522,7 +527,7 @@ function FeeDialog({
   const [rows, setRows] = useState<FeeEnrollment[] | null>(null);
   const [period, setPeriod] = useState(nextMonthLabel());
   const [dueDate, setDueDate] = useState("");
-  const [receipt, setReceipt] = useState<File | null>(null);
+  const [receipts, setReceipts] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -560,17 +565,17 @@ function FeeDialog({
         "/manager-fees/generate",
         { method: "POST", body: JSON.stringify({ period, dueDate }) }
       );
-      if (receipt) {
-        // Personal fees → receipt visible only to the enrolled apartments.
-        try {
-          await uploadFileTo("/documents", receipt, {
-            title: `Receipt — Manager service fees (${period})`,
+      if (receipts.length > 0) {
+        // Personal fees → receipts visible only to the enrolled apartments.
+        const failed = await uploadEach(receipts, (f, i) =>
+          uploadFileTo("/documents", f, {
+            title: `Receipt — Manager service fees (${period})${receipts.length > 1 ? ` #${i + 1}` : ""}`,
             category: "Receipts",
             apartment_ids: list.filter((r) => r.active).map((r) => r.apartmentId).join(","),
-          });
-        } catch {
-          alert("Fees generated, but the receipt upload failed — you can add it from the Documents view.");
-        }
+          })
+        );
+        if (failed > 0)
+          alert(`Fees generated, but ${failed} receipt upload${failed > 1 ? "s" : ""} failed — you can add them from the Documents view.`);
       }
       onDone();
       onClose();
@@ -652,9 +657,9 @@ function FeeDialog({
             </div>
           </div>
           <ReceiptPicker
-            file={receipt}
-            onChange={setReceipt}
-            label="Paper receipt (optional — visible to enrolled apartments only)"
+            files={receipts}
+            onChange={setReceipts}
+            label="Paper receipts (optional — visible to enrolled apartments only)"
           />
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
           <div className="grid grid-cols-2 gap-2">
@@ -684,7 +689,7 @@ function LateFeeDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const [period, setPeriod] = useState("");
   const [amount, setAmount] = useState("200");
   const [dueDate, setDueDate] = useState("");
-  const [receipt, setReceipt] = useState<File | null>(null);
+  const [receipts, setReceipts] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -700,18 +705,18 @@ function LateFeeDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
           body: JSON.stringify({ period, amount: Number(amount), dueDate }),
         }
       );
-      if (receipt && result.created > 0) {
-        // Who paid late is private — scope the receipt to exactly the
+      if (receipts.length > 0 && result.created > 0) {
+        // Who paid late is private — scope the receipts to exactly the
         // apartments that were charged.
-        try {
-          await uploadFileTo("/documents", receipt, {
-            title: `Receipt — Late fees (${period})`,
+        const failed = await uploadEach(receipts, (f, i) =>
+          uploadFileTo("/documents", f, {
+            title: `Receipt — Late fees (${period})${receipts.length > 1 ? ` #${i + 1}` : ""}`,
             category: "Receipts",
             apartment_ids: (result.apartmentIds ?? []).join(","),
-          });
-        } catch {
-          alert("Late fees applied, but the receipt upload failed — you can add it from the Documents view.");
-        }
+          })
+        );
+        if (failed > 0)
+          alert(`Late fees applied, but ${failed} receipt upload${failed > 1 ? "s" : ""} failed — you can add them from the Documents view.`);
       }
       onDone();
       onClose();
@@ -741,9 +746,9 @@ function LateFeeDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
           <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
         </div>
         <ReceiptPicker
-          file={receipt}
-          onChange={setReceipt}
-          label="Paper receipt (optional — visible only to the charged apartments)"
+          files={receipts}
+          onChange={setReceipts}
+          label="Paper receipts (optional — visible only to the charged apartments)"
         />
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button type="submit" disabled={busy} className={primaryBtnCls}>

@@ -53,6 +53,23 @@ export async function prepareUpload(file: File): Promise<File> {
   return out;
 }
 
+/** Uploads files one at a time; returns how many failed so callers can
+ * report partial failures without aborting the rest. */
+export async function uploadEach(
+  files: File[],
+  fn: (file: File, index: number) => Promise<unknown>
+): Promise<number> {
+  let failed = 0;
+  for (let i = 0; i < files.length; i++) {
+    try {
+      await fn(files[i], i);
+    } catch {
+      failed += 1;
+    }
+  }
+  return failed;
+}
+
 /** Multipart upload (the JSON `api()` helper can't carry files). Used for
  * receipts on invoices and document uploads. */
 export async function uploadFileTo(

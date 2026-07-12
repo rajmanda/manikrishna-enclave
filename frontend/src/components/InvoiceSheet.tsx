@@ -66,6 +66,19 @@ export function InvoiceSheet({
     }
   }
 
+  async function deleteReceipt(d: CommunityDocument) {
+    if (!confirm(`Delete receipt "${d.title}"?\n\nIt is removed from Documents too. This cannot be undone.`)) return;
+    setBusyId(d.id);
+    try {
+      await api(`/documents/${d.id}`, { method: "DELETE" });
+      documents.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete receipt");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const linked = payments
     .filter((p) => p.invoiceId === invoice.id)
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -241,16 +254,30 @@ export function InvoiceSheet({
             </h3>
             <div className="space-y-1.5">
               {receipts.map((d) => (
-                <button
+                <div
                   key={d.id}
-                  onClick={() => downloadFile(`/documents/${d.id}/file`, d.title)}
-                  className="flex w-full items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-left text-xs hover:bg-slate-50"
+                  className="flex items-center gap-1 rounded-xl border border-slate-200 pr-1.5 text-xs"
                 >
-                  <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                  <span className="min-w-0 flex-1 truncate font-medium">{d.title}</span>
-                  <span className="shrink-0 text-slate-400">{formatDate(d.uploadedDate)}</span>
-                  <Download className="h-3.5 w-3.5 shrink-0 text-brand-600" />
-                </button>
+                  <button
+                    onClick={() => downloadFile(`/documents/${d.id}/file`, d.title)}
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-slate-50"
+                  >
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <span className="min-w-0 flex-1 truncate font-medium">{d.title}</span>
+                    <span className="shrink-0 text-slate-400">{formatDate(d.uploadedDate)}</span>
+                    <Download className="h-3.5 w-3.5 shrink-0 text-brand-600" />
+                  </button>
+                  {canWrite && (
+                    <button
+                      onClick={() => deleteReceipt(d)}
+                      disabled={busyId === d.id}
+                      title="Delete receipt"
+                      className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               ))}
               {receipts.length === 0 && (
                 <p className="rounded-xl bg-slate-50 p-3 text-center text-xs text-slate-400">
