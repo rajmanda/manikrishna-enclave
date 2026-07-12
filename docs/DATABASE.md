@@ -43,7 +43,9 @@ community_id, user_id, text, date ISO, read, type). `work_orders` gained
 M4 additions: `polls` (id, community_id, question, description, open/close
 dates, status, option_labels[], votes_by {apartment_id→label} — one vote per
 apartment), `documents` (id, community_id, title, category, uploaded_date,
-version, size_kb, file_type, path GCS|null, uploaded_by), `meetings` (id,
+version, size_kb, file_type, path GCS|null, uploaded_by, apartment_ids
+None/[]=community-wide else visible only to those apartments' owners,
+invoice_id set on invoice receipts), `meetings` (id,
 community_id, title, date, attendance, agenda[], resolutions[], has_pdf,
 minutes_path). All PRD collections now exist.
 

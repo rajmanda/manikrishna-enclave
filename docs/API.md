@@ -87,7 +87,8 @@ cross-tenant, 409 conflict).
 | POST | `/invoices` | manager/admin | Single invoice for an apartment |
 | POST | `/invoices/generate` | manager/admin | One per apartment for a period (all, or only `apartmentIds` when provided); idempotent; amount defaults to `community.monthlyMaintenance` |
 | POST | `/invoices/bill-owner` | manager/admin | Itemized reimbursement invoice for one apartment (`ledger=reimbursement`, lineItems auto-summed, owner notified) |
-| POST | `/invoices/apply-late-fees` | manager/admin | Late-fee invoice per overdue invoice of the period (idempotent, linked via `parentInvoiceId`) |
+| POST | `/invoices/apply-late-fees` | manager/admin | Late-fee invoice per overdue invoice of the period (idempotent, linked via `parentInvoiceId`); returns `apartmentIds` of the charged apartments so receipts can be scoped to them |
+| POST | `/invoices/{id}/receipt` | manager/admin | Multipart paper receipt (photo/PDF) → saved as a `Receipts` document scoped to the invoice's apartment (`apartmentIds`, `invoiceId`) |
 | PATCH | `/invoices/{id}` | manager/admin | description/amount/dueDate; status recomputed |
 | DELETE | `/invoices/{id}` | manager/admin | 409 if payments exist; `?cascade=true` deletes the payments too (both audited) |
 | POST | `/payments` | manager/admin | Records payment (or `method: "Credit"` for waivers); recomputes invoice paid/status; rejects overpayment |
@@ -140,9 +141,9 @@ shows a separate fee section; manager dashboard gets a separate fee tile.
 | GET/POST | `/polls` | create: manager/admin | List includes counts, `myVote`, auto-close by date; creation notifies members |
 | POST | `/polls/{id}/vote` | members with an apartment | **One vote per apartment** (revotable while open); 409 when closed |
 | POST | `/polls/{id}/close` · DELETE `/polls/{id}` | manager/admin | |
-| GET/POST | `/documents` | upload: manager/admin | Multipart + title/category; versioned on GCS |
+| GET/POST | `/documents` | upload: manager/admin | Multipart + title/category (+ optional comma-separated `apartment_ids` scope, `invoice_id` link); versioned on GCS. List is visibility-filtered: owners/tenants only see community-wide docs plus ones scoped to their apartments |
 | POST | `/documents/{id}/file` | manager/admin | New version (bumps `version`) |
-| GET | `/documents/{id}/file` | any member | Streams latest version; 404 for legacy metadata-only entries |
+| GET | `/documents/{id}/file` | any member (visibility-scoped) | Streams latest version; 404 for legacy metadata-only entries or docs scoped to another apartment |
 | DELETE | `/documents/{id}` | manager/admin | |
 | GET/POST/PATCH/DELETE | `/meetings[/{id}]` | write: manager/admin | Creation notifies members |
 | POST/GET | `/meetings/{id}/minutes` | upload: manager/admin; read: members | Minutes PDF on GCS |

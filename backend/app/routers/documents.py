@@ -27,7 +27,7 @@ DOC_CONTENT_TYPES = {
 }
 
 
-def _file_type(content_type: str | None) -> str:
+def doc_file_type(content_type: str | None) -> str:
     ft = DOC_CONTENT_TYPES.get(content_type or "")
     if ft is None:
         raise HTTPException(
@@ -37,9 +37,27 @@ def _file_type(content_type: str | None) -> str:
     return ft
 
 
+def visibility_query(user: Any) -> dict:
+    """Community docs (no apartment scope) are visible to everyone; docs
+    scoped to specific apartments only to their owners/tenants. Managers,
+    admins and the auditor see everything."""
+    query: dict = {"community_id": user.community_id}
+    if user.role in ("owner", "tenant"):
+        apts = user.apartment_ids or (
+            [user.apartment_id] if user.apartment_id else []
+        )
+        # $in with None also matches docs missing the field (legacy rows).
+        query["$or"] = [
+            {"apartment_ids": None},
+            {"apartment_ids": []},
+            {"apartment_ids": {"$in": apts}},
+        ]
+    return query
+
+
 @router.get("", response_model=list[CommunityDocument])
 async def list_documents(db: DB, user: CurrentUser) -> list[CommunityDocument]:
-    docs = await db.documents.find({"community_id": user.community_id}).to_list(1000)
+    docs = await db.documents.find(visibility_query(user)).to_list(1000)
     docs.sort(key=lambda d: d["uploaded_date"], reverse=True)
     return [CommunityDocument.model_validate(d) for d in docs]
 
@@ -56,11 +74,14 @@ async def upload_document(
     file: UploadFile,
     title: Annotated[str, Form()],
     category: Annotated[str, Form()],
+    apartment_ids: Annotated[str, Form()] = "",
+    invoice_id: Annotated[str, Form()] = "",
 ) -> CommunityDocument:
     data = await file.read()
     if len(data) > storage.MAX_FILE_BYTES:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Max 10 MB")
-    file_type = _file_type(file.content_type)
+    file_type = doc_file_type(file.content_type)
+    scope = [a.strip() for a in apartment_ids.split(",") if a.strip()]
     doc = CommunityDocument(
         community_id=user.community_id,
         title=title.strip(),
@@ -69,6 +90,8 @@ async def upload_document(
         size_kb=max(1, len(data) // 1024),
         file_type=file_type,  # type: ignore[arg-type]
         uploaded_by=user.id,
+        apartment_ids=scope or None,
+        invoice_id=invoice_id.strip() or None,
     )
     path = f"{user.community_id}/documents/{doc.id}/v1-{file.filename or 'file'}"
     storage.upload_object(path, data, file.content_type or "application/octet-stream")
@@ -94,7 +117,7 @@ async def upload_new_version(
     data = await file.read()
     if len(data) > storage.MAX_FILE_BYTES:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Max 10 MB")
-    file_type = _file_type(file.content_type)
+    file_type = doc_file_type(file.content_type)
     version = doc.get("version", 1) + 1
     path = f"{user.community_id}/documents/{document_id}/v{version}-{file.filename or 'file'}"
     storage.upload_object(path, data, file.content_type or "application/octet-stream")
@@ -118,9 +141,7 @@ async def upload_new_version(
 
 @router.get("/{document_id}/file")
 async def download_document(document_id: str, db: DB, user: CurrentUser) -> Response:
-    doc = await db.documents.find_one(
-        {"id": document_id, "community_id": user.community_id}
-    )
+    doc = await db.documents.find_one({"id": document_id, **visibility_query(user)})
     if doc is None or not doc.get("path"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No file attached")
     data, content_type = storage.download_object(doc["path"])

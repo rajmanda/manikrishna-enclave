@@ -5,6 +5,33 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Invoice receipts (paper receipt upload / take a picture):** every invoice
+  dialog on `/invoices` (Create invoices, Bill owner, Service fees, Late
+  fees) gets an optional receipt picker — choose a file or open the phone
+  camera — and the invoice detail sheet gets a Receipts section so managers
+  can attach receipts to past invoices too. Receipts are saved in Documents
+  under a "Receipts" category. New `POST /invoices/{id}/receipt` stores the
+  file scoped to the invoice's apartment; `documents` gained `apartment_ids`
+  (None = community-wide) and `invoice_id`. Document list & download are now
+  visibility-filtered: owners/tenants see community docs plus only their own
+  apartments' docs (managers/admins/auditor see all); the Documents view
+  badges apartment-scoped files. Bulk flows scope sensibly: community
+  invoices → community-wide (or the selected apartments), service fees →
+  enrolled apartments, bill-owner → that apartment, late fees → only the
+  charged apartments (who paid late is private; `apply-late-fees` now
+  returns `apartmentIds` for this). 4 new tests (145 total).
+- **Dev-mode local file storage:** with `DEV_MODE` on and no `GCS_BUCKET`,
+  `app/storage.py` now reads/writes `backend/.local_media/` (gitignored,
+  path-traversal-guarded) instead of returning 503, so upload/download flows
+  are testable locally without GCS credentials. Production behavior
+  unchanged (hard 503 when the bucket is unset).
+- **Client-side image compression on all uploads:** new `src/lib/upload.ts`
+  — images over 1.5 MB are downscaled to ≤2048px JPEG before upload
+  (browsers transcode phone HEIC captures into files far larger than the
+  gallery shows, tripping the 10 MB API cap and the Next dev-proxy body
+  limit); anything still over 10 MB gets a clear client-side error instead
+  of a mid-flight failure. Receipt pickers, invoice-sheet attach, and both
+  Documents-view upload paths now share this helper.
 - **Fix — invoice tile drill-downs ignored filters:** on `/invoices`, the
   "Community funds" and "Personal — fees & reimbursements" breakdown modals
   listed the whole community's invoices even when the manager had an

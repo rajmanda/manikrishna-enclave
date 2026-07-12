@@ -252,6 +252,10 @@ export interface CommunityDocument {
   sizeKb: number;
   fileType: "pdf" | "image" | "sheet";
   path?: string | null;
+  // Visibility scope: empty/undefined = whole community; otherwise only
+  // owners/tenants of these apartments (managers always see everything).
+  apartmentIds?: string[] | null;
+  invoiceId?: string | null;
 }
 
 export interface Meeting {
