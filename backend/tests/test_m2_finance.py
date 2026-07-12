@@ -90,14 +90,15 @@ async def test_apply_late_fees(client, manager_headers, db):
         json={"period": "Jun 2026", "amount": 200, "dueDate": "2026-07-20"},
         headers=manager_headers,
     )
-    # Two overdue June invoices (201, 401).
-    assert resp.json() == {"created": 2}
+    # Two overdue June invoices (201, 401). apartmentIds names the charged
+    # apartments so the UI can scope a supporting receipt to just them.
+    assert resp.json() == {"created": 2, "apartmentIds": ["apt-201", "apt-401"]}
     again = await client.post(
         "/api/v1/invoices/apply-late-fees",
         json={"period": "Jun 2026", "amount": 200, "dueDate": "2026-07-20"},
         headers=manager_headers,
     )
-    assert again.json() == {"created": 0}
+    assert again.json() == {"created": 0, "apartmentIds": []}
     fee = await db.invoices.find_one({"parent_invoice_id": "inv-2606-201"})
     assert fee["amount"] == 200 and "Late Fee" in fee["description"]
 

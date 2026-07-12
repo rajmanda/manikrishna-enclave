@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Banknote, Check, Link2, Trash2, X } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
-import type { Apartment, Invoice, Payment, User } from "@/lib/types";
+import { useRef, useState } from "react";
+import { Banknote, Camera, Check, Download, Link2, Paperclip, Trash2, X } from "lucide-react";
+import { api, ApiError, downloadFile } from "@/lib/api";
+import { useApi } from "@/hooks/useApi";
+import type { Apartment, CommunityDocument, Invoice, Payment, User } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
 import { invoiceTone } from "@/lib/tones";
 import { Modal } from "@/components/Modal";
+import { uploadFileTo } from "@/lib/upload";
 import { Badge, LedgerBadge } from "@/components/ui";
 
 /** Bottom sheet (modal on desktop) showing one invoice with its full payment
@@ -42,6 +44,40 @@ export function InvoiceSheet({
   onOpenInvoice?: (inv: Invoice) => void;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Server already filters visibility: owners only get community docs plus
+  // ones scoped to their apartments.
+  const documents = useApi<CommunityDocument[]>("/documents");
+  const receipts = (documents.data ?? []).filter((d) => d.invoiceId === invoice.id);
+  const receiptFileRef = useRef<HTMLInputElement>(null);
+  const receiptCameraRef = useRef<HTMLInputElement>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+
+  async function attachReceipt(file: File) {
+    setUploadingReceipt(true);
+    try {
+      await uploadFileTo(`/invoices/${invoice.id}/receipt`, file);
+      documents.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Receipt upload failed");
+    } finally {
+      setUploadingReceipt(false);
+      if (receiptFileRef.current) receiptFileRef.current.value = "";
+      if (receiptCameraRef.current) receiptCameraRef.current.value = "";
+    }
+  }
+
+  async function deleteReceipt(d: CommunityDocument) {
+    if (!confirm(`Delete receipt "${d.title}"?\n\nIt is removed from Documents too. This cannot be undone.`)) return;
+    setBusyId(d.id);
+    try {
+      await api(`/documents/${d.id}`, { method: "DELETE" });
+      documents.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete receipt");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   const linked = payments
     .filter((p) => p.invoiceId === invoice.id)
@@ -210,6 +246,86 @@ export function InvoiceSheet({
             ))}
           </div>
         </div>
+
+        {(receipts.length > 0 || canWrite) && (
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Receipts
+            </h3>
+            <div className="space-y-1.5">
+              {receipts.map((d) => (
+                <div
+                  key={d.id}
+                  className="flex items-center gap-1 rounded-xl border border-slate-200 pr-1.5 text-xs"
+                >
+                  <button
+                    onClick={() => downloadFile(`/documents/${d.id}/file`, d.title)}
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-slate-50"
+                  >
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <span className="min-w-0 flex-1 truncate font-medium">{d.title}</span>
+                    <span className="shrink-0 text-slate-400">{formatDate(d.uploadedDate)}</span>
+                    <Download className="h-3.5 w-3.5 shrink-0 text-brand-600" />
+                  </button>
+                  {canWrite && (
+                    <button
+                      onClick={() => deleteReceipt(d)}
+                      disabled={busyId === d.id}
+                      title="Delete receipt"
+                      className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {receipts.length === 0 && (
+                <p className="rounded-xl bg-slate-50 p-3 text-center text-xs text-slate-400">
+                  No receipt attached.
+                </p>
+              )}
+              {canWrite && (
+                <>
+                  <input
+                    ref={receiptFileRef}
+                    type="file"
+                    accept="application/pdf,image/*"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && attachReceipt(e.target.files[0])}
+                  />
+                  <input
+                    ref={receiptCameraRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && attachReceipt(e.target.files[0])}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => receiptFileRef.current?.click()}
+                      disabled={uploadingReceipt}
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 hover:border-brand-400 hover:text-brand-700 disabled:opacity-50"
+                    >
+                      <Paperclip className="h-3.5 w-3.5" />
+                      {uploadingReceipt ? "Uploading…" : "Attach receipt"}
+                    </button>
+                    <button
+                      onClick={() => receiptCameraRef.current?.click()}
+                      disabled={uploadingReceipt}
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 hover:border-brand-400 hover:text-brand-700 disabled:opacity-50"
+                    >
+                      <Camera className="h-3.5 w-3.5" /> Take photo
+                    </button>
+                  </div>
+                  <p className="text-center text-[10px] text-slate-400">
+                    Saved to Documents — visible only to this apartment&apos;s owners.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {(parent || lateFees.length > 0) && (
           <div>

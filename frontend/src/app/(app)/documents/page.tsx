@@ -13,9 +13,10 @@ import {
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError, downloadFile } from "@/lib/api";
-import { API_URL, getToken } from "@/lib/api";
+import { uploadFileTo } from "@/lib/upload";
 import type { CommunityDocument } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { aptNumber } from "@/lib/lookup";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { Badge, Card, EmptyState, ErrorNote, PageLoading, PageTitle } from "@/components/ui";
 
@@ -38,21 +39,8 @@ function UploadDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
     if (!file) return;
     setBusy(true);
     setError(null);
-    const form = new FormData();
-    form.append("file", file);
-    form.append("title", title);
-    form.append("category", category);
-    const token = getToken();
     try {
-      const resp = await fetch(`${API_URL}/documents`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: form,
-      });
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => ({}));
-        throw new ApiError(resp.status, body.detail ?? resp.statusText);
-      }
+      await uploadFileTo("/documents", file, { title, category });
       onDone();
       onClose();
     } catch (err) {
@@ -99,19 +87,11 @@ function VersionUpload({ doc, onDone }: { doc: CommunityDocument; onDone: () => 
 
   async function upload(file: File) {
     setBusy(true);
-    const form = new FormData();
-    form.append("file", file);
-    const token = getToken();
     try {
-      const resp = await fetch(`${API_URL}/documents/${doc.id}/file`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: form,
-      });
-      if (!resp.ok) throw new Error();
+      await uploadFileTo(`/documents/${doc.id}/file`, file);
       onDone();
-    } catch {
-      alert("Version upload failed");
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Version upload failed");
     } finally {
       setBusy(false);
     }
@@ -224,6 +204,11 @@ export default function DocumentsPage() {
                     {!d.path && " · file not digitised yet"}
                   </p>
                 </div>
+                {d.apartmentIds && d.apartmentIds.length > 0 && (
+                  <Badge tone="amber">
+                    Apt {d.apartmentIds.map(aptNumber).join(", ")}
+                  </Badge>
+                )}
                 {d.version > 1 && <Badge tone="slate">v{d.version}</Badge>}
                 {canWrite && <VersionUpload doc={d} onDone={documents.reload} />}
                 {d.path && (

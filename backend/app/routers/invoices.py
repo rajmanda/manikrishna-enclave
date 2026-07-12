@@ -3,8 +3,9 @@
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 
+from app import storage
 from app.audit import record_audit
 from app.core.security import CurrentUser, owned_community_ids, require_roles
 from app.db import get_db
@@ -12,6 +13,7 @@ from app.models import (
     WRITE_ROLES,
     ApplyLateFeesRequest,
     BillOwnerRequest,
+    CommunityDocument,
     GenerateInvoicesRequest,
     Invoice,
     InvoiceCreate,
@@ -20,6 +22,7 @@ from app.models import (
     PaymentCreate,
     PaymentReport,
 )
+from app.routers.documents import doc_file_type
 from app.notify import notify_user
 from app.notification_service import (
     enqueue_for_apartment_owners,
@@ -251,6 +254,7 @@ async def apply_late_fees(
         }
     ).to_list(1000)
     created = 0
+    apartment_ids: list[str] = []
     for inv in overdue:
         exists = await db.invoices.find_one({"parent_invoice_id": inv["id"]})
         if exists:
@@ -267,10 +271,14 @@ async def apply_late_fees(
         )
         await db.invoices.insert_one(fee.model_dump())
         created += 1
+        if inv["apartment_id"] not in apartment_ids:
+            apartment_ids.append(inv["apartment_id"])
     await record_audit(
         db, user, "create", "invoices", f"late-fees:{body.period}", {"created": created}
     )
-    return {"created": created}
+    # apartmentIds lets the caller scope a supporting receipt to exactly the
+    # charged apartments (who was late is not community-wide information).
+    return {"created": created, "apartmentIds": apartment_ids}
 
 
 @router.patch("/invoices/{invoice_id}", response_model=Invoice, dependencies=[Writer])
@@ -290,6 +298,54 @@ async def update_invoice(
     invoice = await _recompute(db, invoice)
     await record_audit(db, user, "update", "invoices", invoice_id, updates)
     return Invoice.model_validate(invoice)
+
+
+@router.post(
+    "/invoices/{invoice_id}/receipt",
+    response_model=CommunityDocument,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Writer],
+)
+async def attach_receipt(
+    invoice_id: str,
+    file: UploadFile,
+    db: DB,
+    user: CurrentUser,
+    title: Annotated[str, Form()] = "",
+) -> CommunityDocument:
+    """Attach a paper receipt (photo or PDF) supporting an invoice. Stored as
+    a document scoped to the invoice's apartment, so only that apartment's
+    owners (and managers) can see it."""
+    invoice = await db.invoices.find_one(
+        {"id": invoice_id, "community_id": user.community_id}
+    )
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    data = await file.read()
+    if len(data) > storage.MAX_FILE_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Max 10 MB")
+    file_type = doc_file_type(file.content_type)
+    doc = CommunityDocument(
+        community_id=user.community_id,
+        title=title.strip()
+        or f"Receipt — {invoice['description']} ({invoice['period']})",
+        category="Receipts",
+        uploaded_date=date.today().isoformat(),
+        size_kb=max(1, len(data) // 1024),
+        file_type=file_type,  # type: ignore[arg-type]
+        uploaded_by=user.id,
+        apartment_ids=[invoice["apartment_id"]],
+        invoice_id=invoice_id,
+    )
+    path = f"{user.community_id}/documents/{doc.id}/v1-{file.filename or 'receipt'}"
+    storage.upload_object(path, data, file.content_type or "application/octet-stream")
+    doc.path = path
+    await db.documents.insert_one(doc.model_dump())
+    await record_audit(
+        db, user, "create", "documents", doc.id,
+        {"title": doc.title, "invoice_id": invoice_id},
+    )
+    return doc
 
 
 @router.delete(

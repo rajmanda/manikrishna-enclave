@@ -722,6 +722,10 @@ class CommunityDocument(APIModel):
     file_type: Literal["pdf", "image", "sheet"] = "pdf"
     path: str | None = None  # None for legacy metadata-only entries
     uploaded_by: str | None = None
+    # Visibility scope: None/empty = whole community; otherwise only owners
+    # and tenants of these apartments (managers always see everything).
+    apartment_ids: list[str] | None = None
+    invoice_id: str | None = None  # set on receipts attached to an invoice
 
 
 class Meeting(APIModel):
