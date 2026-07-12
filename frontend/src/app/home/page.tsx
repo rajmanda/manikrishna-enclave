@@ -103,7 +103,7 @@ const PRICING = [
     name: "Portfolio",
     price: "Custom",
     tagline: "For managers running many communities at once.",
-    features: ["Multi-community console", "Consolidated billing", "SSO & advanced roles", "Priority support"],
+    features: ["Multi-community console", "Consolidated billing", "WhatsApp AI agent updates (paid add-on)", "SSO & advanced roles", "Priority support"],
     cta: "Talk to us",
     highlight: false,
   },

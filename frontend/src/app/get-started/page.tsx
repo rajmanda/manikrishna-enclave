@@ -55,8 +55,12 @@ export default function GetStartedPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const planParam = params.get("plan");
+      const roleParam = params.get("role");
+      const validRoles = ["manager", "president", "treasurer", "owner", "tenant", "auditor", "other"];
       if (planParam === "portfolio") {
         setFormData((prev) => ({ ...prev, role: "other" }));
+      } else if (roleParam && validRoles.includes(roleParam)) {
+        setFormData((prev) => ({ ...prev, role: roleParam }));
       }
     }
   }, []);
@@ -420,6 +424,8 @@ export default function GetStartedPage() {
                         <option value="president">RWA President / Chairman</option>
                         <option value="treasurer">RWA Treasurer / Joint Secretary</option>
                         <option value="owner">Apartment Owner / Committee Member</option>
+                        <option value="tenant">Tenant / Resident</option>
+                        <option value="auditor">Auditor / Chartered Accountant</option>
                         <option value="other">Other / Builder</option>
                       </select>
                     </div>
