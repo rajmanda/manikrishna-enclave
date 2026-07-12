@@ -27,4 +27,5 @@ client_secret_*.json
 # DB backups / build artifacts — never commit (public repo, real data)
 backend/*baseline*.json
 backend/db_backup*.json
+backend/pre_cutover_*.json
 *.tsbuildinfo
