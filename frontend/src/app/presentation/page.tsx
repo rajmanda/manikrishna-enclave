@@ -126,10 +126,12 @@ function FeatureRow({
   icon: Icon,
   title,
   desc,
+  badge,
 }: {
   icon: LucideIcon;
   title: string;
   desc: string;
+  badge?: string;
 }) {
   return (
     <div className="flex gap-4 items-start">
@@ -137,7 +139,14 @@ function FeatureRow({
         <Icon className="h-5 w-5" />
       </span>
       <div>
-        <h4 className="text-lg font-bold text-slate-800">{title}</h4>
+        <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+          {title}
+          {badge && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700">
+              {badge}
+            </span>
+          )}
+        </h4>
         <p className="text-slate-600 text-sm">{desc}</p>
       </div>
     </div>
@@ -389,7 +398,12 @@ function PortfolioMockup() {
   ];
   return (
     <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-md space-y-3">
-      <span className="text-xs font-bold text-slate-400 uppercase block">Portfolio Console</span>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-slate-400 uppercase block">Portfolio Console</span>
+        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700">
+          Early Access Preview
+        </span>
+      </div>
       {communities.map((c) => (
         <div key={c.name} className="bg-white p-3.5 rounded-2xl border border-slate-100 flex items-center justify-between">
           <div>
@@ -649,6 +663,9 @@ function ctaSlide(audience: Audience): Slide {
                 <li className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-brand-600" /> White-label Domains</li>
                 <li className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-brand-600" /> 24/7 Dedicated Support</li>
               </ul>
+              <p className="text-[10px] text-slate-400 mt-3 leading-relaxed">
+                Console, consolidated invoicing & white-label are in early access — shaped hands-on with our first portfolio partners.
+              </p>
             </div>
             <Link
               href="/get-started?plan=portfolio"
@@ -908,7 +925,7 @@ function buildDeck(audience: Audience): Slide[] {
             <SplitSlide
               left={
                 <>
-                  <FeatureRow icon={LayoutGrid} title="Portfolio Dashboard" desc="Collection rates, outstanding dues, and open work orders for every community, side by side." />
+                  <FeatureRow icon={LayoutGrid} title="Portfolio Dashboard" badge="Early Access" desc="Collection rates, outstanding dues, and open work orders for every community, side by side." />
                   <FeatureRow icon={Building2} title="Strict Data Isolation" desc="Each community's data is fully isolated — residents of one property can never see another's records." />
                   <FeatureRow icon={ClipboardCheck} title="Standardized Operations" desc="Roll out the same invoicing rules, expense categories, and workflows across every property you win." />
                 </>
@@ -924,8 +941,8 @@ function buildDeck(audience: Audience): Slide[] {
             <SplitSlide
               left={
                 <>
-                  <FeatureRow icon={Receipt} title="Consolidated Invoicing" desc="Bill all your communities from one place, and track your own management fees per property." />
-                  <FeatureRow icon={Globe} title="White-Label Domains" desc="Run the portal on your own domain with your agency branding — residents see your name, powered by our engine." />
+                  <FeatureRow icon={Receipt} title="Consolidated Invoicing" badge="Early Access" desc="Bill all your communities from one place, and track your own management fees per property." />
+                  <FeatureRow icon={Globe} title="White-Label Domains" badge="Early Access" desc="Run the portal on your own domain with your agency branding — residents see your name, powered by our engine." />
                   <FeatureRow icon={ShieldCheck} title="Audit-Ready by Default" desc="Every community you manage carries a permanent audit trail — your professionalism, provable to any committee." />
                 </>
               }
