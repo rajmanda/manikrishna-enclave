@@ -5,6 +5,20 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Expense entry made findable (manager feedback):** new dedicated
+  `/expenses` page (Money nav group, all roles) with title-bar "Add
+  expense", month/category ledger, and Spent-this-month / All-time /
+  Missing-receipts tiles; manager Dashboard gains a Quick Actions row
+  (Record expense · Record payment · Create invoices · Bill owner) with
+  deep links (`/expenses?add=1`, `/invoices?dialog=generate|billowner`)
+  that auto-open the right dialog; Community page's ledger slimmed to a
+  Recent Expenses card linking to the full ledger. Add Expense dialog
+  reworked: amount+date first, category starts unselected (no more
+  everything-is-Miscellaneous), description placeholder, and an inline
+  receipt picker (upload or take a photo — compressed client-side) so
+  receipt capture happens at entry time instead of as a second step.
+  Expense ledger/dialog extracted to `src/components/expenses.tsx`.
+
 - **Platform Insights — the super-admin "CEO dashboard" (`/insights`):**
   adoption funnel (whitelisted → logged in ever → active 30d → active 7d),
   daily engagement chart from the audit trail, feature-usage breakdown by
