@@ -241,7 +241,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const notifications = useApi<Notification[]>("/notifications");
   const communities = useApi<Community[]>("/communities");
   const badges = useApi<NavBadges>("/dashboard/badges");
-  const communityName = communities.data?.[0]?.name ?? APP_NAME;
+  // Super admins may own several communities — show the one they're acting in.
+  const communityName =
+    communities.data?.find((c) => c.id === user?.communityId)?.name ??
+    communities.data?.[0]?.name ??
+    APP_NAME;
   // Hide the subtitle when it would just repeat the brand ("Manikrishna
   // Enclave / Mani Krishna Enclave").
   const showCommunitySubtitle =

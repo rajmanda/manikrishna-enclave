@@ -3,6 +3,19 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [Unreleased] — feature/community-switching
+
+- **Community switching (super-admin):** new `POST /auth/switch-community` —
+  a super admin steps into any owned community; the issued JWT carries an
+  `act_cid` claim (home community stays in `community_id`), and
+  `get_current_user` re-validates ownership on EVERY request (revoking
+  ownership instantly drops the acting session back to home). While acting,
+  all reads and writes across every router operate in the acting community,
+  and the full portfolio scope is retained. 6 new tests (122 total).
+- **Frontend:** `switchCommunity` in AuthContext; "Manage this community"
+  button + "Currently managing" state on `/portfolio` cards; AppShell now
+  shows the acting community's name.
+
 ## [Unreleased] — feature/multi-community
 
 - **BREAKING — super admins are no longer global:** new `owned_community_ids`

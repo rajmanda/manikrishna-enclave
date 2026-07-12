@@ -42,7 +42,10 @@ def verify_google_id_token(token: str) -> dict[str, Any]:
     return claims
 
 
-def create_access_token(user: User) -> str:
+def create_access_token(user: User, acting_community_id: str | None = None) -> str:
+    """`community_id` always carries the user's HOME community (the users
+    collection is keyed on it); `act_cid` optionally carries the owned
+    community a super admin is currently managing."""
     settings = get_settings()
     now = datetime.now(timezone.utc)
     payload = {
@@ -53,6 +56,8 @@ def create_access_token(user: User) -> str:
         "iat": now,
         "exp": now + timedelta(minutes=settings.jwt_expires_minutes),
     }
+    if acting_community_id:
+        payload["act_cid"] = acting_community_id
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
@@ -96,6 +101,21 @@ async def get_current_user(
     elif user.apartment_id:
         # Legacy fallback: no account, but has a single apartment_id.
         user.apartment_ids = [user.apartment_id]
+
+    # Community switching: a super admin's token may carry an acting
+    # community. Re-validate ownership on every request (revocation-safe),
+    # then act as that community while keeping the home community owned.
+    acting = payload.get("act_cid")
+    if (
+        acting
+        and acting != user.community_id
+        and user.role == "super_admin"
+        and acting in user.community_ids
+    ):
+        user.community_ids = list(
+            dict.fromkeys([user.community_id, *user.community_ids])
+        )
+        user.community_id = acting
 
     return user
 

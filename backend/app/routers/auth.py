@@ -6,6 +6,7 @@ from app.core.config import get_settings
 from app.core.security import (
     CurrentUser,
     create_access_token,
+    owned_community_ids,
     verify_google_id_token,
 )
 from app.db import get_db
@@ -13,6 +14,7 @@ from app.audit import record_audit
 from app.models import (
     DevLoginRequest,
     GoogleLoginRequest,
+    SwitchCommunityRequest,
     SwitchRoleRequest,
     TokenResponse,
     User,
@@ -98,3 +100,38 @@ async def switch_role(
         updated.apartment_ids = [updated.apartment_id]
     await record_audit(db, user, "update", "users", user.id, {"active_role": body.role})
     return TokenResponse(access_token=create_access_token(updated), user=updated)
+
+
+@router.post("/switch-community", response_model=TokenResponse)
+async def switch_community(
+    body: SwitchCommunityRequest, db: DB, user: CurrentUser
+) -> TokenResponse:
+    """Super admins step into a community they own: the issued token carries
+    the acting community, so every subsequent read AND write operates there.
+    Ownership is re-validated on every request in get_current_user."""
+    if user.role != "super_admin":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, detail="Only super admins switch communities"
+        )
+    # Load the raw doc: user.community_id may already be an acting override,
+    # while the token's community_id claim must always be the HOME community.
+    doc = await db.users.find_one({"id": user.id})
+    home_user = User.model_validate(doc)
+    if body.community_id not in owned_community_ids(home_user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, detail="Not an owner of this community"
+        )
+    token = create_access_token(home_user, acting_community_id=body.community_id)
+    acting_user = home_user.model_copy(
+        update={
+            "community_id": body.community_id,
+            "community_ids": list(
+                dict.fromkeys([home_user.community_id, *home_user.community_ids])
+            ),
+        }
+    )
+    await record_audit(
+        db, user, "update", "users", user.id,
+        {"acting_community": body.community_id},
+    )
+    return TokenResponse(access_token=token, user=acting_user)

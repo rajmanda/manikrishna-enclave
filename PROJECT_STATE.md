@@ -7,9 +7,9 @@ Last updated: 2026-07-11
 | Current version | 0.12.0 |
 | Current milestone | **M4 Governance — complete. PRD Phases 1–4 fully shipped.** Next: M5 (AI, mobile) or hardening |
 | Current sprint | Launch readiness (real owner emails, notifications decision) |
-| Current branch | feature/multi-community (off feature/presentation; main on github.com/rajmanda/manikrishna-enclave, public) |
+| Current branch | feature/community-switching (off main post-PR#3) |
 | Last completed feature | Design-system + UI overhaul (tokens, primitives, Framer Motion, `/home` landing, grouped nav, page transitions — see `UX_REVIEW.md`) + per-deployment branding ("Manikrishna Enclave") |
-| Current feature | Multi-community portfolio console (super-admin): `GET /communities/portfolio/stats` + `/portfolio` page, 4 new tests (112 total). Presentation page rebuilt as role-based decks (6 audiences) with persistent CTAs, WhatsApp-alerts slide, privacy slide, Early Access badges on portfolio claims |
+| Current feature | Community switching (super admin acts inside any owned community — switch-community endpoint + portfolio Manage buttons). Previous: multi-community portfolio console (super-admin): `GET /communities/portfolio/stats` + `/portfolio` page, 4 new tests (112 total). Presentation page rebuilt as role-based decks (6 audiences) with persistent CTAs, WhatsApp-alerts slide, privacy slide, Early Access badges on portfolio claims |
 | Next priority | Owner onboarding: collect real owner emails and whitelist them; then notifications provider decision |
 | Deployment status | **Live at https://community.rajmanda.com** (Cloud Run, asia-south1) |
 | Database version | Schema v6 (migrations 001-006); Atlas `hyderabad.n5kr48f` (AWS Mumbai), DB `communityhub` (prod, live since 2026-07-12 IST) / `communityhub_dev` (local); legacy `manikrishna_enclave` in ~1-week bake before drop |

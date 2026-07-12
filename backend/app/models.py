@@ -201,6 +201,10 @@ class SwitchRoleRequest(APIModel):
     role: Role
 
 
+class SwitchCommunityRequest(APIModel):
+    community_id: str
+
+
 # ---------- Auth ----------
 
 

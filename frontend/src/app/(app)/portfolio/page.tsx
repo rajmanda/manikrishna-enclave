@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Plus, Receipt, Wrench } from "lucide-react";
+import { ArrowRightLeft, Building2, Plus, Receipt, Wrench } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/context/AuthContext";
 import type { PortfolioCommunityStats } from "@/lib/types";
@@ -90,9 +90,19 @@ function rateTone(rate: number): "green" | "brand" | "red" {
 }
 
 export default function PortfolioPage() {
-  const { role } = useAuth();
+  const { user, role, switchCommunity } = useAuth();
   const stats = useApi<PortfolioCommunityStats[]>("/communities/portfolio/stats");
   const [adding, setAdding] = useState(false);
+  const [switching, setSwitching] = useState<string | null>(null);
+
+  async function manage(communityId: string) {
+    setSwitching(communityId);
+    try {
+      await switchCommunity(communityId);
+    } catch {
+      setSwitching(null);
+    }
+  }
 
   if (role && role !== "super_admin")
     return (
@@ -214,6 +224,23 @@ export default function PortfolioPage() {
                 </p>
               </div>
             </div>
+
+            {user?.communityId === c.id ? (
+              <div className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-50 py-2 text-xs font-semibold text-brand-700">
+                <Building2 className="h-3.5 w-3.5" /> Currently managing
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                disabled={switching !== null}
+                onClick={() => manage(c.id)}
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+                {switching === c.id ? "Switching…" : "Manage this community"}
+              </Button>
+            )}
           </Card>
         ))}
         {communities.length === 0 && (
