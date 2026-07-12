@@ -27,5 +27,5 @@ variable "domain" {
 variable "db_name" {
   description = "MongoDB database name for production"
   type        = string
-  default     = "manikrishna_enclave"
+  default     = "communityhub"
 }
