@@ -40,6 +40,8 @@ visibility private/community, status, created_by, created_date), `feed_posts`
 community_id, user_id, text, date ISO, read, type). `work_orders` gained
 `photos[]` (GCS paths).
 
+Money-chain links (2026-07-12): `work_orders.maintenance_request_id`, `expenses.work_order_id`, `invoices.work_order_id` — a job's request, spend, and cost-recovery invoices reference each other.
+
 Adoption tracking (2026-07-12): `users.last_login` (ISO, None = never) and
 `users.login_count` are stamped on every login for all memberships of the
 email; they power the super-admin Platform Insights dashboard.

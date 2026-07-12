@@ -68,6 +68,7 @@ cross-tenant, 409 conflict).
 | GET | `/invoices` | any member | owners/tenants: own apartment only |
 | GET | `/payments` | any member | owners/tenants: own apartment only |
 | GET | `/expenses` | any member | community-wide (transparency) |
+| GET | `/reserve-fund/reconciliation` | any member (page shows to managers) | Anchor-month sanity check: recorded payments/expenses vs the closing entry (`unanchored*` > 0 = booked into a closed month) + `collectionsWithoutExpense` (paid billing drives with no recorded spend) |
 | GET | `/reserve-fund` | any member | community-wide |
 | GET | `/finance/monthly` | any member | Computed from real payments/expenses/invoices, last 6 months (confirmed payments only) |
 | GET | `/finance/summary` | any member | Computed for the current calendar month from real records |

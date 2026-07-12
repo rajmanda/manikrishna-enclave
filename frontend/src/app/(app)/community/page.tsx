@@ -23,6 +23,7 @@ import { currentMonthLabel, formatDate, formatINR } from "@/lib/format";
 import { aptNumber } from "@/lib/lookup";
 import { Modal } from "@/components/Modal";
 import { ExpensesModal } from "@/components/ExpensesModal";
+import { ReserveCaveat } from "@/components/ReserveCaveat";
 import { ReserveModal } from "@/components/ReserveModal";
 import { AddExpenseDialog } from "@/components/expenses";
 import {
@@ -130,6 +131,7 @@ export default function CommunityPage() {
           onClick={() => setReserveModal(true)}
         />
       </div>
+      <ReserveCaveat />
 
       <div className="grid gap-6 lg:grid-cols-5">
         {/* Expense breakdown chart */}

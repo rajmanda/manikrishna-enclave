@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDownRight, ArrowUpRight, PlusCircle } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, PlusCircle } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
-import type { ReserveFundEntry } from "@/lib/types";
+import type { ReserveFundEntry, ReserveReconciliation } from "@/lib/types";
 import { formatINR } from "@/lib/format";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
+import { ReserveCaveat } from "@/components/ReserveCaveat";
 import {
   Card,
   ErrorNote,
@@ -82,6 +84,9 @@ export default function ReserveFundPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [statModal, setStatModal] = useState<"balance" | "contributions" | "withdrawals" | null>(null);
   const reserve = useApi<ReserveFundEntry[]>("/reserve-fund");
+  // Managers get the detailed actionable banners; everyone else still gets
+  // the honest one-line caveat (fairness: owners see the same books).
+  const recon = useApi<ReserveReconciliation>(canWrite ? "/reserve-fund/reconciliation" : null);
 
   if (reserve.error)
     return <ErrorNote message={reserve.error} onRetry={reserve.reload} />;
@@ -115,6 +120,73 @@ export default function ReserveFundPage() {
 
       {addOpen && (
         <AddEntryDialog onClose={() => setAddOpen(false)} onDone={reserve.reload} />
+      )}
+
+      {/* Owners/tenants/auditors: honest one-liner that the figure is provisional. */}
+      {!canWrite && <ReserveCaveat />}
+
+      {/* Reconciliation warnings — money that doesn't add up gets said out loud. */}
+      {canWrite &&
+        ((recon.data?.unanchoredContributions ?? 0) > 0 ||
+          (recon.data?.unanchoredExpenses ?? 0) > 0) && (
+          <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div className="text-sm text-amber-900">
+              <p className="font-semibold">
+                {recon.data?.anchorMonth} doesn&apos;t reconcile with the recorded books
+              </p>
+              {(recon.data?.unanchoredContributions ?? 0) > 0 && (
+                <p className="mt-1 text-xs">
+                  Payments recorded for {recon.data?.anchorMonth} total{" "}
+                  {formatINR(recon.data?.recordedContributions ?? 0)}, but the closing
+                  entry says {formatINR(recon.data?.anchoredContributions ?? 0)} — the
+                  extra {formatINR(recon.data?.unanchoredContributions ?? 0)} is not in
+                  the live reserve. Amend the {recon.data?.anchorMonth} entry to include it.
+                </p>
+              )}
+              {(recon.data?.unanchoredExpenses ?? 0) > 0 && (
+                <p className="mt-1 text-xs">
+                  Expenses recorded for {recon.data?.anchorMonth} exceed the closing
+                  entry by {formatINR(recon.data?.unanchoredExpenses ?? 0)} — the live
+                  reserve is overstated until the entry is amended.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      {canWrite && (recon.data?.collectionsWithoutExpense?.length ?? 0) > 0 && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="min-w-0 flex-1 text-sm text-amber-900">
+            <p className="font-semibold">Money collected, but no expense on record</p>
+            <p className="mt-0.5 text-xs">
+              Owners paid for these jobs, but the actual spend was never recorded —
+              the reserve looks richer than it is until the bills are entered.
+            </p>
+            <ul className="mt-2 space-y-1">
+              {recon.data?.collectionsWithoutExpense?.map((d) => (
+                <li key={`${d.description}-${d.period}`} className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
+                  <span className="font-medium">
+                    {d.description}
+                    {d.period ? ` (${d.period})` : ""}
+                  </span>
+                  <span>
+                    collected {formatINR(d.collected)} of {formatINR(d.billed)} ·{" "}
+                    {d.workOrderId ? (
+                      <Link href={`/work-orders/${d.workOrderId}`} className="font-semibold underline">
+                        record the expense
+                      </Link>
+                    ) : (
+                      <Link href="/expenses?add=1" className="font-semibold underline">
+                        record the expense
+                      </Link>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

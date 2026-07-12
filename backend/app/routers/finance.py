@@ -9,6 +9,7 @@ Scoping rules:
 
 import asyncio
 import calendar
+import re
 from datetime import date
 from typing import Annotated, Any
 
@@ -153,6 +154,112 @@ async def reserve_fund(db: DB, user: CurrentUser) -> list[ReserveFundEntry]:
     return [ReserveFundEntry.model_validate(d) for d in [*docs, *derived]]
 
 
+@router.get("/reserve-fund/reconciliation")
+async def reserve_reconciliation(db: DB, user: CurrentUser) -> dict:
+    """Sanity check on the latest reserve anchor: compares money actually
+    recorded for the anchor month (confirmed community payments, expenses)
+    against the closing entry's figures. `unanchored*` > 0 means activity
+    was booked into an already-closed month — it is invisible to the live
+    reserve until the anchor entry is amended (this is exactly how the June
+    bore well collections went missing)."""
+    cid = user.community_id
+    entries = await db.reserve_fund.find({"community_id": cid}).to_list(1000)
+    if not entries:
+        return {"anchorMonth": None, "anchorCutoff": None}
+    anchor = entries[-1]
+    cutoff = _anchor_cutoff(anchor["month"])
+    if cutoff is None:
+        return {"anchorMonth": anchor["month"], "anchorCutoff": None}
+    prefix = cutoff[:7]
+    payments, expenses = await asyncio.gather(
+        db.payments.find({"community_id": cid}).to_list(10000),
+        db.expenses.find({"community_id": cid}).to_list(10000),
+    )
+    recorded_contributions = sum(
+        p["amount"] for p in payments
+        if p["date"].startswith(prefix)
+        and p.get("status", "confirmed") == "confirmed"
+        and p.get("ledger", "community") == "community"
+    )
+    recorded_expenses = sum(
+        e["amount"] for e in expenses if e["paid_date"].startswith(prefix)
+    )
+    invoices = await db.invoices.find({"community_id": cid}).to_list(10000)
+    # Negative gaps are fine (the anchor can include offline history that
+    # never became payment/expense records) — only excess is a problem.
+    return {
+        "anchorMonth": anchor["month"],
+        "anchorCutoff": cutoff,
+        "anchoredContributions": anchor["contributions"],
+        "anchoredExpenses": anchor["expenses"],
+        "recordedContributions": recorded_contributions,
+        "recordedExpenses": recorded_expenses,
+        "unanchoredContributions": max(0, recorded_contributions - anchor["contributions"]),
+        "unanchoredExpenses": max(0, recorded_expenses - anchor["expenses"]),
+        "collectionsWithoutExpense": _drives_without_expense(invoices, expenses),
+    }
+
+
+# Generic words that don't identify a job ("Bore well repair work" should
+# match an expense named "Bore well motor", not every "repair").
+_DRIVE_STOPWORDS = {"work", "works", "repair", "repairs", "charge", "charges",
+                    "amount", "monthly", "cost", "costs", "bill", "bills"}
+
+
+def _drive_tokens(description: str) -> set[str]:
+    base = re.sub(r"\s*-\s*Apt\s+\S+\s*$", "", description, flags=re.I)
+    return {
+        w for w in re.findall(r"[a-z]+", base.lower())
+        if len(w) >= 4 and w not in _DRIVE_STOPWORDS
+    }
+
+
+def _drives_without_expense(invoices: list[dict], expenses: list[dict]) -> list[dict]:
+    """Special community collection drives (not maintenance/late fees) where
+    owners have PAID but no expense was ever recorded for the job — money
+    came in for work that isn't in the books (the bore well failure mode).
+    Matching is by work-order link when present, else by description words."""
+    expense_tokens = [
+        (_drive_tokens(e["description"]), e.get("work_order_id")) for e in expenses
+    ]
+    drives: dict[tuple, dict] = {}
+    for inv in invoices:
+        if inv.get("ledger", "community") != "community":
+            continue
+        if inv.get("parent_invoice_id"):  # late fees
+            continue
+        desc = re.sub(r"\s*-\s*Apt\s+\S+\s*$", "", inv["description"], flags=re.I).strip()
+        if "maintenance" in desc.lower() or "late fee" in desc.lower():
+            continue
+        key = (desc.lower(), inv.get("period"))
+        d = drives.setdefault(
+            key,
+            {"description": desc, "period": inv.get("period"),
+             "workOrderId": inv.get("work_order_id"),
+             "billed": 0.0, "collected": 0.0},
+        )
+        d["billed"] += inv["amount"]
+        d["collected"] += inv.get("paid_amount", 0)
+        d["workOrderId"] = d["workOrderId"] or inv.get("work_order_id")
+    flagged = []
+    for d in drives.values():
+        if d["collected"] <= 0:
+            continue
+        if d["workOrderId"]:
+            matched = any(wo_id == d["workOrderId"] for _, wo_id in expense_tokens)
+        else:
+            tokens = _drive_tokens(d["description"])
+            # Two shared identifying words (one suffices for one-word jobs) —
+            # "Water tank cleaning" must not match a mere "Water tanker".
+            need = 1 if len(tokens) == 1 else 2
+            matched = bool(tokens) and any(
+                len(tokens & etok) >= need for etok, _ in expense_tokens
+            )
+        if not matched:
+            flagged.append(d)
+    return sorted(flagged, key=lambda d: d["collected"], reverse=True)
+
+
 def _last_month_prefixes(count: int = 6) -> list[str]:
     """YYYY-MM prefixes for the last `count` months, oldest first."""
     today = date.today()
@@ -248,6 +355,12 @@ async def community_summary(db: DB, user: CurrentUser) -> CommunitySummary:
     dependencies=[Writer],
 )
 async def create_expense(body: ExpenseCreate, db: DB, user: CurrentUser) -> Expense:
+    if body.work_order_id:
+        wo = await db.work_orders.find_one(
+            {"id": body.work_order_id, "community_id": user.community_id}
+        )
+        if wo is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Work order not found")
     expense = Expense(community_id=user.community_id, **body.model_dump())
     await db.expenses.insert_one(expense.model_dump())
     await record_audit(db, user, "create", "expenses", expense.id)

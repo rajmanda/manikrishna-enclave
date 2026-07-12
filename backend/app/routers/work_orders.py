@@ -55,6 +55,14 @@ COMMENT_ROLES = ("owner", "tenant", "property_manager", "community_admin", "supe
 async def create_work_order(
     body: WorkOrderCreate, db: DB, user: CurrentUser
 ) -> WorkOrder:
+    if body.maintenance_request_id:
+        mr = await db.maintenance_requests.find_one(
+            {"id": body.maintenance_request_id, "community_id": user.community_id}
+        )
+        if mr is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, detail="Maintenance request not found"
+            )
     today = date.today().isoformat()
     wo = WorkOrder(
         community_id=user.community_id,
@@ -64,6 +72,12 @@ async def create_work_order(
         **body.model_dump(),
     )
     await db.work_orders.insert_one(wo.model_dump())
+    if body.maintenance_request_id:
+        # The request is being acted on — reflect that for its reporter.
+        await db.maintenance_requests.update_one(
+            {"id": body.maintenance_request_id, "status": "Open"},
+            {"$set": {"status": "In Progress"}},
+        )
     await record_audit(db, user, "create", "work_orders", wo.id)
     await notify_members(
         db, user.community_id, f"New work order: {wo.title}", "work_order", user.id,

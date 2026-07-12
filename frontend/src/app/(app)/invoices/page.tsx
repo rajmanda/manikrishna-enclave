@@ -15,6 +15,7 @@ import { invoiceTone, ledgerAccent } from "@/lib/tones";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { InvoiceSheet } from "@/components/InvoiceSheet";
 import { ReceiptPicker } from "@/components/ReceiptPicker";
+import { ClosedMonthNote } from "@/components/expenses";
 import { uploadEach, uploadFileTo } from "@/lib/upload";
 import {
   Badge,
@@ -117,16 +118,21 @@ function GenerateDialog({
   users,
   onClose,
   onDone,
+  initialDescription,
+  workOrderId,
 }: {
   apartments: Apartment[] | undefined;
   users: User[] | undefined;
   onClose: () => void;
   onDone: () => void;
+  /** Set when billing owners for a work order — invoices link back to it. */
+  initialDescription?: string;
+  workOrderId?: string;
 }) {
   const [period, setPeriod] = useState(nextMonthLabel());
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("Monthly Maintenance");
+  const [description, setDescription] = useState(initialDescription || "Monthly Maintenance");
   const [scope, setScope] = useState<"all" | "selected">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [receipts, setReceipts] = useState<File[]>([]);
@@ -165,6 +171,7 @@ function GenerateDialog({
             description,
             ...(amount ? { amount: Number(amount) } : {}),
             ...(scope === "selected" ? { apartmentIds: [...selected] } : {}),
+            ...(workOrderId ? { workOrderId } : {}),
           }),
         }
       );
@@ -348,6 +355,7 @@ function PaymentDialog({
           <label className={labelCls}>Reference</label>
           <input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UPI-1234 / NEFT ref / waiver note" />
         </div>
+        <ClosedMonthNote date={date} />
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button type="submit" disabled={busy} className={primaryBtnCls}>
           {busy ? "Saving…" : `Record ${formatINR(Number(amount) || 0)}`}
@@ -777,7 +785,9 @@ function InvoicesPageInner() {
   const [dialog, setDialog] = useState<"generate" | "latefee" | "fees" | "billowner" | null>(null);
 
   // Quick actions deep-link: /invoices?dialog=generate|billowner|fees|latefee
-  // opens that dialog once, then cleans the param so refresh/back is normal.
+  // opens that dialog once, then cleans the params so refresh/back is normal.
+  // `wo` + `desc` carry a work-order link ("Bill owners" on a work order).
+  const [woLink, setWoLink] = useState<{ id: string; desc: string } | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const consumedDialog = useRef(false);
@@ -789,9 +799,15 @@ function InvoicesPageInner() {
       (wanted === "generate" || wanted === "billowner" || wanted === "fees" || wanted === "latefee")
     ) {
       consumedDialog.current = true;
+      const wo = searchParams.get("wo");
+      if (wanted === "generate" && wo) {
+        setWoLink({ id: wo, desc: searchParams.get("desc") ?? "" });
+      }
       setDialog(wanted);
       const rest = new URLSearchParams(searchParams);
       rest.delete("dialog");
+      rest.delete("wo");
+      rest.delete("desc");
       router.replace(`/invoices${rest.size ? `?${rest}` : ""}`);
     }
   }, [canWrite, searchParams, router]);
@@ -1404,8 +1420,13 @@ function InvoicesPageInner() {
         <GenerateDialog
           apartments={apartments.data}
           users={users.data}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+            setWoLink(null);
+          }}
           onDone={invoices.reload}
+          initialDescription={woLink?.desc}
+          workOrderId={woLink?.id}
         />
       )}
       {dialog === "latefee" && (
