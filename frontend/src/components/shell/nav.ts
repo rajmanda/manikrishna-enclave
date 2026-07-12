@@ -17,6 +17,7 @@ import {
   ScrollText,
   UsersRound,
   KeyRound,
+  Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -37,6 +38,7 @@ export const navItems: NavItem[] = [
   { label: "Feed", href: "/feed", icon: MessageSquare, group: "Overview" },
   { label: "Invoices", href: "/invoices", icon: Receipt, group: "Money" },
   { label: "Payments", href: "/payments", icon: Banknote, group: "Money", roles: ["property_manager", "community_admin", "auditor", "super_admin", "owner", "tenant"] },
+  { label: "Expenses", href: "/expenses", icon: Wallet, group: "Money" },
   { label: "Reserve Fund", href: "/reserve-fund", icon: PiggyBank, group: "Money" },
   { label: "Work Orders", href: "/work-orders", icon: Wrench, group: "Operations" },
   { label: "Maintenance", href: "/maintenance", icon: ClipboardList, group: "Operations" },

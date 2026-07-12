@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlarmClock, ArrowUpDown, Banknote, ChevronDown, Download, FileDown, HandCoins, LayoutGrid, PlusCircle, ReceiptText, Table2, Trash2 } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
@@ -774,6 +775,26 @@ function InvoicesPageInner() {
   });
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: "dueDate", dir: -1 });
   const [dialog, setDialog] = useState<"generate" | "latefee" | "fees" | "billowner" | null>(null);
+
+  // Quick actions deep-link: /invoices?dialog=generate|billowner|fees|latefee
+  // opens that dialog once, then cleans the param so refresh/back is normal.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const consumedDialog = useRef(false);
+  useEffect(() => {
+    const wanted = searchParams.get("dialog");
+    if (
+      canWrite &&
+      !consumedDialog.current &&
+      (wanted === "generate" || wanted === "billowner" || wanted === "fees" || wanted === "latefee")
+    ) {
+      consumedDialog.current = true;
+      setDialog(wanted);
+      const rest = new URLSearchParams(searchParams);
+      rest.delete("dialog");
+      router.replace(`/invoices${rest.size ? `?${rest}` : ""}`);
+    }
+  }, [canWrite, searchParams, router]);
   const [aptTab, setAptTab] = useState<string>("all");
   const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
   const [reportInvoice, setReportInvoice] = useState<Invoice | null>(null);

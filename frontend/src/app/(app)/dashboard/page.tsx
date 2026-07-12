@@ -6,11 +6,15 @@ import {
   AlertTriangle,
   ArrowRight,
   BadgeCheck,
+  Banknote,
   CalendarDays,
   CreditCard,
   Download,
   Megaphone,
   MessageCircle,
+  PlusCircle,
+  ReceiptText,
+  Wallet,
   Wrench,
 } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
@@ -787,6 +791,27 @@ function ManagerDashboard() {
           Live from the API
         </span>
         */}
+      </FadeIn>
+
+      {/* Quick actions — the frequent manager tasks, one tap from landing. */}
+      <FadeIn className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[
+          { label: "Record expense", href: "/expenses?add=1", icon: Wallet },
+          { label: "Record payment", href: "/invoices?status=due", icon: Banknote },
+          { label: "Create invoices", href: "/invoices?dialog=generate", icon: PlusCircle },
+          { label: "Bill owner", href: "/invoices?dialog=billowner", icon: ReceiptText },
+        ].map(({ label, href, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-brand-300 hover:shadow"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+              <Icon className="h-4 w-4" />
+            </span>
+            <span className="text-sm font-semibold text-slate-700">{label}</span>
+          </Link>
+        ))}
       </FadeIn>
 
       {s.pendingPaymentConfirmations > 0 && (
