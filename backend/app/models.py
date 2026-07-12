@@ -146,6 +146,9 @@ class User(APIModel):
     apartment_ids: list[str] = []  # all apartments via account — populated at login
     phone: str | None = None
     preferred_name: str | None = None  # overrides the derived short name in messages
+    # Adoption tracking (stamped on every login; None = never logged in).
+    last_login: str | None = None
+    login_count: int = 0
 
     @property
     def display_name(self) -> str:

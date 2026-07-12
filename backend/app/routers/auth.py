@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -54,6 +55,15 @@ async def _login_by_email(db: Any, email: str) -> TokenResponse:
             status.HTTP_403_FORBIDDEN,
             detail="This account is not whitelisted. Contact your property manager.",
         )
+    # Adoption tracking: stamp every membership of this email — identity is
+    # the email, and membership switching doesn't re-authenticate.
+    await db.users.update_many(
+        {"email": email.lower()},
+        {
+            "$set": {"last_login": datetime.now(timezone.utc).isoformat()},
+            "$inc": {"login_count": 1},
+        },
+    )
     user = await _resolve_apartments(db, User.model_validate(docs[0]))
     return TokenResponse(access_token=create_access_token(user), user=user)
 
