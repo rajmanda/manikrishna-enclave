@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   Building2,
+  Check,
+  Copy,
   MessageSquare,
   Receipt,
   ShieldCheck,
@@ -36,17 +39,90 @@ const DEV_ACCOUNTS = [
   { label: "Community Auditor — Read Only", email: "auditor@communityhub.app" },
 ];
 
+/** Google blocks OAuth inside embedded in-app browsers (WhatsApp, Instagram,
+ * Facebook, Gmail app, …) with "Access denied" — most owners arrive via a
+ * WhatsApp link, so detect it and tell them to open a real browser instead
+ * of letting them hit Google's dead end. */
+function isEmbeddedWebview(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  // Explicit in-app browser markers.
+  if (/WhatsApp|FBAN|FBAV|FB_IAB|Instagram|Line\/|GSA\/|Snapchat|Twitter/i.test(ua)) {
+    return true;
+  }
+  // Android WebView ships "; wv)" in its UA.
+  if (/Android/.test(ua) && /;\s?wv\)/.test(ua)) return true;
+  // iOS in-app browsers use WKWebView: real browsers always carry a
+  // Safari/CriOS/FxiOS/EdgiOS token; a bare AppleWebKit UA is a webview.
+  if (
+    /iPhone|iPad|iPod/.test(ua) &&
+    !/Safari\/|CriOS\/|FxiOS\/|EdgiOS\//.test(ua)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function WebviewWarning() {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left">
+      <p className="flex items-start gap-2 text-sm font-semibold text-amber-900">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        Google sign-in doesn&apos;t work inside this app&apos;s built-in browser
+      </p>
+      <p className="mt-1.5 text-xs text-amber-800">
+        You opened this link inside WhatsApp or another app. Google blocks
+        sign-in here for security. Tap the <b>⋮</b> (or share) menu and choose{" "}
+        <b>Open in browser</b> — or copy the link below and paste it into
+        Chrome or Safari.
+      </p>
+      <button
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(window.location.origin);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2500);
+          } catch {
+            // Clipboard can be unavailable in webviews — the URL is visible below.
+          }
+        }}
+        className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-700"
+      >
+        {copied ? (
+          <>
+            <Check className="h-4 w-4" /> Copied — paste it in Chrome
+          </>
+        ) : (
+          <>
+            <Copy className="h-4 w-4" /> Copy link for Chrome / Safari
+          </>
+        )}
+      </button>
+      <p className="mt-2 text-center font-mono text-xs text-amber-700">
+        community.rajmanda.com
+      </p>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const { user, loading, devLogin, googleLogin } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [customEmail, setCustomEmail] = useState("");
+  const [inWebview, setInWebview] = useState(false);
   const googleButtonRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!loading && user) router.replace("/dashboard");
   }, [loading, user, router]);
+
+  // After hydration only — UA sniffing on the server would mismatch.
+  useEffect(() => {
+    setInWebview(isEmbeddedWebview());
+  }, []);
 
   // Google Identity Services — only when a client ID is configured.
   useEffect(() => {
@@ -109,8 +185,11 @@ export default function LoginPage() {
           discussions in one place.
         </p>
 
+        {/* In-app browsers can't complete Google OAuth — say so up front. */}
+        {inWebview && <WebviewWarning />}
+
         {/* Google sign-in (rendered by GIS when configured) */}
-        <div className="mt-8 flex justify-center">
+        <div className={inWebview ? "hidden" : "mt-8 flex justify-center"}>
           {GOOGLE_CLIENT_ID ? (
             <div ref={googleButtonRef} />
           ) : (
