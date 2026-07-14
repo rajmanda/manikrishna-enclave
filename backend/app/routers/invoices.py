@@ -12,6 +12,7 @@ from app.core.security import CurrentUser, owned_community_ids, require_roles
 from app.db import get_db
 from app.models import (
     WRITE_ROLES,
+    AllocatePaymentRequest,
     ApplyLateFeesRequest,
     BillOwnerRequest,
     CommunityDocument,
@@ -439,6 +440,60 @@ async def record_payment(body: PaymentCreate, db: DB, user: CurrentUser) -> Paym
         {"invoice_id": invoice["id"], "amount": body.amount, "method": body.method},
     )
     return payment
+
+
+@router.post(
+    "/payments/allocate",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Writer],
+)
+async def allocate_payment(
+    body: AllocatePaymentRequest, db: DB, user: CurrentUser
+) -> dict:
+    """Split one received amount across the given invoices, oldest due date
+    first — one Payment per invoice portion, same method/date/reference."""
+    if body.amount <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Amount must be positive")
+    invoices = await db.invoices.find(
+        {"id": {"$in": body.invoice_ids}, "community_id": user.community_id}
+    ).to_list(200)
+    if len(invoices) != len(set(body.invoice_ids)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    open_invs = sorted(
+        (i for i in invoices if i["amount"] - i["paid_amount"] > 0),
+        key=lambda i: i["due_date"],
+    )
+    total_outstanding = sum(i["amount"] - i["paid_amount"] for i in open_invs)
+    if body.amount > total_outstanding:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"Amount exceeds the combined outstanding balance ({total_outstanding:,.0f})",
+        )
+    remaining = body.amount
+    applied = []
+    for inv in open_invs:
+        if remaining <= 0:
+            break
+        portion = min(remaining, inv["amount"] - inv["paid_amount"])
+        payment = Payment(
+            community_id=user.community_id,
+            invoice_id=inv["id"],
+            apartment_id=inv["apartment_id"],
+            amount=portion,
+            date=body.date,
+            method=body.method,
+            reference=body.reference,
+            ledger=inv.get("ledger", "community"),
+        )
+        await db.payments.insert_one(payment.model_dump())
+        await _recompute(db, inv)
+        applied.append({"invoiceId": inv["id"], "apartmentId": inv["apartment_id"], "amount": portion})
+        remaining -= portion
+    await record_audit(
+        db, user, "create", "payments", f"allocate:{body.reference or body.date}",
+        {"total": body.amount, "portions": len(applied), "method": body.method},
+    )
+    return {"applied": applied, "total": body.amount}
 
 
 @router.delete(
