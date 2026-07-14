@@ -166,11 +166,21 @@ async def get_cost_case(case_id: str, db: DB, user: CurrentUser) -> dict:
             timeline.append({"date": ev["date"], "kind": "work_order",
                              "label": f"{w['title']} — {ev['stage']}"
                              + (f" ({ev['note']})" if ev.get("note") else "")})
+    # Who did what — from the audit trail (create/post events per expense).
+    audit = await db.audit_log.find(
+        {"entity": "expenses", "entity_id": {"$in": [e["id"] for e in expenses]}}
+    ).to_list(1000)
+    actor: dict[str, str] = {}
+    for a in sorted(audit, key=lambda a: a["timestamp"]):
+        if a["action"] == "create" or a.get("details", {}).get("status") == "posted":
+            actor[a["entity_id"]] = a.get("user_name", "")
     for e in expenses:
         state = e.get("status", "posted")
+        who = actor.get(e["id"])
         timeline.append({"date": e["paid_date"], "kind": "expense",
                          "label": f"{'Vendor bill (draft)' if state == 'draft' else 'Expense posted'}: "
-                         f"{e['description']} — Rs {e['amount']:,.0f}"})
+                         f"{e['description']} — Rs {e['amount']:,.0f}"
+                         + (f" (by {who})" if who else "")})
     for p in payments:
         if p.get("status", "confirmed") == "confirmed":
             timeline.append({"date": p["date"], "kind": "payment",

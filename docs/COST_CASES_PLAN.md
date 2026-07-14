@@ -84,8 +84,13 @@ Reconciliation.
       expense, draft vendor bills awaiting posting, outstanding assessments;
       all rows deep-link to the case/work order
 - [x] Expense edit-lock once posted — amount/date/category frozen (409), delete refused; POST /expenses/{id}/reverse creates a negative offsetting entry (links preserved, pair nets to zero, reversal itself irreversible); ledger UI badges reversed/reversal and routes the trash action accordingly
-- [ ] Recurring-expense prompts (electricity/water/salary) → monthly cases
-- [ ] Full audit surfacing on the case timeline (who approved/posted)
+- [x] Recurring expenses — DESCOPED by design: monthly recurring spend
+      (electricity/water/watchman) is funded by monthly maintenance
+      collections and needs no cost case; cases are for special-purpose
+      drives. Revisit only if a recurring drive (e.g. tanker seasons)
+      proves otherwise
+- [x] Audit surfacing on the case timeline — expense entries show who
+      created/posted them (from audit_log)
 
 ## Migration & safety checklist
 
