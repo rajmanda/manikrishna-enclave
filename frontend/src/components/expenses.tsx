@@ -317,6 +317,8 @@ export function ExpenseLedger({
                           {e.status === "draft" && (
                             <Badge tone="violet">draft — not in books</Badge>
                           )}
+                          {e.reversalOf && <Badge tone="amber">reversal</Badge>}
+                          {e.reversedBy && <Badge tone="slate">reversed</Badge>}
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
                           {vendor ? `${vendor.name} · ` : ""}
@@ -332,13 +334,26 @@ export function ExpenseLedger({
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1.5">
                         <p className="text-sm font-semibold">{formatINR(e.amount)}</p>
-                        {canWrite && (
+                        {canWrite && !e.reversedBy && !e.reversalOf && (
                           <button
-                            aria-label={`Delete ${e.description}`}
+                            aria-label={`Remove ${e.description}`}
                             onClick={async () => {
-                              if (!confirm(`Delete expense "${e.description}"?`)) return;
-                              await api(`/expenses/${e.id}`, { method: "DELETE" });
-                              onChanged();
+                              // Drafts delete; posted money gets a ledger-safe
+                              // reversal entry instead (books stay intact).
+                              const posted = e.status !== "draft";
+                              const msg = posted
+                                ? `"${e.description}" is posted to the books.\n\nRecord a reversal entry of ${formatINR(-e.amount)} to cancel it out? (Re-enter the correct expense afterwards.)`
+                                : `Delete draft "${e.description}"?`;
+                              if (!confirm(msg)) return;
+                              try {
+                                await api(
+                                  posted ? `/expenses/${e.id}/reverse` : `/expenses/${e.id}`,
+                                  { method: posted ? "POST" : "DELETE" }
+                                );
+                                onChanged();
+                              } catch (err) {
+                                alert(err instanceof ApiError ? err.message : "Failed");
+                              }
                             }}
                             className="text-slate-300 hover:text-red-500"
                           >

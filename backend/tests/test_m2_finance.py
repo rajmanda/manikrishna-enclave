@@ -126,10 +126,12 @@ async def test_owner_cannot_write_finance(client, owner_headers):
 
 
 async def test_expense_crud(client, manager_headers, db):
+    """Drafts are freely editable/deletable; POSTED expenses are ledger
+    truth — financial fields frozen, corrections via reversal entries."""
     created = await client.post(
         "/api/v1/expenses",
         json={"category": "Repairs", "description": "Gate hinge", "amount": 800,
-              "paidDate": "2026-07-04", "vendorId": "v-elec"},
+              "paidDate": "2026-07-04", "vendorId": "v-elec", "status": "draft"},
         headers=manager_headers,
     )
     assert created.status_code == 201
@@ -144,6 +146,49 @@ async def test_expense_crud(client, manager_headers, db):
     assert deleted.status_code == 204
     entries = await db.audit_log.find({"entity_id": eid}).to_list(10)
     assert [e["action"] for e in entries] == ["create", "update", "delete"]
+
+
+async def test_posted_expense_locked_and_reversed(client, manager_headers):
+    created = await client.post(
+        "/api/v1/expenses",
+        json={"category": "Repairs", "description": "Pump seal", "amount": 900,
+              "paidDate": "2026-07-04"},
+        headers=manager_headers,
+    )
+    eid = created.json()["id"]
+    assert created.json()["status"] == "posted"
+
+    # Financial edits and deletes are refused on posted money.
+    assert (await client.patch(
+        f"/api/v1/expenses/{eid}", json={"amount": 950}, headers=manager_headers
+    )).status_code == 409
+    assert (await client.delete(
+        f"/api/v1/expenses/{eid}", headers=manager_headers
+    )).status_code == 409
+    # Descriptive metadata may still be corrected.
+    ok = await client.patch(
+        f"/api/v1/expenses/{eid}", json={"description": "Pump seal (motor #2)"},
+        headers=manager_headers,
+    )
+    assert ok.status_code == 200
+
+    # Reversal offsets the books and locks the pair.
+    rev = await client.post(f"/api/v1/expenses/{eid}/reverse", headers=manager_headers)
+    assert rev.status_code == 200
+    assert rev.json()["amount"] == -900
+    assert rev.json()["reversalOf"] == eid
+    assert (await client.post(
+        f"/api/v1/expenses/{eid}/reverse", headers=manager_headers
+    )).status_code == 409  # already reversed
+    rid = rev.json()["id"]
+    assert (await client.post(
+        f"/api/v1/expenses/{rid}/reverse", headers=manager_headers
+    )).status_code == 409  # reversals can't be reversed
+
+    # Net effect on the books is zero.
+    expenses = (await client.get("/api/v1/expenses", headers=manager_headers)).json()
+    pair = [e for e in expenses if e["id"] in (eid, rid)]
+    assert sum(e["amount"] for e in pair) == 0
 
 
 async def test_receipt_upload_and_download(client, manager_headers, owner_headers, monkeypatch):

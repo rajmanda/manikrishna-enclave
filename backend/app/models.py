@@ -395,6 +395,10 @@ class Expense(APIModel):
     # draft = vendor bill under financial review (never touches the reserve
     # or any community total); posted = real spend in the books.
     status: Literal["draft", "posted"] = "posted"
+    # Ledger integrity: posted expenses are corrected by reversal, never
+    # edited/deleted. A reversal is a negative expense pointing back.
+    reversal_of: str | None = None
+    reversed_by: str | None = None
 
 
 class ExpenseCreate(APIModel):

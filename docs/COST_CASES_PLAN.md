@@ -81,7 +81,7 @@ Reconciliation.
 - [ ] Reports: open cost cases, WOs awaiting expense entry, collected
       without posted expense, vendor bills awaiting posting, assessment
       balances, surpluses/shortfalls
-- [ ] Expense edit-lock once posted (corrections via reversal expense)
+- [x] Expense edit-lock once posted — amount/date/category frozen (409), delete refused; POST /expenses/{id}/reverse creates a negative offsetting entry (links preserved, pair nets to zero, reversal itself irreversible); ledger UI badges reversed/reversal and routes the trash action accordingly
 - [ ] Recurring-expense prompts (electricity/water/salary) → monthly cases
 - [ ] Full audit surfacing on the case timeline (who approved/posted)
 

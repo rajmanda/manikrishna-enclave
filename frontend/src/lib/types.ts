@@ -150,6 +150,8 @@ export interface Expense {
   costCaseId?: string | null;
   // draft = vendor bill under financial review (not yet in the books)
   status?: "draft" | "posted";
+  reversalOf?: string | null;
+  reversedBy?: string | null;
 }
 
 export type WorkOrderStage =

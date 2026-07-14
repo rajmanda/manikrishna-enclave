@@ -435,13 +435,25 @@ async def update_expense(
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+    existing = await db.expenses.find_one(
+        {"id": expense_id, "community_id": user.community_id}
+    )
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Expense not found")
+    # Posted money is ledger truth: financial fields are frozen; only
+    # descriptive metadata may still be corrected.
+    if existing.get("status", "posted") == "posted":
+        frozen = {"amount", "paid_date", "category"} & set(updates)
+        if frozen:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="Posted expenses can't be edited — record a reversal and re-enter",
+            )
     result = await db.expenses.find_one_and_update(
-        {"id": expense_id, "community_id": user.community_id},
+        {"id": expense_id},
         {"$set": updates},
         return_document=True,
     )
-    if result is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Expense not found")
     await record_audit(db, user, "update", "expenses", expense_id, updates)
     return Expense.model_validate(result)
 
@@ -452,12 +464,67 @@ async def update_expense(
     dependencies=[Writer],
 )
 async def delete_expense(expense_id: str, db: DB, user: CurrentUser) -> None:
-    result = await db.expenses.delete_one(
+    existing = await db.expenses.find_one(
         {"id": expense_id, "community_id": user.community_id}
     )
-    if result.deleted_count == 0:
+    if existing is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Expense not found")
+    if existing.get("status", "posted") == "posted":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Posted expenses can't be deleted — record a reversal instead",
+        )
+    await db.expenses.delete_one({"id": expense_id})
     await record_audit(db, user, "delete", "expenses", expense_id)
+
+
+@router.post(
+    "/expenses/{expense_id}/reverse",
+    response_model=Expense,
+    dependencies=[Writer],
+)
+async def reverse_expense(expense_id: str, db: DB, user: CurrentUser) -> Expense:
+    """Ledger-safe correction: a posted expense is offset by a negative
+    reversal entry (links preserved) instead of being edited or deleted.
+    The pair nets to zero everywhere; re-enter the correct expense after."""
+    original = await db.expenses.find_one(
+        {"id": expense_id, "community_id": user.community_id}
+    )
+    if original is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Expense not found")
+    if original.get("status", "posted") != "posted":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Draft bills are deleted, not reversed"
+        )
+    if original.get("reversed_by"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Expense is already reversed"
+        )
+    if original.get("reversal_of"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Reversal entries can't be reversed"
+        )
+    reversal = Expense(
+        community_id=user.community_id,
+        category=original["category"],
+        description=f"Reversal: {original['description']}",
+        vendor_id=original.get("vendor_id"),
+        amount=-original["amount"],
+        paid_date=date.today().isoformat(),
+        work_order_id=original.get("work_order_id"),
+        cost_case_id=original.get("cost_case_id"),
+        status="posted",
+        reversal_of=expense_id,
+    )
+    await db.expenses.insert_one(reversal.model_dump())
+    await db.expenses.update_one(
+        {"id": expense_id}, {"$set": {"reversed_by": reversal.id}}
+    )
+    await record_audit(
+        db, user, "create", "expenses", reversal.id,
+        {"reversal_of": expense_id, "amount": reversal.amount},
+    )
+    return Expense.model_validate(reversal)
 
 
 @router.post(
