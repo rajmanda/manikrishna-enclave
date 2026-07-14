@@ -408,17 +408,27 @@ export default function WorkOrderDetailPage({
                 </>
               )}
             </div>
-            {wo.maintenanceRequestId && (
+            {(wo.maintenanceRequestId || wo.costCaseId) && (
               <div className="p-4">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                  Origin
+                  Related
                 </p>
-                <Link
-                  href="/maintenance"
-                  className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
-                >
-                  <ClipboardList className="h-3.5 w-3.5" /> From a resident maintenance request
-                </Link>
+                {wo.costCaseId && (
+                  <Link
+                    href={`/cost-cases/${wo.costCaseId}`}
+                    className="mt-1.5 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+                  >
+                    <ReceiptText className="h-3.5 w-3.5" /> Open cost case (full money story)
+                  </Link>
+                )}
+                {wo.maintenanceRequestId && (
+                  <Link
+                    href="/maintenance"
+                    className="mt-1.5 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+                  >
+                    <ClipboardList className="h-3.5 w-3.5" /> From a resident maintenance request
+                  </Link>
+                )}
               </div>
             )}
             {vendor && (

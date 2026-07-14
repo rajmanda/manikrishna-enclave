@@ -60,6 +60,77 @@ async def _m006_apartment_in_invoice_description(db: Any) -> None:
         )
 
 
+async def _m007_cost_cases_borewell(db: Any) -> None:
+    """Cost-case backfill. (a) Legacy expenses become `posted` (they were
+    always real spend). (b) The historical 'Bore well repair work' billing
+    drive gets its cost case + a clearly-labeled migrated work order, with
+    the 10 assessment invoices linked. NO expense is fabricated — collected
+    money is not a spend; the vendor bill is still awaited. Original dates
+    and history untouched, links only."""
+    from app.models import CostCase, WorkOrder
+
+    await db.expenses.update_many(
+        {"status": {"$exists": False}}, {"$set": {"status": "posted"}}
+    )
+
+    invoices = await db.invoices.find(
+        {
+            "description": {"$regex": "^Bore well repair", "$options": "i"},
+            "$or": [{"cost_case_id": None}, {"cost_case_id": {"$exists": False}}],
+        }
+    ).to_list(1000)
+    by_community: dict[str, list[dict]] = {}
+    for inv in invoices:
+        by_community.setdefault(inv["community_id"], []).append(inv)
+
+    for cid, invs in by_community.items():
+        existing = await db.cost_cases.find_one(
+            {"community_id": cid, "title": "Bore well repair work"}
+        )
+        if existing:
+            case_id = existing["id"]
+        else:
+            billed = sum(i["amount"] for i in invs)
+            first_due = min(i["due_date"] for i in invs)
+            case = CostCase(
+                community_id=cid,
+                title="Bore well repair work",
+                description=(
+                    "[Migrated] Reconstructed from the July 2026 billing drive. "
+                    "Owners were assessed for the repair; the vendor bill is "
+                    "still awaited — post the expense to complete reconciliation."
+                ),
+                approved_budget=billed,  # expected cost = what was assessed
+                funding_method="collect_first",
+                created_date=first_due,
+            )
+            wo = WorkOrder(
+                community_id=cid,
+                title="Bore well repair work",
+                description="[Migrated] Work order reconstructed from historical data — no operational timeline was recorded at the time.",
+                priority="High",
+                stage="Completed",
+                estimate=billed,
+                reported_date=first_due,
+                cost_case_id=case.id,
+                timeline=[{
+                    "stage": "Completed", "date": first_due,
+                    "note": "[Migrated] created from historical billing data",
+                }],
+            )
+            await db.cost_cases.insert_one(case.model_dump())
+            await db.work_orders.insert_one(wo.model_dump())
+            case_id, wo_id = case.id, wo.id
+            await db.invoices.update_many(
+                {"id": {"$in": [i["id"] for i in invs]}},
+                {"$set": {"cost_case_id": case_id, "work_order_id": wo_id}},
+            )
+            logger.info(
+                "m007: bore well cost case %s created for %s (%d invoices linked)",
+                case_id, cid, len(invs),
+            )
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], Awaitable[None]]]] = [
     (1, _m001_community_monthly_maintenance),
     (2, _m002_backfill_m3_collections),
@@ -67,6 +138,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], Awaitable[None]]]] = [
     (4, _m004_user_roles_list),
     (5, _m005_invoice_ledger),
     (6, _m006_apartment_in_invoice_description),
+    (7, _m007_cost_cases_borewell),
 ]
 
 

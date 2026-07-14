@@ -44,6 +44,7 @@ POLL_LIMIT = int(os.environ.get("OPENCLAW_POLL_LIMIT", "5"))
 DRY_RUN = os.environ.get("OPENCLAW_POLL_DRY_RUN", "") == "1"
 CHANNEL = "whatsapp"
 DEFAULT_GROUP_JID = "120363426724252289@g.us"
+DEFAULT_DEV_GROUP_JID = "120363410068952432@g.us"
 
 HTTP_TIMEOUT = 15  # seconds for CommunityHub calls
 SEND_TIMEOUT = 90  # seconds for the openclaw send subprocess
@@ -139,24 +140,28 @@ def _first(d, keys):
 
 
 def parse_notification(n):
-    """Extract (id, phone, message) defensively; task-specified names win."""
+    """Extract (id, phone, message, env) defensively; task-specified names win."""
     nid = _first(n, ("notificationId", "id", "_id", "notification_id"))
     phone = _first(n, ("recipientPhone", "recipient_phone", "recipient", "phone", "to"))
     message = _first(n, ("message", "body", "text", "content", "messageBody"))
-    return nid, phone, message
+    env = _first(n, ("environment", "env"))
+    return nid, phone, message, env
 
 
-def resolve_recipient(phone):
+def resolve_recipient(phone, env=None):
     """Map notification recipient aliases to concrete WhatsApp targets."""
     target = str(phone).strip()
     if target.lower() == "group":
+        is_dev = env and env.lower() in ("dev", "development", "sandbox", "staging")
+        if is_dev:
+            return os.environ.get("OPENCLAW_WHATSAPP_DEV_GROUP_JID") or DEFAULT_DEV_GROUP_JID
         return os.environ.get("OPENCLAW_WHATSAPP_GROUP_JID") or DEFAULT_GROUP_JID
     return target
 
 
-def send_whatsapp(phone, message):
+def send_whatsapp(phone, message, env=None):
     """Send via the local openclaw gateway. Returns (ok, detail)."""
-    target = resolve_recipient(phone)
+    target = resolve_recipient(phone, env)
     if DRY_RUN:
         log(f"DRY_RUN would send to {target}: {message[:80]!r}")
         return True, "dry-run"
@@ -225,7 +230,7 @@ def process_cycle(base, api_key, dispatched):
 
     dispatched_set = set(dispatched)
     for n in pending:
-        nid, phone, message = parse_notification(n)
+        nid, phone, message, env = parse_notification(n)
         if not nid:
             log(f"skipping notification with no id: {json.dumps(n)[:200]}")
             continue
@@ -243,7 +248,7 @@ def process_cycle(base, api_key, dispatched):
             mark(base, api_key, nid, "failed", err)
             continue
 
-        ok, detail = send_whatsapp(phone, message)
+        ok, detail = send_whatsapp(phone, message, env)
         if ok:
             # Record BEFORE the callback so a callback failure can't cause a resend.
             dispatched.append(nid)

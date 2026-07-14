@@ -63,6 +63,12 @@ async def create_work_order(
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, detail="Maintenance request not found"
             )
+    if body.cost_case_id:
+        cc = await db.cost_cases.find_one(
+            {"id": body.cost_case_id, "community_id": user.community_id}
+        )
+        if cc is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cost case not found")
     today = date.today().isoformat()
     wo = WorkOrder(
         community_id=user.community_id,
@@ -136,6 +142,32 @@ async def change_stage(
     await record_audit(
         db, user, "update", "work_orders", work_order_id, {"stage": body.stage}
     )
+    # Completed job → a DRAFT vendor bill for financial review (never a
+    # posted expense: an estimate is not a spend). Idempotent — skipped
+    # when any expense already references this work order.
+    if body.stage == "Completed":
+        existing = await db.expenses.find_one({"work_order_id": work_order_id})
+        if existing is None:
+            from app.models import Expense
+
+            draft = Expense(
+                community_id=user.community_id,
+                category="Repairs",
+                description=wo["title"],
+                vendor_id=wo.get("vendor_id"),
+                amount=body.final_cost if body.final_cost is not None
+                else (wo.get("final_cost") or wo.get("estimate") or 0),
+                paid_date=date.today().isoformat(),
+                work_order_id=work_order_id,
+                cost_case_id=wo.get("cost_case_id"),
+                status="draft",
+            )
+            await db.expenses.insert_one(draft.model_dump())
+            await record_audit(
+                db, user, "create", "expenses", draft.id,
+                {"status": "draft", "auto": "work_order_completed",
+                 "work_order_id": work_order_id},
+            )
     # PRD: owners are notified whenever a work-order status changes.
     await notify_members(
         db,

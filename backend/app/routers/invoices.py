@@ -1,5 +1,6 @@
 """Invoice and payment write operations (M2)."""
 
+import asyncio
 from datetime import date
 from typing import Annotated, Any
 
@@ -112,6 +113,13 @@ async def generate_invoices(
     amount = body.amount if body.amount is not None else community.get(
         "monthly_maintenance", 3500
     )
+    # Assessment invoices inherit the work order's cost case automatically.
+    cost_case_id = body.cost_case_id
+    if body.work_order_id and not cost_case_id:
+        wo = await db.work_orders.find_one(
+            {"id": body.work_order_id, "community_id": user.community_id}
+        )
+        cost_case_id = (wo or {}).get("cost_case_id")
     apartment_query: dict = {"community_id": user.community_id}
     if body.apartment_ids is not None:
         apartment_query["id"] = {"$in": body.apartment_ids}
@@ -143,6 +151,7 @@ async def generate_invoices(
             due_date=body.due_date,
             status=compute_status(amount, 0, body.due_date),
             work_order_id=body.work_order_id,
+            cost_case_id=cost_case_id,
         )
         await db.invoices.insert_one(invoice.model_dump())
         created += 1
@@ -150,13 +159,15 @@ async def generate_invoices(
         db, user, "create", "invoices", f"bulk:{body.period}", {"created": created}
     )
     # Enqueue WhatsApp notifications for each apartment that got an invoice.
+    # Fan-outs run in parallel: sequentially this is O(apartments × users)
+    # DB round-trips, which times out proxies on high-latency dev links.
     if created > 0:
         apt_query_for_notif: dict = {"community_id": user.community_id}
         if body.apartment_ids is not None:
             apt_query_for_notif["id"] = {"$in": body.apartment_ids}
         apts_for_notif = await db.apartments.find(apt_query_for_notif).to_list(1000)
-        for apt in apts_for_notif:
-            await enqueue_for_apartment_owners(
+        await asyncio.gather(*(
+            enqueue_for_apartment_owners(
                 db,
                 community_id=user.community_id,
                 apartment_id=apt["id"],
@@ -167,6 +178,8 @@ async def generate_invoices(
                 exclude_user_id=user.id,
                 actor_user=user,
             )
+            for apt in apts_for_notif
+        ))
     return {"created": created, "skipped": len(apartments) - created}
 
 

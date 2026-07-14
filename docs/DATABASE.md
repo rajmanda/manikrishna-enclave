@@ -40,6 +40,8 @@ visibility private/community, status, created_by, created_date), `feed_posts`
 community_id, user_id, text, date ISO, read, type). `work_orders` gained
 `photos[]` (GCS paths).
 
+Cost cases (2026-07-13, migration 007): `cost_cases` collection (one financial event; children link via cost_case_id on work_orders/expenses/invoices); `expenses.status` draft|posted — only posted counts in reserve/totals.
+
 Money-chain links (2026-07-12): `work_orders.maintenance_request_id`, `expenses.work_order_id`, `invoices.work_order_id` — a job's request, spend, and cost-recovery invoices reference each other.
 
 Adoption tracking (2026-07-12): `users.last_login` (ISO, None = never) and

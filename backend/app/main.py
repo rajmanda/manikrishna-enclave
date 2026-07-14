@@ -13,6 +13,7 @@ from app.routers import (
     audit_log,
     auth,
     communities,
+    cost_cases,
     dashboard,
     documents,
     feed,
@@ -78,6 +79,7 @@ app.add_middleware(
 API_PREFIX = "/api/v1"
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(communities.router, prefix=API_PREFIX)
+app.include_router(cost_cases.router, prefix=API_PREFIX)
 app.include_router(apartments.router, prefix=API_PREFIX)
 app.include_router(accounts.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)

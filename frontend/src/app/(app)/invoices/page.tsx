@@ -6,7 +6,7 @@ import { AlarmClock, ArrowUpDown, Banknote, ChevronDown, Download, FileDown, Han
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError, downloadFile } from "@/lib/api";
-import type { Account, Apartment, FeeEnrollment, Invoice, Payment, User } from "@/lib/types";
+import type { Account, Apartment, FeeEnrollment, Invoice, Payment, User, WorkOrder } from "@/lib/types";
 import { useUrlFilters } from "@/hooks/useUrlFilters";
 import { FilterBar } from "@/components/FilterBar";
 import { formatDate, formatINR } from "@/lib/format";
@@ -116,6 +116,7 @@ function nextMonthLabel(): string {
 function GenerateDialog({
   apartments,
   users,
+  workOrders,
   onClose,
   onDone,
   initialDescription,
@@ -123,12 +124,14 @@ function GenerateDialog({
 }: {
   apartments: Apartment[] | undefined;
   users: User[] | undefined;
+  workOrders: WorkOrder[] | undefined;
   onClose: () => void;
   onDone: () => void;
   /** Set when billing owners for a work order — invoices link back to it. */
   initialDescription?: string;
   workOrderId?: string;
 }) {
+  const [linkedWo, setLinkedWo] = useState(workOrderId ?? "");
   const [period, setPeriod] = useState(nextMonthLabel());
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState("");
@@ -171,7 +174,7 @@ function GenerateDialog({
             description,
             ...(amount ? { amount: Number(amount) } : {}),
             ...(scope === "selected" ? { apartmentIds: [...selected] } : {}),
-            ...(workOrderId ? { workOrderId } : {}),
+            ...(linkedWo ? { workOrderId: linkedWo } : {}),
           }),
         }
       );
@@ -274,6 +277,25 @@ function GenerateDialog({
                 </p>
               </div>
             )}
+          </div>
+          <div>
+            <label className={labelCls}>Link to work order (optional — ties these invoices to the job's cost case)</label>
+            <select
+              className={inputCls}
+              value={linkedWo}
+              onChange={(e) => {
+                setLinkedWo(e.target.value);
+                const wo = (workOrders ?? []).find((w) => w.id === e.target.value);
+                if (wo && (description === "Monthly Maintenance" || !description.trim())) {
+                  setDescription(wo.title);
+                }
+              }}
+            >
+              <option value="">— none —</option>
+              {(workOrders ?? []).map((w) => (
+                <option key={w.id} value={w.id}>{w.title} ({w.stage})</option>
+              ))}
+            </select>
           </div>
           <ReceiptPicker files={receipts} onChange={setReceipts} />
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
@@ -778,6 +800,7 @@ function InvoicesPageInner() {
   const apartments = useApi<Apartment[]>(mine ? null : "/apartments");
   const users = useApi<User[]>(mine ? null : "/users");
   const accounts = useApi<Account[]>(mine ? null : "/accounts");
+  const workOrders = useApi<WorkOrder[]>(mine ? null : "/work-orders");
   const { values: f, set: setFilter, setMany, clearAll, activeCount } = useUrlFilters({
     client: "all", apt: "all", status: "all", ledger: "all", view: "boxes",
   });
@@ -1420,6 +1443,7 @@ function InvoicesPageInner() {
         <GenerateDialog
           apartments={apartments.data}
           users={users.data}
+          workOrders={workOrders.data}
           onClose={() => {
             setDialog(null);
             setWoLink(null);

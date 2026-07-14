@@ -57,6 +57,7 @@ export function AddExpenseDialog({
     amount?: number;
     vendorId?: string;
     workOrderId?: string;
+    costCaseId?: string;
   };
 }) {
   // No default category — "Miscellaneous" as a default turns the ledger
@@ -84,6 +85,7 @@ export function AddExpenseDialog({
           paidDate,
           ...(vendorId ? { vendorId } : {}),
           ...(initial?.workOrderId ? { workOrderId: initial.workOrderId } : {}),
+          ...(initial?.costCaseId ? { costCaseId: initial.costCaseId } : {}),
         }),
       });
       if (receipts[0]) {
@@ -312,6 +314,9 @@ export function ExpenseLedger({
                           <Badge tone="slate">
                             {view === "category" ? expenseMonthLabel(e.paidDate) : e.category}
                           </Badge>
+                          {e.status === "draft" && (
+                            <Badge tone="violet">draft — not in books</Badge>
+                          )}
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
                           {vendor ? `${vendor.name} · ` : ""}

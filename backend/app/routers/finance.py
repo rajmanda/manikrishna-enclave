@@ -42,6 +42,11 @@ Writer = Depends(require_roles(*WRITE_ROLES))
 MEMBER_SCOPED_ROLES = ("owner", "tenant")
 
 
+def _posted(e: dict) -> bool:
+    """Draft expenses are vendor bills under review — they never count."""
+    return e.get("status", "posted") == "posted"
+
+
 def _apartment_scope(user: User) -> dict:
     query: dict = {"community_id": user.community_id}
     if user.role in MEMBER_SCOPED_ROLES and user.apartment_ids:
@@ -127,7 +132,7 @@ async def live_reserve(db: Any, community_id: str) -> tuple[float, list[dict]]:
         ):
             by_month.setdefault(p["date"][:7], [0.0, 0.0])[0] += p["amount"]
     for e in expenses:
-        if cutoff is None or e["paid_date"] > cutoff:
+        if _posted(e) and (cutoff is None or e["paid_date"] > cutoff):
             by_month.setdefault(e["paid_date"][:7], [0.0, 0.0])[1] += e["amount"]
     balance = base
     derived: list[dict] = []
@@ -182,7 +187,8 @@ async def reserve_reconciliation(db: DB, user: CurrentUser) -> dict:
         and p.get("ledger", "community") == "community"
     )
     recorded_expenses = sum(
-        e["amount"] for e in expenses if e["paid_date"].startswith(prefix)
+        e["amount"] for e in expenses
+        if _posted(e) and e["paid_date"].startswith(prefix)
     )
     invoices = await db.invoices.find({"community_id": cid}).to_list(10000)
     # Negative gaps are fine (the anchor can include offline history that
@@ -220,7 +226,8 @@ def _drives_without_expense(invoices: list[dict], expenses: list[dict]) -> list[
     came in for work that isn't in the books (the bore well failure mode).
     Matching is by work-order link when present, else by description words."""
     expense_tokens = [
-        (_drive_tokens(e["description"]), e.get("work_order_id")) for e in expenses
+        (_drive_tokens(e["description"]), e.get("work_order_id"), e.get("cost_case_id"))
+        for e in expenses if _posted(e)
     ]
     drives: dict[tuple, dict] = {}
     for inv in invoices:
@@ -236,24 +243,28 @@ def _drives_without_expense(invoices: list[dict], expenses: list[dict]) -> list[
             key,
             {"description": desc, "period": inv.get("period"),
              "workOrderId": inv.get("work_order_id"),
+             "costCaseId": inv.get("cost_case_id"),
              "billed": 0.0, "collected": 0.0},
         )
         d["billed"] += inv["amount"]
         d["collected"] += inv.get("paid_amount", 0)
         d["workOrderId"] = d["workOrderId"] or inv.get("work_order_id")
+        d["costCaseId"] = d["costCaseId"] or inv.get("cost_case_id")
     flagged = []
     for d in drives.values():
         if d["collected"] <= 0:
             continue
-        if d["workOrderId"]:
-            matched = any(wo_id == d["workOrderId"] for _, wo_id in expense_tokens)
+        if d["costCaseId"]:
+            matched = any(cc == d["costCaseId"] for _, _, cc in expense_tokens)
+        elif d["workOrderId"]:
+            matched = any(wo == d["workOrderId"] for _, wo, _ in expense_tokens)
         else:
             tokens = _drive_tokens(d["description"])
             # Two shared identifying words (one suffices for one-word jobs) —
             # "Water tank cleaning" must not match a mere "Water tanker".
             need = 1 if len(tokens) == 1 else 2
             matched = bool(tokens) and any(
-                len(tokens & etok) >= need for etok, _ in expense_tokens
+                len(tokens & etok) >= need for etok, _, _ in expense_tokens
             )
         if not matched:
             flagged.append(d)
@@ -295,7 +306,10 @@ async def monthly_finance(db: DB, user: CurrentUser) -> list[MonthlyFinance]:
             and p.get("status", "confirmed") == "confirmed"
             and p.get("ledger", "community") == "community"
         )
-        spent = sum(e["amount"] for e in expenses if e["paid_date"].startswith(prefix))
+        spent = sum(
+            e["amount"] for e in expenses
+            if _posted(e) and e["paid_date"].startswith(prefix)
+        )
         billed = sum(
             i["amount"] for i in invoices
             if i["due_date"].startswith(prefix)
@@ -335,7 +349,8 @@ async def community_summary(db: DB, user: CurrentUser) -> CommunitySummary:
             and p.get("ledger", "community") == "community"
         ),
         month_expenses=sum(
-            e["amount"] for e in expenses if e["paid_date"].startswith(prefix)
+            e["amount"] for e in expenses
+            if _posted(e) and e["paid_date"].startswith(prefix)
         ),
         outstanding_dues=sum(
             i["amount"] - i["paid_amount"] for i in invoices
@@ -355,13 +370,24 @@ async def community_summary(db: DB, user: CurrentUser) -> CommunitySummary:
     dependencies=[Writer],
 )
 async def create_expense(body: ExpenseCreate, db: DB, user: CurrentUser) -> Expense:
+    wo = None
     if body.work_order_id:
         wo = await db.work_orders.find_one(
             {"id": body.work_order_id, "community_id": user.community_id}
         )
         if wo is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Work order not found")
-    expense = Expense(community_id=user.community_id, **body.model_dump())
+    if body.cost_case_id:
+        cc = await db.cost_cases.find_one(
+            {"id": body.cost_case_id, "community_id": user.community_id}
+        )
+        if cc is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cost case not found")
+    data = body.model_dump()
+    # An expense against a work order inherits its cost case automatically.
+    if wo and not data.get("cost_case_id"):
+        data["cost_case_id"] = wo.get("cost_case_id")
+    expense = Expense(community_id=user.community_id, **data)
     await db.expenses.insert_one(expense.model_dump())
     await record_audit(db, user, "create", "expenses", expense.id)
     # Enqueue WhatsApp notification for the community group.
@@ -379,6 +405,27 @@ async def create_expense(body: ExpenseCreate, db: DB, user: CurrentUser) -> Expe
         actor_user=user,
     )
     return expense
+
+
+@router.post("/expenses/{expense_id}/post", response_model=Expense, dependencies=[Writer])
+async def post_expense(expense_id: str, db: DB, user: CurrentUser) -> Expense:
+    """Vendor bill approved after financial review — from here on it counts
+    in the reserve and every community total. Idempotent."""
+    expense = await db.expenses.find_one(
+        {"id": expense_id, "community_id": user.community_id}
+    )
+    if expense is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Expense not found")
+    if expense.get("status", "posted") == "posted":
+        return Expense.model_validate(expense)
+    result = await db.expenses.find_one_and_update(
+        {"id": expense_id}, {"$set": {"status": "posted"}}, return_document=True
+    )
+    await record_audit(
+        db, user, "update", "expenses", expense_id,
+        {"status": "posted", "amount": expense["amount"]},
+    )
+    return Expense.model_validate(result)
 
 
 @router.patch("/expenses/{expense_id}", response_model=Expense, dependencies=[Writer])

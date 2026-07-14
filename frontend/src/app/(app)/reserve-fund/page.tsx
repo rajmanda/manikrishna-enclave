@@ -163,24 +163,27 @@ export default function ReserveFundPage() {
               Owners paid for these jobs, but the actual spend was never recorded —
               the reserve looks richer than it is until the bills are entered.
             </p>
-            <ul className="mt-2 space-y-1">
+            <ul className="mt-2 space-y-1.5">
               {recon.data?.collectionsWithoutExpense?.map((d) => (
                 <li key={`${d.description}-${d.period}`} className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
                   <span className="font-medium">
+                    {formatINR(d.collected)} of {formatINR(d.billed)} collected for{" "}
                     {d.description}
-                    {d.period ? ` (${d.period})` : ""}
+                    {d.period ? ` (${d.period})` : ""} — no final vendor expense posted
                   </span>
-                  <span>
-                    collected {formatINR(d.collected)} of {formatINR(d.billed)} ·{" "}
-                    {d.workOrderId ? (
+                  <span className="flex gap-3">
+                    {d.costCaseId ? (
+                      <Link href={`/cost-cases/${d.costCaseId}`} className="font-semibold underline">
+                        open cost case
+                      </Link>
+                    ) : d.workOrderId ? (
                       <Link href={`/work-orders/${d.workOrderId}`} className="font-semibold underline">
-                        record the expense
+                        open work order
                       </Link>
-                    ) : (
-                      <Link href="/expenses?add=1" className="font-semibold underline">
-                        record the expense
-                      </Link>
-                    )}
+                    ) : null}
+                    <Link href="/expenses?add=1" className="font-semibold underline">
+                      add expense
+                    </Link>
                   </span>
                 </li>
               ))}
@@ -202,7 +205,7 @@ export default function ReserveFundPage() {
           label="Contributions YTD"
           value={formatINR(totalIn)}
           tone="positive"
-          hint="₹500/apt monthly · tap for the list"
+          hint="All community collections · tap for the list"
           onClick={() => setStatModal("contributions")}
         />
         <Stat
