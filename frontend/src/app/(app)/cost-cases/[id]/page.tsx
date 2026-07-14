@@ -33,6 +33,7 @@ function AssessDialog({
   caseId,
   caseTitle,
   budget,
+  fundingMethod,
   apartments,
   onClose,
   onDone,
@@ -40,14 +41,19 @@ function AssessDialog({
   caseId: string;
   caseTitle: string;
   budget: number;
+  fundingMethod?: string | null;
   apartments: Apartment[];
   onClose: () => void;
   onDone: () => void;
 }) {
   const sorted = [...apartments].sort((a, b) => a.number.localeCompare(b.number));
+  // Funding method drives the defaults: "selected_apartments" starts with
+  // nothing ticked; reserve/no-recovery cases warn that billing is unusual.
+  const startTicked = fundingMethod !== "selected_apartments";
+  const noBilling = fundingMethod === "reserve" || fundingMethod === "no_recovery";
   const equal = sorted.length > 0 ? Math.round((budget || 0) / sorted.length) : 0;
   const [rows, setRows] = useState(
-    sorted.map((a) => ({ apartmentId: a.id, number: a.number, included: true, amount: String(equal || ""), installments: 1 }))
+    sorted.map((a) => ({ apartmentId: a.id, number: a.number, included: startTicked, amount: String(equal || ""), installments: 1 }))
   );
   const [period, setPeriod] = useState(
     new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })
@@ -105,6 +111,12 @@ function AssessDialog({
   return (
     <Modal title="Bill owners for this case" onClose={onClose}>
       <form className="space-y-4" onSubmit={submit}>
+        {noBilling && (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+            This case is funded {fundingMethod === "reserve" ? "from the reserve" : "without owner recovery"} —
+            billing owners is unusual for it. Continue only if the funding plan changed.
+          </p>
+        )}
         <p className="text-xs text-slate-500">
           One invoice per ticked apartment, linked to this cost case. Amounts
           default to an equal split{budget ? ` of the ${formatINR(budget)} budget` : ""} —
@@ -436,6 +448,7 @@ export default function CostCaseDetailPage({
           caseId={c.id}
           caseTitle={c.title}
           budget={c.approvedBudget ?? 0}
+          fundingMethod={c.fundingMethod}
           apartments={apartments.data ?? []}
           onClose={() => setAssessOpen(false)}
           onDone={detail.reload}

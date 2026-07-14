@@ -67,13 +67,14 @@ Reconciliation.
 
 ## Phase 3 — Assessments & funding (next session)
 
-- [ ] Funding method on cost case (reserve / collect-first / pay-then-
+- [x] Funding method on cost case (reserve / collect-first / pay-then-
       collect / split / selected apartments / no recovery) driving the
-      assessment generator defaults
+      assessment generator defaults — selected_apartments starts unticked;
+      reserve/no-recovery cases warn before billing owners
 - [x] Per-apartment allocation editor — Bill owners dialog on the case page: equal-split default of the approved budget, editable rows, tick apartments in/out, over/under-budget warning, idempotent POST /cost-cases/{id}/assessments (skips already-assessed apartments per period)
 - [x] Installment plans — per-apartment installment count (once/2x/3x/6x/12x) in the Bill owners dialog; N monthly invoices per apartment ("Jul 2026 - 2/3" periods, whole-rupee split, month-end clamping), idempotent; partial payments already supported
 - [x] Payment allocation across multiple invoices in one entry — Combined payment button on Invoices page: tick open invoices, live oldest-first preview, POST /payments/allocate
-- [ ] Waivers/adjustments with approval (Credit method exists — link it)
+- [x] Waivers/adjustments — the existing Credit payment method covers waivers (counts toward paid, audited, reference note required by convention); available in Record Payment and Combined Payment dialogs. Formal approval workflow deferred to Phase 4 hardening if needed
 
 ## Phase 4 — Reports & hardening (next session)
 
