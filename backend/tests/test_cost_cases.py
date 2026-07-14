@@ -214,3 +214,45 @@ async def test_assessment_generation_with_allocations(client, manager_headers):
         headers=manager_headers,
     )
     assert bad.status_code == 404
+
+
+async def test_assessment_installments(client, manager_headers):
+    """Different owners can get different installment schedules."""
+    case_id, _ = await _create_case_with_wo(client, manager_headers)
+    resp = await client.post(
+        f"/api/v1/cost-cases/{case_id}/assessments",
+        json={"period": "Mar 2027", "dueDate": "2027-03-31",
+              "allocations": [
+                  {"apartmentId": "apt-101", "amount": 10000, "installments": 3},
+                  {"apartmentId": "apt-102", "amount": 10000},
+              ]},
+        headers=manager_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json() == {"created": 4, "skipped": 0}
+
+    detail = (
+        await client.get(f"/api/v1/cost-cases/{case_id}", headers=manager_headers)
+    ).json()
+    a101 = sorted(
+        (i for i in detail["invoices"] if i["apartmentId"] == "apt-101"),
+        key=lambda i: i["dueDate"],
+    )
+    assert [i["period"] for i in a101] == ["Mar 2027 - 1/3", "Mar 2027 - 2/3", "Mar 2027 - 3/3"]
+    assert sum(i["amount"] for i in a101) == 10000
+    # Monthly cadence, clamped to month length (Mar 31 → Apr 30 → May 31).
+    assert [i["dueDate"] for i in a101] == ["2027-03-31", "2027-04-30", "2027-05-31"]
+    # Case totals still reconcile.
+    assert detail["summary"]["billedToOwners"] == 20000
+
+    # Idempotent re-run creates nothing.
+    again = await client.post(
+        f"/api/v1/cost-cases/{case_id}/assessments",
+        json={"period": "Mar 2027", "dueDate": "2027-03-31",
+              "allocations": [
+                  {"apartmentId": "apt-101", "amount": 10000, "installments": 3},
+                  {"apartmentId": "apt-102", "amount": 10000},
+              ]},
+        headers=manager_headers,
+    )
+    assert again.json() == {"created": 0, "skipped": 4}

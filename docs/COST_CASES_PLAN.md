@@ -71,8 +71,7 @@ Reconciliation.
       collect / split / selected apartments / no recovery) driving the
       assessment generator defaults
 - [x] Per-apartment allocation editor — Bill owners dialog on the case page: equal-split default of the approved budget, editable rows, tick apartments in/out, over/under-budget warning, idempotent POST /cost-cases/{id}/assessments (skips already-assessed apartments per period)
-- [ ] Installment plans (per-owner schedules), partial payments already
-      supported by invoice/payment model
+- [x] Installment plans — per-apartment installment count (once/2x/3x/6x/12x) in the Bill owners dialog; N monthly invoices per apartment ("Jul 2026 - 2/3" periods, whole-rupee split, month-end clamping), idempotent; partial payments already supported
 - [ ] Payment allocation across multiple invoices in one entry
 - [ ] Waivers/adjustments with approval (Credit method exists — link it)
 

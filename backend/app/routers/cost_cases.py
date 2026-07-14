@@ -6,6 +6,7 @@ those children so nothing can drift. Draft expenses are vendor bills under
 review and never count as spend."""
 
 import asyncio
+import calendar
 from datetime import date
 from typing import Annotated, Any
 
@@ -193,6 +194,22 @@ async def get_cost_case(case_id: str, db: DB, user: CurrentUser) -> dict:
     }
 
 
+def _shift_months(iso: str, months: int) -> str:
+    """ISO date shifted forward by N months, clamped to month length."""
+    d = date.fromisoformat(iso)
+    total = d.month - 1 + months
+    year, month = d.year + total // 12, total % 12 + 1
+    return date(year, month, min(d.day, calendar.monthrange(year, month)[1])).isoformat()
+
+
+def _split_amount(total: float, parts: int) -> list[float]:
+    """Whole-rupee installments; the last one absorbs the remainder."""
+    base = int(total // parts)
+    amounts = [float(base)] * parts
+    amounts[-1] = float(total - base * (parts - 1))
+    return amounts
+
+
 @router.post("/{case_id}/assessments", status_code=status.HTTP_201_CREATED, dependencies=[Writer])
 async def generate_assessments(
     case_id: str, body: AssessmentRequest, db: DB, user: CurrentUser
@@ -231,27 +248,37 @@ async def generate_assessments(
     wo_id = wos[0]["id"] if wos else None
     created, skipped, new_apts = 0, 0, []
     for alloc in allocations:
-        exists = await db.invoices.find_one(
-            {"community_id": user.community_id, "apartment_id": alloc.apartment_id,
-             "cost_case_id": case_id, "period": body.period}
-        )
-        if exists:
-            skipped += 1
-            continue
-        invoice = Invoice(
-            community_id=user.community_id,
-            apartment_id=alloc.apartment_id,
-            period=body.period,
-            description=with_apartment(description, alloc.apartment_id),
-            amount=alloc.amount,
-            due_date=body.due_date,
-            status=compute_status(alloc.amount, 0, body.due_date),
-            work_order_id=wo_id,
-            cost_case_id=case_id,
-        )
-        await db.invoices.insert_one(invoice.model_dump())
-        created += 1
-        new_apts.append((alloc.apartment_id, alloc.amount))
+        n = max(1, min(24, int(alloc.installments)))
+        parts = _split_amount(alloc.amount, n)
+        made_any = False
+        for i, part in enumerate(parts):
+            # Installments carry distinct periods ("Jul 2026 - 2/3") so the
+            # apartment+case+period idempotency key still holds.
+            period = body.period if n == 1 else f"{body.period} - {i + 1}/{n}"
+            exists = await db.invoices.find_one(
+                {"community_id": user.community_id, "apartment_id": alloc.apartment_id,
+                 "cost_case_id": case_id, "period": period}
+            )
+            if exists:
+                skipped += 1
+                continue
+            due = _shift_months(body.due_date, i)
+            invoice = Invoice(
+                community_id=user.community_id,
+                apartment_id=alloc.apartment_id,
+                period=period,
+                description=with_apartment(description, alloc.apartment_id),
+                amount=part,
+                due_date=due,
+                status=compute_status(part, 0, due),
+                work_order_id=wo_id,
+                cost_case_id=case_id,
+            )
+            await db.invoices.insert_one(invoice.model_dump())
+            created += 1
+            made_any = True
+        if made_any:
+            new_apts.append((alloc.apartment_id, alloc.amount))
     await record_audit(
         db, user, "create", "invoices", f"assessment:{case_id}:{body.period}",
         {"created": created, "skipped": skipped,

@@ -47,7 +47,7 @@ function AssessDialog({
   const sorted = [...apartments].sort((a, b) => a.number.localeCompare(b.number));
   const equal = sorted.length > 0 ? Math.round((budget || 0) / sorted.length) : 0;
   const [rows, setRows] = useState(
-    sorted.map((a) => ({ apartmentId: a.id, number: a.number, included: true, amount: String(equal || "") }))
+    sorted.map((a) => ({ apartmentId: a.id, number: a.number, included: true, amount: String(equal || ""), installments: 1 }))
   );
   const [period, setPeriod] = useState(
     new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })
@@ -60,7 +60,7 @@ function AssessDialog({
   const included = rows.filter((r) => r.included && Number(r.amount) > 0);
   const total = included.reduce((s, r) => s + Number(r.amount), 0);
 
-  function update(i: number, patch: Partial<{ included: boolean; amount: string }>) {
+  function update(i: number, patch: Partial<{ included: boolean; amount: string; installments: number }>) {
     setRows(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
 
@@ -87,6 +87,7 @@ function AssessDialog({
             allocations: included.map((r) => ({
               apartmentId: r.apartmentId,
               amount: Number(r.amount),
+              installments: r.installments,
             })),
           }),
         }
@@ -148,8 +149,19 @@ function AssessDialog({
                   value={r.amount}
                   disabled={!r.included}
                   onChange={(e) => update(i, { amount: e.target.value })}
-                  className="ml-auto w-28 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm disabled:bg-slate-50 disabled:text-slate-300"
+                  className="ml-auto w-24 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm disabled:bg-slate-50 disabled:text-slate-300"
                 />
+                <select
+                  value={r.installments}
+                  disabled={!r.included}
+                  onChange={(e) => update(i, { installments: Number(e.target.value) })}
+                  title="Installments (monthly)"
+                  className="w-16 rounded-lg border border-slate-200 px-1 py-1 text-xs disabled:bg-slate-50 disabled:text-slate-300"
+                >
+                  {[1, 2, 3, 6, 12].map((n) => (
+                    <option key={n} value={n}>{n === 1 ? "once" : `${n}×`}</option>
+                  ))}
+                </select>
               </div>
             ))}
           </div>

@@ -441,7 +441,8 @@ class CostCaseClose(APIModel):
 
 class AssessmentAllocation(APIModel):
     apartment_id: str
-    amount: float
+    amount: float  # TOTAL for this apartment (split across installments)
+    installments: int = 1  # 1 = single invoice; N = monthly invoices
 
 
 class AssessmentRequest(APIModel):
