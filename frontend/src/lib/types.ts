@@ -110,6 +110,7 @@ export interface Invoice {
   lineItems?: { description: string; amount: number }[];
   parentInvoiceId?: string | null;
   workOrderId?: string | null;
+  costCaseId?: string | null;
 }
 
 export interface Payment {
@@ -146,6 +147,9 @@ export interface Expense {
   paidDate: string;
   hasReceipt: boolean;
   workOrderId?: string | null;
+  costCaseId?: string | null;
+  // draft = vendor bill under financial review (not yet in the books)
+  status?: "draft" | "posted";
 }
 
 export type WorkOrderStage =
@@ -188,6 +192,7 @@ export interface WorkOrder {
   timeline: WorkOrderEvent[];
   comments: WorkOrderComment[];
   maintenanceRequestId?: string | null;
+  costCaseId?: string | null;
 }
 
 export interface ReserveReconciliation {
@@ -203,9 +208,48 @@ export interface ReserveReconciliation {
     description: string;
     period?: string | null;
     workOrderId?: string | null;
+    costCaseId?: string | null;
     billed: number;
     collected: number;
   }[];
+}
+
+export interface CostCaseSummary {
+  estimatedCost: number;
+  approvedBudget?: number | null;
+  actualCost: number;
+  draftBills: number;
+  draftBillAmount: number;
+  billedToOwners: number;
+  collectedFromOwners: number;
+  outstandingFromOwners: number;
+  reserveFunded: number;
+  surplusCollected: number;
+  awaitingVendorBill: boolean;
+}
+
+export interface CostCase {
+  id: string;
+  communityId: string;
+  title: string;
+  description: string;
+  status: "open" | "review" | "closed";
+  approvedBudget?: number | null;
+  fundingMethod?: string | null;
+  maintenanceRequestId?: string | null;
+  createdDate: string;
+  closedDate?: string | null;
+  closeNote?: string;
+  summary: CostCaseSummary;
+}
+
+export interface CostCaseDetail extends CostCase {
+  maintenanceRequest?: MaintenanceRequest | null;
+  workOrders: WorkOrder[];
+  expenses: Expense[];
+  invoices: Invoice[];
+  payments: Payment[];
+  timeline: { date: string; kind: string; label: string }[];
 }
 
 export interface MaintenanceRequest {

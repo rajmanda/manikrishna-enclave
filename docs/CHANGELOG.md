@@ -5,6 +5,25 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Cost Cases (Phase 1+2)** — one entity per complete financial event
+  connecting Maintenance Request → Work Order → Vendor Bill/Expense →
+  Owner Assessments → Payments → Reconciliation (plan:
+  docs/COST_CASES_PLAN.md). New `cost_cases` collection + `/cost-cases`
+  API (create/list/detail/close-with-guard/reopen); children link via
+  `cost_case_id` on work orders, expenses, invoices; all case totals
+  computed live. `expenses.status` (draft|posted): a DRAFT is a vendor
+  bill under review and never touches the reserve/books — completing a
+  work order auto-creates one (idempotent); `POST /expenses/{id}/post`
+  puts it in the books. Migration 007 backfills legacy expenses as posted
+  and reconstructs the historical "Bore well repair work" case (10
+  invoices + [Migrated] work order linked; NO expense fabricated).
+  UI: Cost Cases nav page + detail screen (reconciliation table,
+  timeline, related records, owner assessments, post-to-books, guarded
+  close); reserve warning is now actionable ("₹10,800 collected … no
+  final vendor expense posted" → open cost case / add expense). 5 new
+  tests (160 total).
+
+
 - **Money-chain integrity (bore well discrepancy):** three-part fix after
   ₹2,700 of June bore well collections silently vanished from the reserve.
   (1) *Data*: June closing entry amended 20,000→22,700 contributions

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.audit import record_audit
+from app.core.config import get_settings
 from app.models import NotificationRecord, User
 
 
@@ -40,9 +41,10 @@ async def enqueue_notification(
     Does NOT send — delivery is handled by the OpenClaw polling agent.
     """
     # Force sandbox notifications to redirect to the test number to avoid interrupting prod users
-    if community_id.startswith("com-") or community_id == "sandbox":
+    if (community_id.startswith("com-") or community_id == "sandbox") and recipient_phone != "group":
         recipient_phone = "+13158775699"
 
+    settings = get_settings()
     now = _now()
     record = NotificationRecord(
         community_id=community_id,
@@ -56,6 +58,7 @@ async def enqueue_notification(
         title=title,
         message=message,
         payload=payload or {},
+        environment=settings.environment,
         scheduled_at=scheduled_at,
         created_at=now,
         updated_at=now,

@@ -285,6 +285,7 @@ class Invoice(APIModel):
     ledger: Literal["community", "manager_fee", "reimbursement"] = "community"
     line_items: list["InvoiceLineItem"] = []
     work_order_id: str | None = None  # money-chain link (cost recovery)
+    cost_case_id: str | None = None  # money-chain link (assessment batch)
 
 
 class InvoiceLineItem(APIModel):
@@ -325,6 +326,7 @@ class GenerateInvoicesRequest(APIModel):
     description: str = "Monthly Maintenance"
     apartment_ids: list[str] | None = None  # None = all apartments
     work_order_id: str | None = None  # link cost-recovery invoices to the job
+    cost_case_id: str | None = None  # link the assessment batch to its case
 
 
 class ApplyLateFeesRequest(APIModel):
@@ -378,6 +380,10 @@ class Expense(APIModel):
     has_receipt: bool = False
     receipt_path: str | None = None
     work_order_id: str | None = None  # money-chain link
+    cost_case_id: str | None = None  # money-chain link
+    # draft = vendor bill under financial review (never touches the reserve
+    # or any community total); posted = real spend in the books.
+    status: Literal["draft", "posted"] = "posted"
 
 
 class ExpenseCreate(APIModel):
@@ -387,6 +393,50 @@ class ExpenseCreate(APIModel):
     amount: float
     paid_date: str
     work_order_id: str | None = None
+    cost_case_id: str | None = None
+    status: Literal["draft", "posted"] = "posted"
+
+
+# ---------- Cost cases (one complete financial event) ----------
+
+
+class CostCase(APIModel):
+    """Parent of one financial event (bore well repair, lift repair, …).
+    Children link back via cost_case_id on work orders, expenses and
+    invoices — all money totals are computed live from them."""
+
+    id: str = Field(default_factory=lambda: new_id("cc"))
+    community_id: str
+    title: str
+    description: str = ""
+    status: Literal["open", "review", "closed"] = "open"
+    approved_budget: float | None = None  # an estimate is NOT an expense
+    funding_method: Literal[
+        "reserve", "collect_first", "pay_then_collect", "split",
+        "selected_apartments", "no_recovery",
+    ] | None = None
+    maintenance_request_id: str | None = None
+    created_by: str | None = None
+    created_date: str = ""
+    closed_date: str | None = None
+    close_note: str = ""
+
+
+class CostCaseCreate(APIModel):
+    title: str
+    description: str = ""
+    approved_budget: float | None = None
+    funding_method: Literal[
+        "reserve", "collect_first", "pay_then_collect", "split",
+        "selected_apartments", "no_recovery",
+    ] | None = None
+    maintenance_request_id: str | None = None
+    work_order_id: str | None = None  # adopt an existing work order
+
+
+class CostCaseClose(APIModel):
+    note: str = ""
+    force: bool = False  # override the reconciliation guard (audited)
 
 
 class ExpenseUpdate(APIModel):
@@ -575,9 +625,11 @@ class WorkOrder(APIModel):
     photos: list[str] = []  # GCS object paths
     timeline: list[WorkOrderEvent] = []
     comments: list[WorkOrderComment] = []
-    # Money-chain link: the maintenance request this work order came from.
-    # Expenses and invoices link back via their own work_order_id.
+    # Money-chain links: the maintenance request this work order came from,
+    # and the cost case that owns this job's finances. Expenses and invoices
+    # link back via their own work_order_id / cost_case_id.
     maintenance_request_id: str | None = None
+    cost_case_id: str | None = None
 
 
 class WorkOrderCreate(APIModel):
@@ -587,6 +639,7 @@ class WorkOrderCreate(APIModel):
     vendor_id: str | None = None
     estimate: float | None = None
     maintenance_request_id: str | None = None
+    cost_case_id: str | None = None
 
 
 class WorkOrderUpdate(APIModel):
@@ -813,6 +866,7 @@ class NotificationRecord(APIModel):
     message: str
     payload: dict = {}
     status: NotificationStatus = "pending"
+    environment: str = "production"  # dev | staging | production
     provider: str | None = None  # e.g. "openclaw", "sendgrid"
     retry_count: int = 0
     max_retries: int = 3
