@@ -301,3 +301,38 @@ async def test_combined_payment_allocation(client, manager_headers):
         headers=manager_headers,
     )
     assert over.status_code == 400
+
+
+async def test_money_health_report(client, manager_headers):
+    case_id, wo_id = await _create_case_with_wo(client, manager_headers)
+    await client.post(
+        f"/api/v1/cost-cases/{case_id}/assessments",
+        json={"period": "Sep 2027", "dueDate": "2027-09-10",
+              "allocations": [{"apartmentId": "apt-101", "amount": 4000}]},
+        headers=manager_headers,
+    )
+    # Completing the WO auto-creates a draft bill (so it's NOT "awaiting
+    # expense" — it's in the draft list instead).
+    await client.post(
+        f"/api/v1/work-orders/{wo_id}/stage",
+        json={"stage": "Completed", "note": "done", "finalCost": 3800},
+        headers=manager_headers,
+    )
+    report = (
+        await client.get("/api/v1/reports/money-health", headers=manager_headers)
+    ).json()
+    case_row = next(r for r in report["openCostCases"] if r["id"] == case_id)
+    assert case_row["billed"] == 4000 and case_row["outstanding"] == 4000
+    assert any(d["workOrderId"] == wo_id for d in report["draftVendorBills"])
+    assert not any(w["id"] == wo_id for w in report["workOrdersAwaitingExpense"])
+    assert any(a["costCaseId"] == case_id for a in report["outstandingAssessments"])
+
+    # Post the draft → it leaves the draft list; shortfall appears.
+    draft = next(d for d in report["draftVendorBills"] if d["workOrderId"] == wo_id)
+    await client.post(f"/api/v1/expenses/{draft['id']}/post", headers=manager_headers)
+    report2 = (
+        await client.get("/api/v1/reports/money-health", headers=manager_headers)
+    ).json()
+    assert not any(d["workOrderId"] == wo_id for d in report2["draftVendorBills"])
+    case_row2 = next(r for r in report2["openCostCases"] if r["id"] == case_id)
+    assert case_row2["actualCost"] == 3800 and case_row2["shortfall"] == 3800

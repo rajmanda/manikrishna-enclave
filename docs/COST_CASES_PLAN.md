@@ -78,9 +78,11 @@ Reconciliation.
 
 ## Phase 4 — Reports & hardening (next session)
 
-- [ ] Reports: open cost cases, WOs awaiting expense entry, collected
-      without posted expense, vendor bills awaiting posting, assessment
-      balances, surpluses/shortfalls
+- [x] Reports — GET /reports/money-health + "Money health" section on the
+      Reports page: open cost cases (outstanding / reserve-funded shortfall /
+      surplus / no-expense-posted flags), completed jobs missing their
+      expense, draft vendor bills awaiting posting, outstanding assessments;
+      all rows deep-link to the case/work order
 - [x] Expense edit-lock once posted — amount/date/category frozen (409), delete refused; POST /expenses/{id}/reverse creates a negative offsetting entry (links preserved, pair nets to zero, reversal itself irreversible); ledger UI badges reversed/reversal and routes the trash action accordingly
 - [ ] Recurring-expense prompts (electricity/water/salary) → monthly cases
 - [ ] Full audit surfacing on the case timeline (who approved/posted)

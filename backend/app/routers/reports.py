@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
 
-from app.core.security import require_roles
+from app.core.security import CurrentUser, require_roles
 from app.db import get_db
 from app.models import User
 
@@ -129,3 +129,69 @@ async def vendor_spend_report(
         [(k, f"Rs {v:,.0f}") for k, v in sorted(by_vendor.items(), key=lambda kv: -kv[1])],
     )
     return _respond(pdf, "vendor-spend.pdf")
+
+
+@router.get("/money-health", dependencies=[Reader])
+async def money_health(db: DB, user: CurrentUser) -> dict:
+    """Manager worklists: everything that keeps the books from closing.
+    Computed live — same rules as cost cases (posted-only spend)."""
+    cid = user.community_id
+    import asyncio
+
+    cases, work_orders, expenses, invoices = await asyncio.gather(
+        db.cost_cases.find({"community_id": cid}).to_list(1000),
+        db.work_orders.find({"community_id": cid}).to_list(1000),
+        db.expenses.find({"community_id": cid}).to_list(10000),
+        db.invoices.find({"community_id": cid}).to_list(10000),
+    )
+    posted = [e for e in expenses if e.get("status", "posted") == "posted"]
+    drafts = [e for e in expenses if e.get("status", "posted") == "draft"]
+
+    # Completed jobs with NO expense at all (a drafted bill counts as
+    # in-progress — it shows in the drafts list, not here).
+    wo_with_expense = {e.get("work_order_id") for e in expenses if e.get("work_order_id")}
+    awaiting_expense = [
+        {"id": w["id"], "title": w["title"], "finalCost": w.get("final_cost"),
+         "costCaseId": w.get("cost_case_id")}
+        for w in work_orders
+        if w.get("stage") in ("Completed", "Closed") and w["id"] not in wo_with_expense
+    ]
+
+    # Per-case money position (open cases only).
+    case_rows = []
+    for c in cases:
+        if c.get("status") == "closed":
+            continue
+        c_inv = [i for i in invoices if i.get("cost_case_id") == c["id"]]
+        c_posted = sum(e["amount"] for e in posted if e.get("cost_case_id") == c["id"])
+        billed = sum(i["amount"] for i in c_inv)
+        collected = sum(i.get("paid_amount", 0) for i in c_inv)
+        case_rows.append({
+            "id": c["id"], "title": c["title"],
+            "billed": billed, "collected": collected,
+            "outstanding": billed - collected, "actualCost": c_posted,
+            "surplus": max(0.0, collected - c_posted) if c_posted > 0 else 0.0,
+            "shortfall": max(0.0, c_posted - collected),
+        })
+
+    outstanding_assessments = [
+        {"invoiceId": i["id"], "apartmentId": i["apartment_id"],
+         "description": i["description"], "period": i.get("period"),
+         "balance": i["amount"] - i.get("paid_amount", 0),
+         "costCaseId": i.get("cost_case_id")}
+        for i in invoices
+        if i.get("cost_case_id") and i["amount"] - i.get("paid_amount", 0) > 0
+    ]
+
+    return {
+        "openCostCases": sorted(case_rows, key=lambda r: r["outstanding"], reverse=True),
+        "workOrdersAwaitingExpense": awaiting_expense,
+        "draftVendorBills": [
+            {"id": e["id"], "description": e["description"], "amount": e["amount"],
+             "costCaseId": e.get("cost_case_id"), "workOrderId": e.get("work_order_id")}
+            for e in drafts
+        ],
+        "outstandingAssessments": sorted(
+            outstanding_assessments, key=lambda r: r["balance"], reverse=True
+        ),
+    }

@@ -12,13 +12,95 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
+import Link from "next/link";
 import { useApi } from "@/hooks/useApi";
 import { downloadFile } from "@/lib/api";
+import { formatINR } from "@/lib/format";
 import type { MonthlyFinance } from "@/lib/types";
-import { Card, PageTitle } from "@/components/ui";
+import { Badge, Card, PageTitle } from "@/components/ui";
 import { CashFlowChart } from "@/components/charts";
 
 const periods = ["Monthly", "Quarterly", "Yearly"] as const;
+
+interface MoneyHealthData {
+  openCostCases: { id: string; title: string; billed: number; collected: number; outstanding: number; actualCost: number; surplus: number; shortfall: number }[];
+  workOrdersAwaitingExpense: { id: string; title: string; finalCost?: number | null }[];
+  draftVendorBills: { id: string; description: string; amount: number; costCaseId?: string | null }[];
+  outstandingAssessments: { invoiceId: string; description: string; balance: number }[];
+}
+
+/** The worklists that keep the books from closing — live, with links. */
+function MoneyHealth() {
+  const health = useApi<MoneyHealthData>("/reports/money-health");
+  const d = health.data;
+  if (!d) return null;
+  const clean =
+    d.openCostCases.length === 0 &&
+    d.workOrdersAwaitingExpense.length === 0 &&
+    d.draftVendorBills.length === 0;
+  if (clean) return null;
+  return (
+    <Card className="p-4">
+      <h2 className="mb-1 text-sm font-semibold">Money health — needs attention</h2>
+      <p className="mb-3 text-xs text-slate-400">
+        Live worklists: what's keeping the books from closing.
+      </p>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div>
+          <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Open cost cases ({d.openCostCases.length})
+          </h3>
+          <div className="space-y-1.5">
+            {d.openCostCases.slice(0, 5).map((c) => (
+              <Link key={c.id} href={`/cost-cases/${c.id}`} className="block rounded-xl border border-slate-200 px-3 py-2 text-xs hover:bg-slate-50">
+                <span className="font-medium">{c.title}</span>
+                <span className="mt-0.5 flex flex-wrap gap-x-3 text-slate-500">
+                  {c.outstanding > 0 && <span className="text-red-600">{formatINR(c.outstanding)} owed</span>}
+                  {c.shortfall > 0 && <span className="text-amber-600">{formatINR(c.shortfall)} from reserve</span>}
+                  {c.surplus > 0 && <span className="text-emerald-600">{formatINR(c.surplus)} surplus</span>}
+                  {c.actualCost === 0 && c.collected > 0 && <Badge tone="amber">no expense posted</Badge>}
+                </span>
+              </Link>
+            ))}
+            {d.openCostCases.length === 0 && <p className="text-xs text-slate-400">None — all closed.</p>}
+          </div>
+        </div>
+        <div>
+          <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Jobs missing their expense ({d.workOrdersAwaitingExpense.length})
+          </h3>
+          <div className="space-y-1.5">
+            {d.workOrdersAwaitingExpense.slice(0, 5).map((w) => (
+              <Link key={w.id} href={`/work-orders/${w.id}`} className="block rounded-xl border border-slate-200 px-3 py-2 text-xs hover:bg-slate-50">
+                <span className="font-medium">{w.title}</span>
+                {w.finalCost != null && <span className="ml-2 text-slate-500">{formatINR(w.finalCost)}</span>}
+              </Link>
+            ))}
+            {d.workOrdersAwaitingExpense.length === 0 && <p className="text-xs text-slate-400">All completed jobs have expenses.</p>}
+          </div>
+        </div>
+        <div>
+          <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Draft vendor bills ({d.draftVendorBills.length})
+          </h3>
+          <div className="space-y-1.5">
+            {d.draftVendorBills.slice(0, 5).map((b) => (
+              <Link
+                key={b.id}
+                href={b.costCaseId ? `/cost-cases/${b.costCaseId}` : "/expenses"}
+                className="block rounded-xl border border-slate-200 px-3 py-2 text-xs hover:bg-slate-50"
+              >
+                <span className="font-medium">{b.description}</span>
+                <span className="ml-2 text-slate-500">{formatINR(b.amount)} · awaiting posting</span>
+              </Link>
+            ))}
+            {d.draftVendorBills.length === 0 && <p className="text-xs text-slate-400">Nothing awaiting review.</p>}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 const reports: { icon: typeof Wallet; title: string; desc: string; pdf?: string; csv?: string }[] = [
   { icon: Wallet, title: "Collection Report", desc: "Billed vs collected per apartment", pdf: "/reports/collection.pdf" },
@@ -38,6 +120,8 @@ export default function ReportsPage() {
   return (
     <div className="space-y-5">
       <PageTitle title="Reports" subtitle="Download as PDF or export CSV" />
+
+      <MoneyHealth />
 
       <div className="flex gap-2">
         {periods.map((p) => (
