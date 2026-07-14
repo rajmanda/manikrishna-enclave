@@ -16,6 +16,7 @@ from app.core.security import CurrentUser, require_roles
 from app.db import get_db
 from app.models import (
     WRITE_ROLES,
+    AssessmentRequest,
     CostCase,
     CostCaseClose,
     CostCaseCreate,
@@ -190,6 +191,87 @@ async def get_cost_case(case_id: str, db: DB, user: CurrentUser) -> dict:
         "payments": dump(Payment, payments),
         "timeline": timeline,
     }
+
+
+@router.post("/{case_id}/assessments", status_code=status.HTTP_201_CREATED, dependencies=[Writer])
+async def generate_assessments(
+    case_id: str, body: AssessmentRequest, db: DB, user: CurrentUser
+) -> dict:
+    """Create owner assessment invoices for this case from explicit
+    per-apartment allocations. Idempotent: apartments that already hold an
+    invoice for this case+period are skipped, so re-submitting is safe."""
+    from app.notification_service import enqueue_for_apartment_owners
+    from app.routers.invoices import compute_status, with_apartment
+
+    case = await db.cost_cases.find_one(
+        {"id": case_id, "community_id": user.community_id}
+    )
+    if case is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cost case not found")
+    if case.get("status") == "closed":
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Cost case is closed")
+    allocations = [a for a in body.allocations if a.amount > 0]
+    if not allocations:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="At least one allocation required"
+        )
+    apt_ids = [a.apartment_id for a in allocations]
+    if len(set(apt_ids)) != len(apt_ids):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Duplicate apartment in allocations"
+        )
+    found = await db.apartments.count_documents(
+        {"id": {"$in": apt_ids}, "community_id": user.community_id}
+    )
+    if found != len(apt_ids):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Unknown apartment in allocations")
+
+    description = body.description.strip() or case["title"]
+    wos = await db.work_orders.find({"cost_case_id": case_id}).to_list(10)
+    wo_id = wos[0]["id"] if wos else None
+    created, skipped, new_apts = 0, 0, []
+    for alloc in allocations:
+        exists = await db.invoices.find_one(
+            {"community_id": user.community_id, "apartment_id": alloc.apartment_id,
+             "cost_case_id": case_id, "period": body.period}
+        )
+        if exists:
+            skipped += 1
+            continue
+        invoice = Invoice(
+            community_id=user.community_id,
+            apartment_id=alloc.apartment_id,
+            period=body.period,
+            description=with_apartment(description, alloc.apartment_id),
+            amount=alloc.amount,
+            due_date=body.due_date,
+            status=compute_status(alloc.amount, 0, body.due_date),
+            work_order_id=wo_id,
+            cost_case_id=case_id,
+        )
+        await db.invoices.insert_one(invoice.model_dump())
+        created += 1
+        new_apts.append((alloc.apartment_id, alloc.amount))
+    await record_audit(
+        db, user, "create", "invoices", f"assessment:{case_id}:{body.period}",
+        {"created": created, "skipped": skipped,
+         "total": sum(a.amount for a in allocations)},
+    )
+    await asyncio.gather(*(
+        enqueue_for_apartment_owners(
+            db,
+            community_id=user.community_id,
+            apartment_id=apt_id,
+            event_type="invoice_created",
+            title="New Assessment",
+            message=f"Sent by {user.display_name}. {description} — {body.period}: Rs {amount:,.0f} due {body.due_date}. View details: https://community.rajmanda.com/invoices",
+            payload={"period": body.period, "amount": amount, "cost_case_id": case_id},
+            exclude_user_id=user.id,
+            actor_user=user,
+        )
+        for apt_id, amount in new_apts
+    ))
+    return {"created": created, "skipped": skipped}
 
 
 @router.post("/{case_id}/close", dependencies=[Writer])

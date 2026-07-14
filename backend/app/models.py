@@ -439,6 +439,22 @@ class CostCaseClose(APIModel):
     force: bool = False  # override the reconciliation guard (audited)
 
 
+class AssessmentAllocation(APIModel):
+    apartment_id: str
+    amount: float
+
+
+class AssessmentRequest(APIModel):
+    """Owner assessment batch for a cost case — one invoice per allocation.
+    Allocations default to equal-split in the UI but every row is editable;
+    apartments already invoiced for this case+period are skipped."""
+
+    period: str
+    due_date: str
+    description: str = ""  # defaults to the case title
+    allocations: list[AssessmentAllocation]
+
+
 class ExpenseUpdate(APIModel):
     category: str | None = None
     description: str | None = None

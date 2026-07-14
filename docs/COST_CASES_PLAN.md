@@ -70,7 +70,7 @@ Reconciliation.
 - [ ] Funding method on cost case (reserve / collect-first / pay-then-
       collect / split / selected apartments / no recovery) driving the
       assessment generator defaults
-- [ ] Per-apartment allocation editor (default equal across 10)
+- [x] Per-apartment allocation editor — Bill owners dialog on the case page: equal-split default of the approved budget, editable rows, tick apartments in/out, over/under-budget warning, idempotent POST /cost-cases/{id}/assessments (skips already-assessed apartments per period)
 - [ ] Installment plans (per-owner schedules), partial payments already
       supported by invoice/payment model
 - [ ] Payment allocation across multiple invoices in one entry

@@ -168,3 +168,49 @@ async def test_m007_migrates_borewell_history(client, manager_headers, db):
         d for d in recon["collectionsWithoutExpense"] if "Bore well" in d["description"]
     )
     assert drive["costCaseId"] == case["id"]
+
+
+async def test_assessment_generation_with_allocations(client, manager_headers):
+    case_id, _ = await _create_case_with_wo(client, manager_headers)
+    # Unequal allocations: two apartments, custom amounts.
+    resp = await client.post(
+        f"/api/v1/cost-cases/{case_id}/assessments",
+        json={"period": "Jan 2027", "dueDate": "2027-01-10",
+              "allocations": [
+                  {"apartmentId": "apt-101", "amount": 5000},
+                  {"apartmentId": "apt-102", "amount": 2500},
+              ]},
+        headers=manager_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json() == {"created": 2, "skipped": 0}
+
+    detail = (
+        await client.get(f"/api/v1/cost-cases/{case_id}", headers=manager_headers)
+    ).json()
+    assert detail["summary"]["billedToOwners"] == 7500
+    amounts = {i["apartmentId"]: i["amount"] for i in detail["invoices"]}
+    assert amounts == {"apt-101": 5000, "apt-102": 2500}
+    # Description defaults to the case title, apartment-labeled.
+    assert all("Motor replacement" in i["description"] for i in detail["invoices"])
+
+    # Idempotent: same batch again creates nothing new.
+    again = await client.post(
+        f"/api/v1/cost-cases/{case_id}/assessments",
+        json={"period": "Jan 2027", "dueDate": "2027-01-10",
+              "allocations": [
+                  {"apartmentId": "apt-101", "amount": 5000},
+                  {"apartmentId": "apt-102", "amount": 2500},
+              ]},
+        headers=manager_headers,
+    )
+    assert again.json() == {"created": 0, "skipped": 2}
+
+    # Unknown apartment and closed-case guards.
+    bad = await client.post(
+        f"/api/v1/cost-cases/{case_id}/assessments",
+        json={"period": "Feb 2027", "dueDate": "2027-02-10",
+              "allocations": [{"apartmentId": "apt-nope", "amount": 100}]},
+        headers=manager_headers,
+    )
+    assert bad.status_code == 404

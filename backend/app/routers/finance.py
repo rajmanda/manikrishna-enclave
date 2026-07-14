@@ -400,7 +400,7 @@ async def create_expense(body: ExpenseCreate, db: DB, user: CurrentUser) -> Expe
         channel="whatsapp",
         event_type="common_expense_created",
         title="New Community Expense",
-        message=f"Recorded by {user.display_name}. {body.category}: {body.description} — Rs {body.amount:,.0f}. View details: https://community.rajmanda.com/finance",
+        message=f"Recorded by {user.display_name}. {body.category}: {body.description} — Rs {body.amount:,.0f}. View details: https://community.rajmanda.com/expenses",
         payload={"expense_id": expense.id, "amount": body.amount, "category": body.category},
         actor_user=user,
     )

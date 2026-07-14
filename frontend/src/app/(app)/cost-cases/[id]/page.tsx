@@ -17,14 +17,160 @@ import {
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
-import type { CostCaseDetail, Vendor } from "@/lib/types";
+import type { Apartment, CostCaseDetail, Vendor } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber } from "@/lib/lookup";
 import { invoiceTone } from "@/lib/tones";
 import { AddExpenseDialog } from "@/components/expenses";
+import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { Badge, Card, ErrorNote, PageLoading } from "@/components/ui";
 
 const WRITER_ROLES = ["property_manager", "community_admin", "super_admin"];
+
+/** Owner assessment batch: per-apartment allocation table, equal split of
+ * the budget by default, every row editable, tick apartments in or out. */
+function AssessDialog({
+  caseId,
+  caseTitle,
+  budget,
+  apartments,
+  onClose,
+  onDone,
+}: {
+  caseId: string;
+  caseTitle: string;
+  budget: number;
+  apartments: Apartment[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const sorted = [...apartments].sort((a, b) => a.number.localeCompare(b.number));
+  const equal = sorted.length > 0 ? Math.round((budget || 0) / sorted.length) : 0;
+  const [rows, setRows] = useState(
+    sorted.map((a) => ({ apartmentId: a.id, number: a.number, included: true, amount: String(equal || "") }))
+  );
+  const [period, setPeriod] = useState(
+    new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })
+  );
+  const [dueDate, setDueDate] = useState("");
+  const [description, setDescription] = useState(caseTitle);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const included = rows.filter((r) => r.included && Number(r.amount) > 0);
+  const total = included.reduce((s, r) => s + Number(r.amount), 0);
+
+  function update(i: number, patch: Partial<{ included: boolean; amount: string }>) {
+    setRows(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+
+  function splitEqually() {
+    const active = rows.filter((r) => r.included).length;
+    if (!active || !budget) return;
+    const share = String(Math.round(budget / active));
+    setRows(rows.map((r) => (r.included ? { ...r, amount: share } : r)));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<{ created: number; skipped: number }>(
+        `/cost-cases/${caseId}/assessments`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            period,
+            dueDate,
+            description,
+            allocations: included.map((r) => ({
+              apartmentId: r.apartmentId,
+              amount: Number(r.amount),
+            })),
+          }),
+        }
+      );
+      if (res.skipped > 0)
+        alert(`${res.created} invoice(s) created; ${res.skipped} apartment(s) already assessed for ${period} were skipped.`);
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to generate assessments");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Bill owners for this case" onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <p className="text-xs text-slate-500">
+          One invoice per ticked apartment, linked to this cost case. Amounts
+          default to an equal split{budget ? ` of the ${formatINR(budget)} budget` : ""} —
+          edit any row for a custom allocation.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Period</label>
+            <input className={inputCls} value={period} onChange={(e) => setPeriod(e.target.value)} required />
+          </div>
+          <div>
+            <label className={labelCls}>Due date</label>
+            <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Invoice title</label>
+          <input className={inputCls} value={description} onChange={(e) => setDescription(e.target.value)} required />
+        </div>
+        <div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-xs font-medium text-slate-600">Allocation per apartment</label>
+            <button type="button" onClick={splitEqually} className="text-xs font-medium text-brand-600 hover:text-brand-700">
+              Split equally
+            </button>
+          </div>
+          <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
+            {rows.map((r, i) => (
+              <div key={r.apartmentId} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={r.included}
+                  onChange={(e) => update(i, { included: e.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                />
+                <span className={`w-16 font-medium ${r.included ? "" : "text-slate-400 line-through"}`}>
+                  Apt {r.number}
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  value={r.amount}
+                  disabled={!r.included}
+                  onChange={(e) => update(i, { amount: e.target.value })}
+                  className="ml-auto w-28 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm disabled:bg-slate-50 disabled:text-slate-300"
+                />
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 flex justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold">
+            <span>Total ({included.length} apartment{included.length === 1 ? "" : "s"})</span>
+            <span>{formatINR(total)}</span>
+          </p>
+          {budget > 0 && total !== budget && total > 0 && (
+            <p className="mt-1 text-xs font-medium text-amber-600">
+              {total > budget ? "Over" : "Under"} the approved budget by {formatINR(Math.abs(total - budget))}
+            </p>
+          )}
+        </div>
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button type="submit" disabled={busy || !dueDate || total <= 0} className={primaryBtnCls}>
+          {busy ? "Generating…" : `Generate ${included.length} invoice${included.length === 1 ? "" : "s"} (${formatINR(total)})`}
+        </button>
+      </form>
+    </Modal>
+  );
+}
 
 const TIMELINE_ICONS: Record<string, typeof Wrench> = {
   case: FileText,
@@ -44,7 +190,9 @@ export default function CostCaseDetailPage({
   const canWrite = WRITER_ROLES.includes(role);
   const detail = useApi<CostCaseDetail>(`/cost-cases/${id}`);
   const vendors = useApi<Vendor[]>("/vendors");
+  const apartments = useApi<Apartment[]>("/apartments");
   const [expenseOpen, setExpenseOpen] = useState(false);
+  const [assessOpen, setAssessOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
   if (detail.error) return <ErrorNote message={detail.error} onRetry={detail.reload} />;
@@ -239,8 +387,18 @@ export default function CostCaseDetailPage({
         <Card className="p-4">
           <h2 className="mb-3 flex items-center justify-between text-sm font-semibold">
             Owner assessments
-            <span className="text-xs font-normal text-slate-400">
-              {c.invoices.length} invoice{c.invoices.length === 1 ? "" : "s"}
+            <span className="flex items-center gap-2">
+              <span className="text-xs font-normal text-slate-400">
+                {c.invoices.length} invoice{c.invoices.length === 1 ? "" : "s"}
+              </span>
+              {canWrite && c.status !== "closed" && (
+                <button
+                  onClick={() => setAssessOpen(true)}
+                  className="rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-700"
+                >
+                  Bill owners
+                </button>
+              )}
             </span>
           </h2>
           <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
@@ -253,14 +411,24 @@ export default function CostCaseDetailPage({
             ))}
             {c.invoices.length === 0 && (
               <p className="py-3 text-center text-xs text-slate-400">
-                No assessments — generate them from the Invoices page with this
-                case&apos;s work order.
+                No assessments yet — tap <b>Bill owners</b> to allocate and
+                invoice the apartments.
               </p>
             )}
           </div>
         </Card>
       </div>
 
+      {assessOpen && (
+        <AssessDialog
+          caseId={c.id}
+          caseTitle={c.title}
+          budget={c.approvedBudget ?? 0}
+          apartments={apartments.data ?? []}
+          onClose={() => setAssessOpen(false)}
+          onDone={detail.reload}
+        />
+      )}
       {expenseOpen && (
         <AddExpenseDialog
           vendors={vendors.data}
