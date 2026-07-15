@@ -7,12 +7,13 @@ import { ArrowLeft, ArrowRight, Camera, Check, ClipboardList, Phone, ReceiptText
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, apiBlob, ApiError, apiUpload } from "@/lib/api";
-import type { Expense, Invoice, User, Vendor, WorkOrder, WorkOrderStage } from "@/lib/types";
+import type { Apartment, Expense, Invoice, User, Vendor, WorkOrder, WorkOrderStage } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { userName, vendorFor } from "@/lib/lookup";
 import { priorityTone, stageTone } from "@/lib/tones";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { AddExpenseDialog } from "@/components/expenses";
+import { AssessDialog } from "@/components/AssessDialog";
 import {
   Avatar,
   Badge,
@@ -151,8 +152,10 @@ export default function WorkOrderDetailPage({
   // Money chain (manager view): expenses/invoices linked to this job.
   const expenses = useApi<Expense[]>(canWrite ? "/expenses" : null);
   const invoices = useApi<Invoice[]>(canWrite ? "/invoices" : null);
+  const apartments = useApi<Apartment[]>(canWrite ? "/apartments" : null);
   const [stageOpen, setStageOpen] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false);
+  const [assessOpen, setAssessOpen] = useState(false);
   const [comment, setComment] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -232,9 +235,31 @@ export default function WorkOrderDetailPage({
       : spent === 0
         ? { label: "Record expense for this job", run: () => setExpenseOpen(true) }
         : billed === 0
-          ? { label: "Bill owners for this job", href: `/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}` }
+          ? wo.costCaseId
+            ? { label: "Bill owners for this job", run: () => setAssessOpen(true) }
+            : { label: "Bill owners for this job", href: `/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}` }
           : billed !== spent
-            ? { label: "Adjust owner invoices to actual", href: `/cost-cases/${wo.costCaseId}` }
+            ? {
+                label: "Adjust owner invoices to actual",
+                run: async () => {
+                  if (!confirm(
+                    `Adjust every owner invoice to the actual cost of ${formatINR(spent)}?\n\nBilled today: ${formatINR(billed)}. Shares recalculate proportionally; paid money is never reduced. Owners are notified of their change.`
+                  )) return;
+                  try {
+                    const r = await api<{ adjusted: number; surplusByApartment: Record<string, number> }>(
+                      `/cost-cases/${wo.costCaseId}/adjust-assessments`, { method: "POST" }
+                    );
+                    const surplus = Object.entries(r.surplusByApartment);
+                    alert(`${r.adjusted} invoice(s) adjusted.` + (surplus.length
+                      ? `\n\nOverpaid (apply credit from the cost case):\n` +
+                        surplus.map(([apt, v]) => `  Apt ${apt.replace("apt-", "")}: ${formatINR(v)}`).join("\n")
+                      : ""));
+                    invoices.reload();
+                  } catch (err) {
+                    alert(err instanceof ApiError ? err.message : "Adjustment failed");
+                  }
+                },
+              }
             : null;
 
   return (
@@ -563,6 +588,16 @@ export default function WorkOrderDetailPage({
       </div>
       {stageOpen && (
         <StageDialog wo={wo} onClose={() => setStageOpen(false)} onDone={workOrder.reload} />
+      )}
+      {assessOpen && wo.costCaseId && (
+        <AssessDialog
+          caseId={wo.costCaseId}
+          caseTitle={wo.title}
+          budget={wo.finalCost ?? wo.estimate ?? 0}
+          apartments={apartments.data ?? []}
+          onClose={() => setAssessOpen(false)}
+          onDone={() => invoices.reload()}
+        />
       )}
       {expenseOpen && (
         <AddExpenseDialog
