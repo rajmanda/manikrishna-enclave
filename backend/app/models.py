@@ -878,6 +878,8 @@ NotificationStatus = Literal["pending", "processing", "sent", "failed", "cancell
 
 NotificationEventType = Literal[
     "invoice_created",
+    "invoice_adjusted",
+    "credit_applied",
     "payment_reminder",
     "payment_received",
     "common_expense_created",

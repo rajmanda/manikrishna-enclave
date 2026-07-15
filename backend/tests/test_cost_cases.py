@@ -528,7 +528,7 @@ async def test_apply_credit_settles_and_flips(client, manager_headers):
     )).status_code == 409
 
 
-async def test_adjust_upward_reopens_paid_invoice(client, manager_headers):
+async def test_adjust_upward_reopens_paid_invoice(client, manager_headers, db):
     """Actual HIGHER than billed: the same invoice grows and reopens as
     partial for the difference — no separate debit invoice."""
     case_id, wo_id = await _create_case_with_wo(client, manager_headers)
@@ -549,6 +549,8 @@ async def test_adjust_upward_reopens_paid_invoice(client, manager_headers):
               "method": "UPI", "reference": ""},
         headers=manager_headers,
     )
+    # Give an owner a phone so the WhatsApp enqueue has a recipient.
+    await db.users.update_one({"id": "u-101"}, {"$set": {"phone": "+911234567890"}})
     # Job cost MORE than billed: 6000 vs 5000 → each share 3000.
     await client.post(
         "/api/v1/expenses",
@@ -571,3 +573,8 @@ async def test_adjust_upward_reopens_paid_invoice(client, manager_headers):
     # Unpaid invoice simply grew.
     assert rows["apt-102"]["amount"] == 3000 and rows["apt-102"]["status"] == "due"
     assert detail["summary"]["outstandingFromOwners"] == 3500
+    # Owners were told their share increased.
+    notes = await db.notification_queue.find(
+        {"event_type": "invoice_adjusted"}
+    ).to_list(100)
+    assert notes and all("increased by Rs 500" in n["message"] for n in notes)

@@ -421,6 +421,18 @@ async def apply_credit(
         {"credit_from_case": case_id, "apartment_id": apartment_id,
          "amount": amount, "applied_to": target_inv["id"]},
     )
+    from app.notification_service import enqueue_for_apartment_owners
+    await enqueue_for_apartment_owners(
+        db, community_id=user.community_id, apartment_id=apartment_id,
+        event_type="credit_applied",
+        title="Credit Applied",
+        message=(f"Applied by {user.display_name}. Rs {amount:,.0f} from "
+                 f"'{case['title']}' has been credited to your "
+                 f"{target_inv.get('period', '')} invoice. View: https://community.rajmanda.com/invoices"),
+        payload={"cost_case_id": case_id, "amount": amount,
+                 "invoice_id": target_inv["id"]},
+        exclude_user_id=user.id, actor_user=user,
+    )
     return {"applied": amount, "toInvoice": target_inv["id"],
             "remainingCredit": remaining - amount}
 
@@ -477,6 +489,8 @@ async def adjust_assessments_to_actual(
         targets[apts[0]] += drift
 
     adjusted, deleted, surplus_by_apt = 0, 0, {}
+    old_totals = {apt: sum(i["amount"] for i in by_apt[apt]) for apt in apts}
+    new_totals: dict[str, float] = {}
     for apt in apts:
         remaining = targets[apt]
         rows = sorted(by_apt[apt], key=lambda i: i["due_date"])
@@ -486,6 +500,7 @@ async def adjust_assessments_to_actual(
             if inv is rows[-1] and remaining > new_amount and paid <= new_amount:
                 new_amount = max(paid, remaining)  # actual > billed: last row grows
             remaining -= new_amount
+            new_totals[apt] = new_totals.get(apt, 0) + new_amount
             if new_amount == 0 and paid == 0:
                 await db.invoices.delete_one({"id": inv["id"]})
                 deleted += 1
@@ -507,6 +522,32 @@ async def adjust_assessments_to_actual(
         {"actual": actual, "previous_billed": total_billed,
          "adjusted": adjusted, "deleted": deleted, "surplus": surplus_by_apt},
     )
+    # Owners hear about their change — nobody discovers a reopened invoice
+    # by surprise.
+    from app.notification_service import enqueue_for_apartment_owners
+
+    async def _notify(apt: str, delta: float) -> None:
+        if delta > 0:
+            msg = (f"Update from {user.display_name}. The final cost for "
+                   f"'{case['title']}' came in higher — your share increased by "
+                   f"Rs {delta:,.0f} and is now due. View: https://community.rajmanda.com/invoices")
+        else:
+            msg = (f"Good news from {user.display_name}. The final cost for "
+                   f"'{case['title']}' came in lower — your share reduced by "
+                   f"Rs {-delta:,.0f}. View: https://community.rajmanda.com/invoices")
+        await enqueue_for_apartment_owners(
+            db, community_id=user.community_id, apartment_id=apt,
+            event_type="invoice_adjusted",
+            title="Invoice Adjusted",
+            message=msg,
+            payload={"cost_case_id": case_id, "delta": delta},
+            exclude_user_id=user.id, actor_user=user,
+        )
+
+    deltas = {apt: new_totals.get(apt, 0) - old_totals.get(apt, 0) for apt in apts}
+    await asyncio.gather(*(
+        _notify(apt, d) for apt, d in deltas.items() if d != 0
+    ))
     return {"adjusted": adjusted, "deleted": deleted, "actual": actual,
             "surplusByApartment": surplus_by_apt}
 
