@@ -328,6 +328,92 @@ async def generate_assessments(
     return {"created": created, "skipped": skipped}
 
 
+@router.post("/{case_id}/adjust-assessments", dependencies=[Writer])
+async def adjust_assessments_to_actual(
+    case_id: str, db: DB, user: CurrentUser
+) -> dict:
+    """One tap after the vendor bill posts: every apartment's assessed total
+    is recalculated to its proportional share of the ACTUAL posted cost.
+    Paid money is never touched — an invoice can't drop below what was
+    already received (the excess surfaces as per-apartment surplus for a
+    credit/refund). Unpaid zero-remainder invoices are removed. Idempotent.
+    """
+    from app.routers.invoices import compute_status
+
+    case = await db.cost_cases.find_one(
+        {"id": case_id, "community_id": user.community_id}
+    )
+    if case is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cost case not found")
+    if case.get("status") == "closed":
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Cost case is closed")
+    _, expenses, invoices, _ = await _children(db, case_id)
+    actual = sum(
+        e["amount"] for e in expenses if e.get("status", "posted") == "posted"
+    )
+    if actual <= 0:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="No posted expense yet — post the vendor bill first",
+        )
+    total_billed = sum(i["amount"] for i in invoices)
+    if not invoices or sum(i.get("original_amount") or i["amount"] for i in invoices) <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No assessments to adjust")
+
+    by_apt: dict[str, list[dict]] = {}
+    for inv in invoices:
+        by_apt.setdefault(inv["apartment_id"], []).append(inv)
+
+    # Proportions come from the ORIGINAL allocation weights (falling back
+    # to current amounts on first run) so repeated adjustments are stable.
+    def weight(inv: dict) -> float:
+        return inv.get("original_amount") or inv["amount"]
+
+    total_weight = sum(weight(i) for i in invoices)
+    targets: dict[str, float] = {}
+    apts = sorted(by_apt)
+    for apt in apts:
+        apt_weight = sum(weight(i) for i in by_apt[apt])
+        targets[apt] = round(actual * apt_weight / total_weight)
+    drift = round(actual) - sum(targets.values())
+    if apts:
+        targets[apts[0]] += drift
+
+    adjusted, deleted, surplus_by_apt = 0, 0, {}
+    for apt in apts:
+        remaining = targets[apt]
+        rows = sorted(by_apt[apt], key=lambda i: i["due_date"])
+        for inv in rows:
+            paid = inv.get("paid_amount", 0)
+            new_amount = max(paid, min(inv["amount"], remaining))
+            if inv is rows[-1] and remaining > new_amount and paid <= new_amount:
+                new_amount = max(paid, remaining)  # actual > billed: last row grows
+            remaining -= new_amount
+            if new_amount == 0 and paid == 0:
+                await db.invoices.delete_one({"id": inv["id"]})
+                deleted += 1
+                continue
+            if new_amount != inv["amount"]:
+                await db.invoices.update_one(
+                    {"id": inv["id"]},
+                    {"$set": {"amount": new_amount,
+                              "original_amount": weight(inv),
+                              "status": compute_status(new_amount, paid, inv["due_date"])}},
+                )
+                adjusted += 1
+        apt_paid = sum(i.get("paid_amount", 0) for i in rows)
+        if apt_paid > targets[apt]:
+            surplus_by_apt[apt] = apt_paid - targets[apt]
+
+    await record_audit(
+        db, user, "update", "invoices", f"adjust-to-actual:{case_id}",
+        {"actual": actual, "previous_billed": total_billed,
+         "adjusted": adjusted, "deleted": deleted, "surplus": surplus_by_apt},
+    )
+    return {"adjusted": adjusted, "deleted": deleted, "actual": actual,
+            "surplusByApartment": surplus_by_apt}
+
+
 @router.post("/{case_id}/close", dependencies=[Writer])
 async def close_cost_case(
     case_id: str, body: CostCaseClose, db: DB, user: CurrentUser

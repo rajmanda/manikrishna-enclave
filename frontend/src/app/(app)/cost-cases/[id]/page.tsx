@@ -369,6 +369,35 @@ export default function CostCaseDetailPage({
               post below to count them in the books.
             </p>
           )}
+          {canWrite && c.status !== "closed" && s.actualCost > 0 &&
+            s.billedToOwners > 0 && s.billedToOwners !== s.actualCost && (
+            <button
+              onClick={async () => {
+                if (!confirm(
+                  `Adjust every owner invoice to the actual cost of ${formatINR(s.actualCost)}?\n\nBilled today: ${formatINR(s.billedToOwners)}. Each apartment's share is recalculated proportionally; amounts already paid are never reduced (any excess shows as surplus for a credit/refund).`
+                )) return;
+                try {
+                  const r = await api<{ adjusted: number; deleted: number; surplusByApartment: Record<string, number> }>(
+                    `/cost-cases/${c.id}/adjust-assessments`, { method: "POST" }
+                  );
+                  const surplus = Object.entries(r.surplusByApartment);
+                  alert(
+                    `${r.adjusted} invoice(s) adjusted${r.deleted ? `, ${r.deleted} removed` : ""}.` +
+                    (surplus.length
+                      ? `\n\nOverpaid (credit on their next invoice or refund):\n` +
+                        surplus.map(([apt, v]) => `  Apt ${aptNumber(apt)}: ${formatINR(v)}`).join("\n")
+                      : "")
+                  );
+                  detail.reload();
+                } catch (err) {
+                  alert(err instanceof ApiError ? err.message : "Adjustment failed");
+                }
+              }}
+              className="mt-2 w-full rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-700"
+            >
+              Adjust owner invoices to actual ({formatINR(s.actualCost)})
+            </button>
+          )}
         </Card>
 
         {/* Timeline */}

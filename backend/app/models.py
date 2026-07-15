@@ -286,6 +286,9 @@ class Invoice(APIModel):
     line_items: list["InvoiceLineItem"] = []
     work_order_id: str | None = None  # money-chain link (cost recovery)
     cost_case_id: str | None = None  # money-chain link (assessment batch)
+    # Allocation weight before any adjust-to-actual run (keeps proportional
+    # re-adjustment stable/idempotent).
+    original_amount: float | None = None
 
 
 class InvoiceLineItem(APIModel):

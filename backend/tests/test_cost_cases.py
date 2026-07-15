@@ -405,3 +405,61 @@ async def test_generate_with_per_apartment_allocations(client, manager_headers):
     invoices = (await client.get("/api/v1/invoices", headers=manager_headers)).json()
     levies = {i["apartmentId"]: i["amount"] for i in invoices if "Painting levy" in i["description"]}
     assert levies == {"apt-101": 3000, "apt-201": 1500}
+
+
+async def test_adjust_assessments_to_actual(client, manager_headers):
+    """Raj's scenario: billed 2×2500, job actually cost 4000 — one tap
+    corrects every invoice instead of editing 10 by hand."""
+    case_id, wo_id = await _create_case_with_wo(client, manager_headers)
+    await client.post(
+        f"/api/v1/cost-cases/{case_id}/assessments",
+        json={"period": "Dec 2027", "dueDate": "2027-12-10",
+              "allocations": [
+                  {"apartmentId": "apt-101", "amount": 2500},
+                  {"apartmentId": "apt-102", "amount": 2500},
+              ]},
+        headers=manager_headers,
+    )
+    # No expense yet → refused.
+    early = await client.post(
+        f"/api/v1/cost-cases/{case_id}/adjust-assessments", headers=manager_headers
+    )
+    assert early.status_code == 400
+
+    # Owner 101 already paid in full before the adjustment.
+    invoices = (await client.get("/api/v1/invoices", headers=manager_headers)).json()
+    inv101 = next(i for i in invoices if i.get("costCaseId") == case_id and i["apartmentId"] == "apt-101")
+    await client.post(
+        "/api/v1/payments",
+        json={"invoiceId": inv101["id"], "amount": 2500, "date": "2027-12-01",
+              "method": "UPI", "reference": ""},
+        headers=manager_headers,
+    )
+    # Post the actual vendor bill: 4000.
+    exp = await client.post(
+        "/api/v1/expenses",
+        json={"category": "Repairs", "description": "Motor final bill",
+              "amount": 4000, "paidDate": "2027-12-02", "workOrderId": wo_id},
+        headers=manager_headers,
+    )
+    assert exp.json()["costCaseId"] == case_id
+
+    res = await client.post(
+        f"/api/v1/cost-cases/{case_id}/adjust-assessments", headers=manager_headers
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    # 102 (unpaid) drops 2500→2000; 101 can't go below its 2500 paid.
+    assert body["surplusByApartment"] == {"apt-101": 500}
+    detail = (
+        await client.get(f"/api/v1/cost-cases/{case_id}", headers=manager_headers)
+    ).json()
+    amounts = {i["apartmentId"]: (i["amount"], i["status"]) for i in detail["invoices"]}
+    assert amounts["apt-102"] == (2000, "due")
+    assert amounts["apt-101"] == (2500, "paid")
+
+    # Idempotent: run again, nothing changes.
+    again = await client.post(
+        f"/api/v1/cost-cases/{case_id}/adjust-assessments", headers=manager_headers
+    )
+    assert again.json()["adjusted"] == 0 and again.json()["deleted"] == 0

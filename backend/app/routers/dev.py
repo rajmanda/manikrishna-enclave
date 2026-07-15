@@ -3,14 +3,16 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.config import get_settings
+from app.core.security import require_roles
 from app.db import get_db, ensure_indexes
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 
 DB = Annotated[Any, Depends(get_db)]
+SuperAdmin = Depends(require_roles())
 
 
-@router.post("/refresh-db")
+@router.post("/refresh-db", dependencies=[SuperAdmin])
 async def refresh_dev_db(db: DB) -> dict[str, str]:
     """DEV ONLY — drops all local dev collections and copies them from prod (communityhub)."""
     settings = get_settings()

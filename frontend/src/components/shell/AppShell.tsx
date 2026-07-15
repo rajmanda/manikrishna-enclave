@@ -75,11 +75,16 @@ function DevAccountSwitcher() {
 }
 
 function DevDbRefresher() {
+  const { role } = useSessionUser();
   const [refreshing, setRefreshing] = useState(false);
+
+  if (role !== "super_admin") return null;
 
   async function handleRefresh() {
     const confirm = window.confirm(
-      "⚠️ WARNING: This will drop ALL collections in the local dev database and copy all live data from the production database ('communityhub').\n\nAre you sure you want to refresh the dev database?"
+      "⚠️ WARNING: This will drop ALL collections in the local dev database and copy all live data from the production database ('communityhub').\n\n" +
+      "Note: Since your current user session will be overwritten, you may see an 'Internal Server Error' or get logged out when the process completes. This is expected.\n\n" +
+      "Are you sure you want to refresh the dev database?"
     );
     if (!confirm) return;
 
@@ -90,7 +95,12 @@ function DevDbRefresher() {
       window.location.reload();
     } catch (err) {
       setRefreshing(false);
-      alert(err instanceof Error ? err.message : "Failed to refresh database");
+      alert(
+        "⚠️ Notice: The refresh operation finished, but the server returned an error (e.g., 'Internal Server Error').\n\n" +
+        "This is expected because your active user session was overwritten/deleted during the sync.\n\n" +
+        "The page will now reload so you can log in with the new database state."
+      );
+      window.location.reload();
     }
   }
 
