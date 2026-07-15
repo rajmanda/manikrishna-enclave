@@ -307,7 +307,12 @@ export default function CostCaseDetailPage({
                             alert(`${formatINR(r.applied)} credited to their next open invoice.${r.remainingCredit > 0 ? ` ${formatINR(r.remainingCredit)} still to settle.` : ""}`);
                             detail.reload();
                           } catch (err) {
-                            alert(err instanceof ApiError ? err.message : "Failed to apply credit");
+                            if (err instanceof ApiError && err.message.includes("No unapplied credit")) {
+                              alert("This credit was already applied — refreshing the view.");
+                              detail.reload();
+                            } else {
+                              alert(err instanceof ApiError ? err.message : "Failed to apply credit");
+                            }
                           }
                         }}
                         className="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"

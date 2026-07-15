@@ -178,7 +178,13 @@ export function InvoiceSheet({
                     costCase.reload();
                     onChanged();
                   } catch (err) {
-                    alert(err instanceof ApiError ? err.message : "Failed to apply credit");
+                    if (err instanceof ApiError && err.message.includes("No unapplied credit")) {
+                      alert("This credit was already applied — refreshing the view.");
+                      costCase.reload();
+                      onChanged();
+                    } else {
+                      alert(err instanceof ApiError ? err.message : "Failed to apply credit");
+                    }
                   }
                 }}
                 className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
