@@ -83,7 +83,7 @@ Reconciliation.
       surplus / no-expense-posted flags), completed jobs missing their
       expense, draft vendor bills awaiting posting, outstanding assessments;
       all rows deep-link to the case/work order
-- [x] Expense edit-lock once posted — amount/date/category frozen (409), delete refused; POST /expenses/{id}/reverse creates a negative offsetting entry (links preserved, pair nets to zero, reversal itself irreversible); ledger UI badges reversed/reversal and routes the trash action accordingly
+- [x] Expense edit-lock once posted — amount/date/category frozen (409), delete refused; POST /expenses/{id}/reverse creates a negative offsetting entry (links preserved, pair nets to zero, reversal itself irreversible); financial edits on posted rows auto-correct (system posts reversal + corrected replacement in one step — pencil icon); trash = full cancellation via reversal; ledger badges reversed/reversal
 - [x] Recurring expenses — DESCOPED by design: monthly recurring spend
       (electricity/water/watchman) is funded by monthly maintenance
       collections and needs no cost case; cases are for special-purpose

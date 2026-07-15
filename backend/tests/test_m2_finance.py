@@ -158,37 +158,43 @@ async def test_posted_expense_locked_and_reversed(client, manager_headers):
     eid = created.json()["id"]
     assert created.json()["status"] == "posted"
 
-    # Financial edits and deletes are refused on posted money.
-    assert (await client.patch(
-        f"/api/v1/expenses/{eid}", json={"amount": 950}, headers=manager_headers
-    )).status_code == 409
+    # Deletes are refused on posted money.
     assert (await client.delete(
         f"/api/v1/expenses/{eid}", headers=manager_headers
     )).status_code == 409
-    # Descriptive metadata may still be corrected.
+    # Descriptive metadata edits touch the row in place.
     ok = await client.patch(
         f"/api/v1/expenses/{eid}", json={"description": "Pump seal (motor #2)"},
         headers=manager_headers,
     )
-    assert ok.status_code == 200
+    assert ok.status_code == 200 and ok.json()["id"] == eid
 
-    # Reversal offsets the books and locks the pair.
-    rev = await client.post(f"/api/v1/expenses/{eid}/reverse", headers=manager_headers)
-    assert rev.status_code == 200
-    assert rev.json()["amount"] == -900
-    assert rev.json()["reversalOf"] == eid
-    assert (await client.post(
-        f"/api/v1/expenses/{eid}/reverse", headers=manager_headers
-    )).status_code == 409  # already reversed
-    rid = rev.json()["id"]
+    # A financial edit becomes a SYSTEM correction: reversal + replacement.
+    corrected = await client.patch(
+        f"/api/v1/expenses/{eid}", json={"amount": 950}, headers=manager_headers
+    )
+    assert corrected.status_code == 200
+    new_id = corrected.json()["id"]
+    assert new_id != eid and corrected.json()["amount"] == 950
+    expenses = (await client.get("/api/v1/expenses", headers=manager_headers)).json()
+    by_id = {e["id"]: e for e in expenses}
+    assert by_id[eid]["reversedBy"]  # original reversed
+    rid = by_id[eid]["reversedBy"]
+    assert by_id[rid]["amount"] == -900
+    # Net effect across the trio is exactly the corrected amount.
+    trio = [by_id[eid], by_id[rid], by_id[new_id]]
+    assert sum(e["amount"] for e in trio) == 950
+
+    # The reversed pair can't be corrected or re-reversed.
+    assert (await client.patch(
+        f"/api/v1/expenses/{eid}", json={"amount": 1}, headers=manager_headers
+    )).status_code == 409
     assert (await client.post(
         f"/api/v1/expenses/{rid}/reverse", headers=manager_headers
-    )).status_code == 409  # reversals can't be reversed
-
-    # Net effect on the books is zero.
-    expenses = (await client.get("/api/v1/expenses", headers=manager_headers)).json()
-    pair = [e for e in expenses if e["id"] in (eid, rid)]
-    assert sum(e["amount"] for e in pair) == 0
+    )).status_code == 409
+    # Plain cancellation (reverse without replacement) still works.
+    rev2 = await client.post(f"/api/v1/expenses/{new_id}/reverse", headers=manager_headers)
+    assert rev2.status_code == 200 and rev2.json()["amount"] == -950
 
 
 async def test_receipt_upload_and_download(client, manager_headers, owner_headers, monkeypatch):

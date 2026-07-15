@@ -440,15 +440,37 @@ async def update_expense(
     )
     if existing is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Expense not found")
-    # Posted money is ledger truth: financial fields are frozen; only
-    # descriptive metadata may still be corrected.
+    # Posted money is ledger truth: financial-field edits become a
+    # system-generated CORRECTION — reversal entry + corrected replacement —
+    # so the ledger history stays intact while the fix is one step.
     if existing.get("status", "posted") == "posted":
         frozen = {"amount", "paid_date", "category"} & set(updates)
         if frozen:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                detail="Posted expenses can't be edited — record a reversal and re-enter",
+            if existing.get("reversed_by") or existing.get("reversal_of"):
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail="This entry is part of a reversal pair and can't be corrected",
+                )
+            reversal = await _create_reversal(db, user, existing)
+            corrected = Expense(
+                community_id=user.community_id,
+                category=updates.get("category", existing["category"]),
+                description=updates.get("description", existing["description"]),
+                vendor_id=updates.get("vendor_id", existing.get("vendor_id")),
+                amount=updates.get("amount", existing["amount"]),
+                paid_date=updates.get("paid_date", existing["paid_date"]),
+                has_receipt=existing.get("has_receipt", False),
+                receipt_path=existing.get("receipt_path"),
+                work_order_id=existing.get("work_order_id"),
+                cost_case_id=existing.get("cost_case_id"),
+                status="posted",
             )
+            await db.expenses.insert_one(corrected.model_dump())
+            await record_audit(
+                db, user, "create", "expenses", corrected.id,
+                {"correction_of": expense_id, "via_reversal": reversal.id, **updates},
+            )
+            return corrected
     result = await db.expenses.find_one_and_update(
         {"id": expense_id},
         {"$set": updates},
@@ -504,6 +526,11 @@ async def reverse_expense(expense_id: str, db: DB, user: CurrentUser) -> Expense
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail="Reversal entries can't be reversed"
         )
+    reversal = await _create_reversal(db, user, original)
+    return reversal
+
+
+async def _create_reversal(db: Any, user: User, original: dict) -> Expense:
     reversal = Expense(
         community_id=user.community_id,
         category=original["category"],
@@ -514,15 +541,15 @@ async def reverse_expense(expense_id: str, db: DB, user: CurrentUser) -> Expense
         work_order_id=original.get("work_order_id"),
         cost_case_id=original.get("cost_case_id"),
         status="posted",
-        reversal_of=expense_id,
+        reversal_of=original["id"],
     )
     await db.expenses.insert_one(reversal.model_dump())
     await db.expenses.update_one(
-        {"id": expense_id}, {"$set": {"reversed_by": reversal.id}}
+        {"id": original["id"]}, {"$set": {"reversed_by": reversal.id}}
     )
     await record_audit(
         db, user, "create", "expenses", reversal.id,
-        {"reversal_of": expense_id, "amount": reversal.amount},
+        {"reversal_of": original["id"], "amount": reversal.amount},
     )
     return Expense.model_validate(reversal)
 

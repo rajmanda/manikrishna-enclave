@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, Paperclip, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ChevronDown, Paperclip, Pencil, Trash2, Upload } from "lucide-react";
 import { api, ApiError, apiBlob } from "@/lib/api";
 import { uploadFileTo } from "@/lib/upload";
 import { useApi } from "@/hooks/useApi";
@@ -334,6 +334,33 @@ export function ExpenseLedger({
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1.5">
                         <p className="text-sm font-semibold">{formatINR(e.amount)}</p>
+                        {canWrite && !e.reversedBy && !e.reversalOf && e.status !== "draft" && (
+                          <button
+                            aria-label={`Correct ${e.description}`}
+                            title="Correct amount (system posts reversal + corrected entry)"
+                            onClick={async () => {
+                              const raw = prompt(
+                                `Correct amount for "${e.description}"?\n\nThe system will post a reversal of ${formatINR(-e.amount)} and a corrected entry automatically.`,
+                                String(e.amount)
+                              );
+                              if (raw == null) return;
+                              const amount = Number(raw);
+                              if (!amount || amount <= 0 || amount === e.amount) return;
+                              try {
+                                await api(`/expenses/${e.id}`, {
+                                  method: "PATCH",
+                                  body: JSON.stringify({ amount }),
+                                });
+                                onChanged();
+                              } catch (err) {
+                                alert(err instanceof ApiError ? err.message : "Failed");
+                              }
+                            }}
+                            className="text-slate-300 hover:text-brand-600"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         {canWrite && !e.reversedBy && !e.reversalOf && (
                           <button
                             aria-label={`Remove ${e.description}`}
@@ -342,7 +369,7 @@ export function ExpenseLedger({
                               // reversal entry instead (books stay intact).
                               const posted = e.status !== "draft";
                               const msg = posted
-                                ? `"${e.description}" is posted to the books.\n\nRecord a reversal entry of ${formatINR(-e.amount)} to cancel it out? (Re-enter the correct expense afterwards.)`
+                                ? `Cancel "${e.description}" completely?\n\nThe system posts a reversal entry of ${formatINR(-e.amount)} — the books stay intact and the pair nets to zero. (To fix a wrong amount, use the pencil instead.)`
                                 : `Delete draft "${e.description}"?`;
                               if (!confirm(msg)) return;
                               try {
