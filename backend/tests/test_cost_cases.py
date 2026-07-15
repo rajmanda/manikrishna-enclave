@@ -463,3 +463,66 @@ async def test_adjust_assessments_to_actual(client, manager_headers):
         f"/api/v1/cost-cases/{case_id}/adjust-assessments", headers=manager_headers
     )
     assert again.json()["adjusted"] == 0 and again.json()["deleted"] == 0
+
+
+async def test_apply_credit_settles_and_flips(client, manager_headers):
+    case_id, wo_id = await _create_case_with_wo(client, manager_headers)
+    await client.post(
+        f"/api/v1/cost-cases/{case_id}/assessments",
+        json={"period": "Feb 2028", "dueDate": "2028-02-10",
+              "allocations": [{"apartmentId": "apt-101", "amount": 2500}]},
+        headers=manager_headers,
+    )
+    invs = (await client.get("/api/v1/invoices", headers=manager_headers)).json()
+    case_inv = next(i for i in invs if i.get("costCaseId") == case_id)
+    await client.post(
+        "/api/v1/payments",
+        json={"invoiceId": case_inv["id"], "amount": 2500, "date": "2028-02-01",
+              "method": "UPI", "reference": ""},
+        headers=manager_headers,
+    )
+    await client.post(
+        "/api/v1/expenses",
+        json={"category": "Repairs", "description": "Final bill", "amount": 2000,
+              "paidDate": "2028-02-02", "workOrderId": wo_id},
+        headers=manager_headers,
+    )
+    detail = (
+        await client.get(f"/api/v1/cost-cases/{case_id}", headers=manager_headers)
+    ).json()
+    assert detail["credits"] == {"apt-101": 500}
+
+    # No open invoice outside the case yet → guided error.
+    blocked = await client.post(
+        f"/api/v1/cost-cases/{case_id}/apply-credit",
+        json={"apartmentId": "apt-101"}, headers=manager_headers,
+    )
+    assert blocked.status_code == 409
+
+    # Next month's maintenance invoice arrives → credit applies to it.
+    nxt = await client.post(
+        "/api/v1/invoices",
+        json={"apartmentId": "apt-101", "period": "Mar 2028",
+              "description": "Monthly Maintenance", "amount": 2000,
+              "dueDate": "2028-03-10"},
+        headers=manager_headers,
+    )
+    res = await client.post(
+        f"/api/v1/cost-cases/{case_id}/apply-credit",
+        json={"apartmentId": "apt-101"}, headers=manager_headers,
+    )
+    assert res.json()["applied"] == 500 and res.json()["remainingCredit"] == 0
+    target = (await client.get("/api/v1/invoices", headers=manager_headers)).json()
+    march = next(i for i in target if i["id"] == nxt.json()["id"])
+    assert march["paidAmount"] == 500 and march["status"] == "partial"
+
+    # Badge flips: remaining credit gone, applied recorded; re-apply 409s.
+    detail2 = (
+        await client.get(f"/api/v1/cost-cases/{case_id}", headers=manager_headers)
+    ).json()
+    assert detail2["credits"] == {}
+    assert detail2["creditsApplied"] == {"apt-101": 500}
+    assert (await client.post(
+        f"/api/v1/cost-cases/{case_id}/apply-credit",
+        json={"apartmentId": "apt-101"}, headers=manager_headers,
+    )).status_code == 409

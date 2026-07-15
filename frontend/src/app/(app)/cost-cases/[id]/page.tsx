@@ -484,15 +484,41 @@ export default function CostCaseDetailPage({
             </span>
           </h2>
           <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
-            {Object.keys(c.credits ?? {}).length > 0 && (
+            {(Object.keys(c.credits ?? {}).length > 0 ||
+              Object.keys(c.creditsApplied ?? {}).length > 0) && (
               <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                <p className="font-semibold">Credits owed (paid over their share)</p>
+                <p className="font-semibold">Credits (paid over their share)</p>
                 {Object.entries(c.credits ?? {}).map(([apt, v]) => (
-                  <p key={apt} className="mt-0.5">
-                    Apt {aptNumber(apt)}: <b>{formatINR(v)}</b> — apply as a Credit
-                    on their next invoice, or refund
+                  <p key={apt} className="mt-1 flex items-center justify-between gap-2">
+                    <span>Apt {aptNumber(apt)}: <b>{formatINR(v)}</b> to settle</span>
+                    {canWrite && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const r = await api<{ applied: number; remainingCredit: number }>(
+                              `/cost-cases/${c.id}/apply-credit`,
+                              { method: "POST", body: JSON.stringify({ apartmentId: apt }) }
+                            );
+                            alert(`${formatINR(r.applied)} credited to their next open invoice.${r.remainingCredit > 0 ? ` ${formatINR(r.remainingCredit)} still to settle.` : ""}`);
+                            detail.reload();
+                          } catch (err) {
+                            alert(err instanceof ApiError ? err.message : "Failed to apply credit");
+                          }
+                        }}
+                        className="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                      >
+                        Apply to next invoice
+                      </button>
+                    )}
                   </p>
                 ))}
+                {Object.entries(c.creditsApplied ?? {})
+                  .filter(([apt]) => !(c.credits ?? {})[apt])
+                  .map(([apt, v]) => (
+                    <p key={apt} className="mt-1">
+                      Apt {aptNumber(apt)}: {formatINR(v)} <b>credit applied ✓</b>
+                    </p>
+                  ))}
               </div>
             )}
             {c.invoices.map((inv) => (

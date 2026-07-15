@@ -253,6 +253,7 @@ export interface CostCaseDetail extends CostCase {
   payments: Payment[];
   timeline: { date: string; kind: string; label: string }[];
   credits?: Record<string, number>;
+  creditsApplied?: Record<string, number>;
 }
 
 export interface MaintenanceRequest {

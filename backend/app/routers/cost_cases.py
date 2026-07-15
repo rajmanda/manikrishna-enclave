@@ -204,21 +204,7 @@ async def get_cost_case(case_id: str, db: DB, user: CurrentUser) -> dict:
                              "label": f"Owner payment Rs {p['amount']:,.0f} ({p['method']})"})
     timeline.sort(key=lambda t: t["date"])
 
-    # Per-apartment over-collection (credit owed): paid beyond the
-    # apartment's proportional share of the actual posted cost.
-    credits: dict[str, float] = {}
-    actual = sum(e["amount"] for e in expenses if e.get("status", "posted") == "posted")
-    if actual > 0 and invoices:
-        weight = lambda i: i.get("original_amount") or i["amount"]  # noqa: E731
-        total_w = sum(weight(i) for i in invoices) or 1
-        by_apt: dict[str, list[dict]] = {}
-        for i in invoices:
-            by_apt.setdefault(i["apartment_id"], []).append(i)
-        for apt, rows in by_apt.items():
-            target = round(actual * sum(weight(i) for i in rows) / total_w)
-            paid = sum(i.get("paid_amount", 0) for i in rows)
-            if paid > target:
-                credits[apt] = paid - target
+    credits, credits_applied = await _apartment_credits(db, case_id, expenses, invoices)
 
     def dump(model: Any, docs: list) -> list:
         return [model.model_validate(d).model_dump(by_alias=True) for d in docs]
@@ -235,6 +221,7 @@ async def get_cost_case(case_id: str, db: DB, user: CurrentUser) -> dict:
         "payments": dump(Payment, payments),
         "timeline": timeline,
         "credits": credits,
+        "creditsApplied": credits_applied,
     }
 
 
@@ -343,6 +330,99 @@ async def generate_assessments(
         for apt_id, amount in new_apts
     ))
     return {"created": created, "skipped": skipped}
+
+
+async def _apartment_credits(
+    db: Any, case_id: str, expenses: list, invoices: list
+) -> tuple[dict[str, float], dict[str, float]]:
+    """(remaining credit, already applied) per apartment: paid beyond the
+    proportional share of actual posted cost, minus Credit payments that
+    settled this case."""
+    credits: dict[str, float] = {}
+    applied: dict[str, float] = {}
+    actual = sum(e["amount"] for e in expenses if e.get("status", "posted") == "posted")
+    if actual <= 0 or not invoices:
+        return credits, applied
+    settles = await db.payments.find({"settles_cost_case_id": case_id}).to_list(1000)
+    for pmt in settles:
+        applied[pmt["apartment_id"]] = applied.get(pmt["apartment_id"], 0) + pmt["amount"]
+    weight = lambda i: i.get("original_amount") or i["amount"]  # noqa: E731
+    total_w = sum(weight(i) for i in invoices) or 1
+    by_apt: dict[str, list[dict]] = {}
+    for i in invoices:
+        by_apt.setdefault(i["apartment_id"], []).append(i)
+    for apt, rows in by_apt.items():
+        target = round(actual * sum(weight(i) for i in rows) / total_w)
+        paid = sum(i.get("paid_amount", 0) for i in rows)
+        remaining = paid - target - applied.get(apt, 0)
+        if remaining > 0:
+            credits[apt] = remaining
+    return credits, applied
+
+
+@router.post("/{case_id}/apply-credit", dependencies=[Writer])
+async def apply_credit(
+    case_id: str, body: dict, db: DB, user: CurrentUser
+) -> dict:
+    """Settle an apartment's over-collection: records a Credit payment on
+    their oldest open invoice OUTSIDE this case, linked back so the case
+    badge flips to applied. Repeatable until the credit is exhausted."""
+    from app.routers.invoices import compute_status as _cs  # noqa: F401
+    from app.models import Payment
+
+    apartment_id = body.get("apartmentId") or body.get("apartment_id")
+    if not apartment_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="apartmentId required")
+    case = await db.cost_cases.find_one(
+        {"id": case_id, "community_id": user.community_id}
+    )
+    if case is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cost case not found")
+    _, expenses, invoices, _ = await _children(db, case_id)
+    credits, _applied = await _apartment_credits(db, case_id, expenses, invoices)
+    remaining = credits.get(apartment_id, 0)
+    if remaining <= 0:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="No unapplied credit for this apartment"
+        )
+    case_inv_ids = {i["id"] for i in invoices}
+    open_invs = await db.invoices.find(
+        {"community_id": user.community_id, "apartment_id": apartment_id,
+         "ledger": {"$in": [None, "community"]}}
+    ).to_list(1000)
+    open_invs = sorted(
+        (i for i in open_invs
+         if i["id"] not in case_inv_ids and i["amount"] - i.get("paid_amount", 0) > 0),
+        key=lambda i: i["due_date"],
+    )
+    if not open_invs:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="No open invoice to apply the credit to — generate their next invoice first",
+        )
+    target_inv = open_invs[0]
+    amount = min(remaining, target_inv["amount"] - target_inv.get("paid_amount", 0))
+    payment = Payment(
+        community_id=user.community_id,
+        invoice_id=target_inv["id"],
+        apartment_id=apartment_id,
+        amount=amount,
+        date=date.today().isoformat(),
+        method="Credit",
+        reference=f"Credit — {case['title']}",
+        ledger=target_inv.get("ledger", "community"),
+        settles_cost_case_id=case_id,
+    )
+    await db.payments.insert_one(payment.model_dump())
+    from app.routers.invoices import _recompute
+    await _recompute(db, target_inv)
+    await record_audit(
+        db, user, "create", "payments", payment.id,
+        {"credit_from_case": case_id, "apartment_id": apartment_id,
+         "amount": amount, "applied_to": target_inv["id"]},
+    )
+    return {"applied": amount, "toInvoice": target_inv["id"],
+            "remainingCredit": remaining - amount}
 
 
 @router.post("/{case_id}/adjust-assessments", dependencies=[Writer])

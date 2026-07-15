@@ -354,6 +354,8 @@ class Payment(APIModel):
     status: Literal["pending", "confirmed"] = "confirmed"
     reported_by: str | None = None
     ledger: Literal["community", "manager_fee", "reimbursement"] = "community"
+    # Set on Credit payments that settle a cost case's over-collection.
+    settles_cost_case_id: str | None = None
 
 
 class PaymentReport(APIModel):
