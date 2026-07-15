@@ -204,6 +204,22 @@ async def get_cost_case(case_id: str, db: DB, user: CurrentUser) -> dict:
                              "label": f"Owner payment Rs {p['amount']:,.0f} ({p['method']})"})
     timeline.sort(key=lambda t: t["date"])
 
+    # Per-apartment over-collection (credit owed): paid beyond the
+    # apartment's proportional share of the actual posted cost.
+    credits: dict[str, float] = {}
+    actual = sum(e["amount"] for e in expenses if e.get("status", "posted") == "posted")
+    if actual > 0 and invoices:
+        weight = lambda i: i.get("original_amount") or i["amount"]  # noqa: E731
+        total_w = sum(weight(i) for i in invoices) or 1
+        by_apt: dict[str, list[dict]] = {}
+        for i in invoices:
+            by_apt.setdefault(i["apartment_id"], []).append(i)
+        for apt, rows in by_apt.items():
+            target = round(actual * sum(weight(i) for i in rows) / total_w)
+            paid = sum(i.get("paid_amount", 0) for i in rows)
+            if paid > target:
+                credits[apt] = paid - target
+
     def dump(model: Any, docs: list) -> list:
         return [model.model_validate(d).model_dump(by_alias=True) for d in docs]
 
@@ -218,6 +234,7 @@ async def get_cost_case(case_id: str, db: DB, user: CurrentUser) -> dict:
         "invoices": dump(Invoice, invoices),
         "payments": dump(Payment, payments),
         "timeline": timeline,
+        "credits": credits,
     }
 
 

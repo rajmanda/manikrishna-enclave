@@ -484,10 +484,24 @@ export default function CostCaseDetailPage({
             </span>
           </h2>
           <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+            {Object.keys(c.credits ?? {}).length > 0 && (
+              <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                <p className="font-semibold">Credits owed (paid over their share)</p>
+                {Object.entries(c.credits ?? {}).map(([apt, v]) => (
+                  <p key={apt} className="mt-0.5">
+                    Apt {aptNumber(apt)}: <b>{formatINR(v)}</b> — apply as a Credit
+                    on their next invoice, or refund
+                  </p>
+                ))}
+              </div>
+            )}
             {c.invoices.map((inv) => (
               <div key={inv.id} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs">
                 <ReceiptText className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                 <span className="min-w-0 flex-1 truncate">Apt {aptNumber(inv.apartmentId)} · {formatINR(inv.amount)}</span>
+                {(c.credits ?? {})[inv.apartmentId] != null && (
+                  <Badge tone="green">credit {formatINR((c.credits ?? {})[inv.apartmentId])}</Badge>
+                )}
                 <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
               </div>
             ))}
