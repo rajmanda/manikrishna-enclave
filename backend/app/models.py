@@ -325,6 +325,8 @@ class GenerateInvoicesRequest(APIModel):
     amount: float | None = None  # defaults to community.monthly_maintenance
     description: str = "Monthly Maintenance"
     apartment_ids: list[str] | None = None  # None = all apartments
+    # Per-apartment amounts (overrides amount/apartment_ids when given).
+    allocations: list["AssessmentAllocation"] | None = None
     work_order_id: str | None = None  # link cost-recovery invoices to the job
     cost_case_id: str | None = None  # link the assessment batch to its case
 

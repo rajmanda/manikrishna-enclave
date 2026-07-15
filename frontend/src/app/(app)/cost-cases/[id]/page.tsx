@@ -22,6 +22,8 @@ import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber } from "@/lib/lookup";
 import { invoiceTone } from "@/lib/tones";
 import { AddExpenseDialog } from "@/components/expenses";
+import { ReceiptPicker } from "@/components/ReceiptPicker";
+import { uploadEach, uploadFileTo } from "@/lib/upload";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { Badge, Card, ErrorNote, PageLoading } from "@/components/ui";
 
@@ -60,6 +62,7 @@ function AssessDialog({
   );
   const [dueDate, setDueDate] = useState("");
   const [description, setDescription] = useState(caseTitle);
+  const [receipts, setReceipts] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,6 +103,19 @@ function AssessDialog({
       );
       if (res.skipped > 0)
         alert(`${res.created} invoice(s) created; ${res.skipped} apartment(s) already assessed for ${period} were skipped.`);
+      if (receipts.length > 0 && res.created > 0) {
+        // Supporting paper receipts land in Documents, visible only to the
+        // assessed apartments (same behavior as Create Community Invoices).
+        const failed = await uploadEach(receipts, (f, i) =>
+          uploadFileTo("/documents", f, {
+            title: `Receipt — ${description} (${period})${receipts.length > 1 ? ` #${i + 1}` : ""}`,
+            category: "Receipts",
+            apartment_ids: included.map((r) => r.apartmentId).join(","),
+          })
+        );
+        if (failed > 0)
+          alert(`Invoices created, but ${failed} receipt upload${failed > 1 ? "s" : ""} failed — you can add them from the Documents view.`);
+      }
       onDone();
       onClose();
     } catch (err) {
@@ -195,6 +211,11 @@ function AssessDialog({
             </p>
           )}
         </div>
+        <ReceiptPicker
+          files={receipts}
+          onChange={setReceipts}
+          label="Paper receipts (optional — saved to Documents, visible to the assessed apartments)"
+        />
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button type="submit" disabled={busy || !dueDate || total <= 0} className={primaryBtnCls}>
           {busy ? "Generating…" : `Generate ${included.length} invoice${included.length === 1 ? "" : "s"} (${formatINR(total)})`}

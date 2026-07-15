@@ -388,3 +388,20 @@ async def test_automation_chain_and_cascades(client, manager_headers, owner_head
         f"/api/v1/cost-cases/{case2_id}", headers=manager_headers
     )
     assert blocked.status_code == 409
+
+
+async def test_generate_with_per_apartment_allocations(client, manager_headers):
+    gen = await client.post(
+        "/api/v1/invoices/generate",
+        json={"period": "Nov 2027", "dueDate": "2027-11-10",
+              "description": "Painting levy",
+              "allocations": [
+                  {"apartmentId": "apt-101", "amount": 3000},
+                  {"apartmentId": "apt-201", "amount": 1500},
+              ]},
+        headers=manager_headers,
+    )
+    assert gen.json() == {"created": 2, "skipped": 0}
+    invoices = (await client.get("/api/v1/invoices", headers=manager_headers)).json()
+    levies = {i["apartmentId"]: i["amount"] for i in invoices if "Painting levy" in i["description"]}
+    assert levies == {"apt-101": 3000, "apt-201": 1500}

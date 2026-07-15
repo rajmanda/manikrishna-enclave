@@ -136,8 +136,6 @@ function GenerateDialog({
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState(initialDescription || "Monthly Maintenance");
-  const [scope, setScope] = useState<"all" | "selected">("all");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [receipts, setReceipts] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,20 +143,27 @@ function GenerateDialog({
   const sortedApartments = [...(apartments ?? [])].sort((a, b) =>
     a.number.localeCompare(b.number)
   );
+  // Allocation rows like the cost-case Bill owners dialog: tick apartments
+  // in/out, blank amount = the default amount field below.
+  const [rows, setRows] = useState(
+    sortedApartments.map((a) => ({ apartmentId: a.id, number: a.number, included: true, amount: "" }))
+  );
+  const included = rows.filter((r) => r.included);
+  const allIncluded = included.length === rows.length;
+  const customUsed = included.some((r) => r.amount !== "");
 
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  function updateRow(i: number, patch: Partial<{ included: boolean; amount: string }>) {
+    setRows(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (scope === "selected" && selected.size === 0) {
+    if (included.length === 0) {
       setError("Select at least one apartment");
+      return;
+    }
+    if (customUsed && !amount && included.some((r) => r.amount === "")) {
+      setError("With custom amounts, fill every selected row or set a default amount");
       return;
     }
     setBusy(true);
@@ -172,8 +177,15 @@ function GenerateDialog({
             period,
             dueDate,
             description,
-            ...(amount ? { amount: Number(amount) } : {}),
-            ...(scope === "selected" ? { apartmentIds: [...selected] } : {}),
+            ...(customUsed
+              ? { allocations: included.map((r) => ({
+                    apartmentId: r.apartmentId,
+                    amount: Number(r.amount || amount),
+                  })) }
+              : {
+                  ...(amount ? { amount: Number(amount) } : {}),
+                  ...(allIncluded ? {} : { apartmentIds: included.map((r) => r.apartmentId) }),
+                }),
             ...(linkedWo ? { workOrderId: linkedWo } : {}),
           }),
         }
@@ -185,7 +197,7 @@ function GenerateDialog({
           uploadFileTo("/documents", f, {
             title: `Receipt — ${description.trim()} (${period})${receipts.length > 1 ? ` #${i + 1}` : ""}`,
             category: "Receipts",
-            apartment_ids: scope === "selected" ? [...selected].join(",") : "",
+            apartment_ids: allIncluded ? "" : included.map((r) => r.apartmentId).join(","),
           })
         );
         if (failed > 0)
@@ -228,83 +240,56 @@ function GenerateDialog({
           <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="3500" />
         </div>
         <div>
-          <label className={labelCls}>Apartments</label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setScope("all")}
-              className={`rounded-xl border px-3 py-2.5 text-sm font-medium ${
-                scope === "all"
-                  ? "border-brand-500 bg-brand-50 text-brand-700"
-                  : "border-slate-200 text-slate-600"
-              }`}
-            >
-              All apartments
-            </button>
-            <button
-              type="button"
-                onClick={() => setScope("selected")}
-                className={`rounded-xl border px-3 py-2.5 text-sm font-medium ${
-                  scope === "selected"
-                    ? "border-brand-500 bg-brand-50 text-brand-700"
-                    : "border-slate-200 text-slate-600"
-                }`}
-              >
-                Select apartments
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-xs font-medium text-slate-600">Apartments & amounts</label>
+            <span className="flex gap-3">
+              <button type="button" onClick={() => setRows(rows.map((r) => ({ ...r, included: true })))} className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                Select all
               </button>
-            </div>
-            {scope === "selected" && (
-              <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
-                {sortedApartments.map((apt) => (
-                  <label
-                    key={apt.id}
-                    className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected.has(apt.id)}
-                      onChange={() => toggle(apt.id)}
-                      className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                    />
-                    <span className="font-medium">Apt {apt.number}</span>
-                    <span className="truncate text-xs text-slate-400">
-                      {ownerNameFor(users, sortedApartments, apt.id)}
-                    </span>
-                  </label>
-                ))}
-                <p className="px-2 pt-1 text-xs text-slate-400">
-                  {selected.size} selected
-                </p>
+              <button type="button" onClick={() => setRows(rows.map((r) => ({ ...r, included: false })))} className="text-xs font-medium text-slate-500 hover:text-slate-700">
+                Clear all
+              </button>
+            </span>
+          </div>
+          <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
+            {rows.map((r, i) => (
+              <div key={r.apartmentId} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={r.included}
+                  onChange={(e) => updateRow(i, { included: e.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                />
+                <span className={`w-14 font-medium ${r.included ? "" : "text-slate-400 line-through"}`}>
+                  Apt {r.number}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-xs text-slate-400">
+                  {ownerNameFor(users, sortedApartments, r.apartmentId)}
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  value={r.amount}
+                  disabled={!r.included}
+                  placeholder={amount || "default"}
+                  onChange={(e) => updateRow(i, { amount: e.target.value })}
+                  className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm disabled:bg-slate-50 disabled:text-slate-300"
+                />
               </div>
-            )}
+            ))}
           </div>
-          <div>
-            <label className={labelCls}>Link to work order (optional — ties these invoices to the job's cost case)</label>
-            <select
-              className={inputCls}
-              value={linkedWo}
-              onChange={(e) => {
-                setLinkedWo(e.target.value);
-                const wo = (workOrders ?? []).find((w) => w.id === e.target.value);
-                if (wo && (description === "Monthly Maintenance" || !description.trim())) {
-                  setDescription(wo.title);
-                }
-              }}
-            >
-              <option value="">— none —</option>
-              {(workOrders ?? []).map((w) => (
-                <option key={w.id} value={w.id}>{w.title} ({w.stage})</option>
-              ))}
-            </select>
-          </div>
+          <p className="mt-1 px-1 text-xs text-slate-400">
+            {included.length} selected · blank amount = the default above
+          </p>
+        </div>
           <ReceiptPicker files={receipts} onChange={setReceipts} />
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-          <button type="submit" disabled={busy || !dueDate} className={primaryBtnCls}>
+          <button type="submit" disabled={busy || !dueDate || included.length === 0} className={primaryBtnCls}>
             {busy
               ? "Creating…"
-              : scope === "all"
+              : allIncluded
                 ? "Create for all apartments"
-                : `Create for ${selected.size} apartment${selected.size === 1 ? "" : "s"}`}
+                : `Create for ${included.length} apartment${included.length === 1 ? "" : "s"}`}
           </button>
         </form>
       </Modal>

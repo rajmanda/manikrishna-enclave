@@ -121,11 +121,18 @@ async def generate_invoices(
             {"id": body.work_order_id, "community_id": user.community_id}
         )
         cost_case_id = (wo or {}).get("cost_case_id")
+    # Explicit per-apartment allocations trump amount/apartment_ids.
+    alloc_amounts: dict[str, float] = {}
+    if body.allocations:
+        alloc_amounts = {
+            a.apartment_id: a.amount for a in body.allocations if a.amount > 0
+        }
+    wanted_ids = list(alloc_amounts) if alloc_amounts else body.apartment_ids
     apartment_query: dict = {"community_id": user.community_id}
-    if body.apartment_ids is not None:
-        apartment_query["id"] = {"$in": body.apartment_ids}
+    if wanted_ids is not None:
+        apartment_query["id"] = {"$in": wanted_ids}
     apartments = await db.apartments.find(apartment_query).to_list(1000)
-    if body.apartment_ids is not None and not apartments:
+    if wanted_ids is not None and not apartments:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="No matching apartments"
         )
@@ -143,14 +150,15 @@ async def generate_invoices(
         )
         if exists:
             continue
+        apt_amount = alloc_amounts.get(apt["id"], amount)
         invoice = Invoice(
             community_id=user.community_id,
             apartment_id=apt["id"],
             period=body.period,
             description=labeled,
-            amount=amount,
+            amount=apt_amount,
             due_date=body.due_date,
-            status=compute_status(amount, 0, body.due_date),
+            status=compute_status(apt_amount, 0, body.due_date),
             work_order_id=body.work_order_id,
             cost_case_id=cost_case_id,
         )
@@ -164,8 +172,8 @@ async def generate_invoices(
     # DB round-trips, which times out proxies on high-latency dev links.
     if created > 0:
         apt_query_for_notif: dict = {"community_id": user.community_id}
-        if body.apartment_ids is not None:
-            apt_query_for_notif["id"] = {"$in": body.apartment_ids}
+        if wanted_ids is not None:
+            apt_query_for_notif["id"] = {"$in": wanted_ids}
         apts_for_notif = await db.apartments.find(apt_query_for_notif).to_list(1000)
         await asyncio.gather(*(
             enqueue_for_apartment_owners(
@@ -174,8 +182,8 @@ async def generate_invoices(
                 apartment_id=apt["id"],
                 event_type="invoice_created",
                 title="New Invoice",
-                message=f"Sent by {user.display_name}. {body.description} — {body.period}: Rs {amount:,.0f} due {body.due_date}. View details: https://community.rajmanda.com/invoices",
-                payload={"period": body.period, "amount": amount},
+                message=f"Sent by {user.display_name}. {body.description} — {body.period}: Rs {alloc_amounts.get(apt['id'], amount):,.0f} due {body.due_date}. View details: https://community.rajmanda.com/invoices",
+                payload={"period": body.period, "amount": alloc_amounts.get(apt["id"], amount)},
                 exclude_user_id=user.id,
                 actor_user=user,
             )
