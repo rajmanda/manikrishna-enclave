@@ -477,21 +477,36 @@ export default function WorkOrderDetailPage({
                           <ReceiptText className="h-3.5 w-3.5" /> {nextMoneyAction.label}
                         </button>
                       ))}
-                    {spent > 0 && (
+                    {/* Both paths stay visible — collect-first communities
+                        bill owners BEFORE any expense exists. The primary is
+                        a suggestion, never a gate. */}
+                    {nextMoneyAction?.label !== "Record expense for this job" && !draftBill && (
                       <button
                         onClick={() => setExpenseOpen(true)}
                         className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50"
                       >
-                        <Wallet className="h-3.5 w-3.5" /> Add another expense
+                        <Wallet className="h-3.5 w-3.5" />
+                        {spent > 0 ? "Add another expense" : "Record expense for this job"}
                       </button>
                     )}
-                    {billed > 0 && (
-                      <Link
-                        href={`/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}`}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50"
-                      >
-                        <ReceiptText className="h-3.5 w-3.5" /> Bill more owners
-                      </Link>
+                    {nextMoneyAction?.label !== "Bill owners for this job" && (
+                      wo.costCaseId ? (
+                        <button
+                          onClick={() => setAssessOpen(true)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50"
+                        >
+                          <ReceiptText className="h-3.5 w-3.5" />
+                          {billed > 0 ? "Bill more owners" : "Bill owners for this job"}
+                        </button>
+                      ) : (
+                        <Link
+                          href={`/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}`}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50"
+                        >
+                          <ReceiptText className="h-3.5 w-3.5" />
+                          {billed > 0 ? "Bill more owners" : "Bill owners for this job"}
+                        </Link>
+                      )
                     )}
                   </div>
                 </>
