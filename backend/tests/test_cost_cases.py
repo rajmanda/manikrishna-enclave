@@ -526,3 +526,48 @@ async def test_apply_credit_settles_and_flips(client, manager_headers):
         f"/api/v1/cost-cases/{case_id}/apply-credit",
         json={"apartmentId": "apt-101"}, headers=manager_headers,
     )).status_code == 409
+
+
+async def test_adjust_upward_reopens_paid_invoice(client, manager_headers):
+    """Actual HIGHER than billed: the same invoice grows and reopens as
+    partial for the difference — no separate debit invoice."""
+    case_id, wo_id = await _create_case_with_wo(client, manager_headers)
+    await client.post(
+        f"/api/v1/cost-cases/{case_id}/assessments",
+        json={"period": "Apr 2028", "dueDate": "2028-04-10",
+              "allocations": [
+                  {"apartmentId": "apt-101", "amount": 2500},
+                  {"apartmentId": "apt-102", "amount": 2500},
+              ]},
+        headers=manager_headers,
+    )
+    invs = (await client.get("/api/v1/invoices", headers=manager_headers)).json()
+    inv101 = next(i for i in invs if i.get("costCaseId") == case_id and i["apartmentId"] == "apt-101")
+    await client.post(
+        "/api/v1/payments",
+        json={"invoiceId": inv101["id"], "amount": 2500, "date": "2028-04-01",
+              "method": "UPI", "reference": ""},
+        headers=manager_headers,
+    )
+    # Job cost MORE than billed: 6000 vs 5000 → each share 3000.
+    await client.post(
+        "/api/v1/expenses",
+        json={"category": "Repairs", "description": "Final bill higher",
+              "amount": 6000, "paidDate": "2028-04-02", "workOrderId": wo_id},
+        headers=manager_headers,
+    )
+    res = await client.post(
+        f"/api/v1/cost-cases/{case_id}/adjust-assessments", headers=manager_headers
+    )
+    assert res.status_code == 200 and res.json()["surplusByApartment"] == {}
+    detail = (
+        await client.get(f"/api/v1/cost-cases/{case_id}", headers=manager_headers)
+    ).json()
+    rows = {i["apartmentId"]: i for i in detail["invoices"]}
+    # Paid invoice reopened as partial with the extra 500 due.
+    assert rows["apt-101"]["amount"] == 3000
+    assert rows["apt-101"]["paidAmount"] == 2500
+    assert rows["apt-101"]["status"] == "partial"
+    # Unpaid invoice simply grew.
+    assert rows["apt-102"]["amount"] == 3000 and rows["apt-102"]["status"] == "due"
+    assert detail["summary"]["outstandingFromOwners"] == 3500
