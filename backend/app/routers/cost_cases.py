@@ -121,6 +121,23 @@ async def create_cost_case(body: CostCaseCreate, db: DB, user: CurrentUser) -> d
         created_date=date.today().isoformat(),
     )
     await db.cost_cases.insert_one(case.model_dump())
+    if wo is None:
+        # Symmetric automation: a standalone case gets its job record too.
+        auto_wo = WorkOrder(
+            community_id=user.community_id,
+            title=case.title,
+            description="Opened automatically with the cost case.",
+            estimate=case.approved_budget,
+            reported_date=case.created_date,
+            assigned_to=user.id,
+            maintenance_request_id=mr_id,
+            cost_case_id=case.id,
+            timeline=[{"stage": "Reported", "date": case.created_date,
+                       "note": f"Created with cost case by {user.name}"}],
+        )
+        await db.work_orders.insert_one(auto_wo.model_dump())
+        await record_audit(db, user, "create", "work_orders", auto_wo.id,
+                           {"auto": "cost_case_created"})
     if wo:
         # Adopting a work order pulls its existing money links into the case.
         await db.work_orders.update_one(
@@ -345,6 +362,30 @@ async def close_cost_case(
          "note": body.note, "blockers_overridden": blockers if body.force else []},
     )
     return {"closed": True, "forced": bool(blockers and body.force)}
+
+
+@router.delete("/{case_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Writer])
+async def delete_cost_case(case_id: str, db: DB, user: CurrentUser) -> None:
+    """Only empty cases delete — anything holding money (expenses or
+    invoices) must be closed instead, preserving the ledger. Linked work
+    orders without money of their own are removed with it (cascade)."""
+    case = await db.cost_cases.find_one(
+        {"id": case_id, "community_id": user.community_id}
+    )
+    if case is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cost case not found")
+    wos, expenses, invoices, _ = await _children(db, case_id)
+    if expenses or invoices:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Cost case holds expenses/invoices — close it instead of deleting",
+        )
+    for w in wos:
+        await db.work_orders.delete_one({"id": w["id"]})
+        await record_audit(db, user, "delete", "work_orders", w["id"],
+                           {"cascade_from_cost_case": case_id})
+    await db.cost_cases.delete_one({"id": case_id})
+    await record_audit(db, user, "delete", "cost_cases", case_id)
 
 
 @router.post("/{case_id}/reopen", dependencies=[Writer])

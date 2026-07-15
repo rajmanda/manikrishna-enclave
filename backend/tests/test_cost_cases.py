@@ -3,20 +3,17 @@ assessments → payments → reconciliation."""
 
 
 async def _create_case_with_wo(client, manager_headers) -> tuple[str, str]:
+    # Creating a work order auto-opens its cost case (estimate = budget).
     wo = await client.post(
         "/api/v1/work-orders",
         json={"title": "Motor replacement", "priority": "High", "estimate": 20000},
         headers=manager_headers,
     )
+    assert wo.status_code == 201, wo.text
     wo_id = wo.json()["id"]
-    case = await client.post(
-        "/api/v1/cost-cases",
-        json={"title": "Motor replacement", "approvedBudget": 20000,
-              "fundingMethod": "collect_first", "workOrderId": wo_id},
-        headers=manager_headers,
-    )
-    assert case.status_code == 201, case.text
-    return case.json()["id"], wo_id
+    case_id = wo.json()["costCaseId"]
+    assert case_id, "work order should auto-create its cost case"
+    return case_id, wo_id
 
 
 async def test_full_chain_and_live_summary(client, manager_headers):
@@ -336,3 +333,58 @@ async def test_money_health_report(client, manager_headers):
     assert not any(d["workOrderId"] == wo_id for d in report2["draftVendorBills"])
     case_row2 = next(r for r in report2["openCostCases"] if r["id"] == case_id)
     assert case_row2["actualCost"] == 3800 and case_row2["shortfall"] == 3800
+
+
+async def test_automation_chain_and_cascades(client, manager_headers, owner_headers, db):
+    # Community maintenance request → auto work order + auto cost case.
+    mr = await client.post(
+        "/api/v1/maintenance-requests",
+        json={"title": "Gate motor jammed", "description": "front gate",
+              "visibility": "community"},
+        headers=owner_headers,
+    )
+    mr_id = mr.json()["id"]
+    wo = await db.work_orders.find_one({"maintenance_request_id": mr_id})
+    assert wo is not None
+    case = await db.cost_cases.find_one({"id": wo["cost_case_id"]})
+    assert case is not None and case["maintenance_request_id"] == mr_id
+
+    # PRIVATE requests never auto-create (a public WO would leak them).
+    private = await client.post(
+        "/api/v1/maintenance-requests",
+        json={"title": "Neighbour noise", "visibility": "private"},
+        headers=owner_headers,
+    )
+    assert await db.work_orders.find_one(
+        {"maintenance_request_id": private.json()["id"]}
+    ) is None
+
+    # Standalone cost case → auto work order.
+    cc = await client.post(
+        "/api/v1/cost-cases",
+        json={"title": "Diwali lighting", "approvedBudget": 3000},
+        headers=manager_headers,
+    )
+    cc_id = cc.json()["id"]
+    auto_wo = await db.work_orders.find_one({"cost_case_id": cc_id})
+    assert auto_wo is not None and auto_wo["estimate"] == 3000
+
+    # Deleting an EMPTY case cascades to its money-less work order.
+    deleted = await client.delete(
+        f"/api/v1/cost-cases/{cc_id}", headers=manager_headers
+    )
+    assert deleted.status_code == 204
+    assert await db.work_orders.find_one({"id": auto_wo["id"]}) is None
+
+    # A case holding money refuses deletion.
+    case2_id, wo2_id = await _create_case_with_wo(client, manager_headers)
+    await client.post(
+        f"/api/v1/cost-cases/{case2_id}/assessments",
+        json={"period": "Oct 2027", "dueDate": "2027-10-10",
+              "allocations": [{"apartmentId": "apt-101", "amount": 100}]},
+        headers=manager_headers,
+    )
+    blocked = await client.delete(
+        f"/api/v1/cost-cases/{case2_id}", headers=manager_headers
+    )
+    assert blocked.status_code == 409

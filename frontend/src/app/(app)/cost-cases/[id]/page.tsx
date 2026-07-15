@@ -139,9 +139,17 @@ function AssessDialog({
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <label className="text-xs font-medium text-slate-600">Allocation per apartment</label>
-            <button type="button" onClick={splitEqually} className="text-xs font-medium text-brand-600 hover:text-brand-700">
-              Split equally
-            </button>
+            <span className="flex gap-3">
+              <button type="button" onClick={() => setRows(rows.map((r) => ({ ...r, included: true })))} className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                Select all
+              </button>
+              <button type="button" onClick={() => setRows(rows.map((r) => ({ ...r, included: false })))} className="text-xs font-medium text-slate-500 hover:text-slate-700">
+                Clear all
+              </button>
+              <button type="button" onClick={splitEqually} className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                Split equally
+              </button>
+            </span>
           </div>
           <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
             {rows.map((r, i) => (

@@ -363,6 +363,35 @@ export function InvoiceSheet({
         )}
 
         <div className="flex gap-2 pt-1">
+          {canWrite && (
+            <button
+              onClick={async () => {
+                const raw = prompt(
+                  `Correct the invoice amount?\n\nCurrent: ${formatINR(invoice.amount)} (paid so far ${formatINR(invoice.paidAmount)}). The status recomputes automatically.`,
+                  String(invoice.amount)
+                );
+                if (raw == null) return;
+                const amount = Number(raw);
+                if (!amount || amount <= 0 || amount === invoice.amount) return;
+                if (amount < invoice.paidAmount) {
+                  alert(`Cannot set below the ${formatINR(invoice.paidAmount)} already paid — reverse a payment first.`);
+                  return;
+                }
+                try {
+                  await api(`/invoices/${invoice.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ amount }),
+                  });
+                  onChanged();
+                } catch (err) {
+                  alert(err instanceof ApiError ? err.message : "Failed to update amount");
+                }
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Edit amount
+            </button>
+          )}
           {canWrite && balance > 0 && onRecordPayment && (
             <button
               onClick={() => {
