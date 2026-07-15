@@ -206,9 +206,36 @@ export default function WorkOrderDetailPage({
   const eventByStage = new Map(wo.timeline.map((e) => [e.stage, e]));
   const linkedExpenses = (expenses.data ?? []).filter((e) => e.workOrderId === wo.id);
   const linkedInvoices = (invoices.data ?? []).filter((i) => i.workOrderId === wo.id);
-  const spent = linkedExpenses.reduce((s, e) => s + e.amount, 0);
+  const posted = linkedExpenses.filter((e) => e.status !== "draft");
+  const draftBill = linkedExpenses.find((e) => e.status === "draft");
+  const spent = posted.reduce((s, e) => s + e.amount, 0);
   const billed = linkedInvoices.reduce((s, i) => s + i.amount, 0);
   const collected = linkedInvoices.reduce((s, i) => s + i.paidAmount, 0);
+
+  // One contextual primary money action, tracking the lifecycle:
+  // record the spend → post the vendor bill → bill owners → adjust to actual.
+  const nextMoneyAction = !canWrite
+    ? null
+    : draftBill
+      ? {
+          label: `Post vendor bill (${formatINR(draftBill.amount)})`,
+          run: async () => {
+            if (!confirm(`Post "${draftBill.description}" (${formatINR(draftBill.amount)}) to the books? It will count against the reserve.`)) return;
+            try {
+              await api(`/expenses/${draftBill.id}/post`, { method: "POST" });
+              expenses.reload();
+            } catch (err) {
+              alert(err instanceof ApiError ? err.message : "Failed to post");
+            }
+          },
+        }
+      : spent === 0
+        ? { label: "Record expense for this job", run: () => setExpenseOpen(true) }
+        : billed === 0
+          ? { label: "Bill owners for this job", href: `/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}` }
+          : billed !== spent
+            ? { label: "Adjust owner invoices to actual", href: `/cost-cases/${wo.costCaseId}` }
+            : null;
 
   return (
     <div className="space-y-5">
@@ -234,6 +261,23 @@ export default function WorkOrderDetailPage({
             >
               <ArrowRight className="h-4 w-4" /> Update stage
             </button>
+          )}
+          {nextMoneyAction && (
+            nextMoneyAction.href ? (
+              <Link
+                href={nextMoneyAction.href}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+              >
+                <ReceiptText className="h-4 w-4" /> {nextMoneyAction.label}
+              </Link>
+            ) : (
+              <button
+                onClick={nextMoneyAction.run}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+              >
+                <ReceiptText className="h-4 w-4" /> {nextMoneyAction.label}
+              </button>
+            )
           )}
           {role === "super_admin" && (
             <button
@@ -392,18 +436,38 @@ export default function WorkOrderDetailPage({
                     </p>
                   )}
                   <div className="mt-3 flex flex-col gap-1.5">
-                    <button
-                      onClick={() => setExpenseOpen(true)}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                    >
-                      <Wallet className="h-3.5 w-3.5" /> Record expense for this job
-                    </button>
-                    <Link
-                      href={`/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}`}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                    >
-                      <ReceiptText className="h-3.5 w-3.5" /> Bill owners for this job
-                    </Link>
+                    {nextMoneyAction &&
+                      (nextMoneyAction.href ? (
+                        <Link
+                          href={nextMoneyAction.href}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                        >
+                          <ReceiptText className="h-3.5 w-3.5" /> {nextMoneyAction.label}
+                        </Link>
+                      ) : (
+                        <button
+                          onClick={nextMoneyAction.run}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                        >
+                          <ReceiptText className="h-3.5 w-3.5" /> {nextMoneyAction.label}
+                        </button>
+                      ))}
+                    {spent > 0 && (
+                      <button
+                        onClick={() => setExpenseOpen(true)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50"
+                      >
+                        <Wallet className="h-3.5 w-3.5" /> Add another expense
+                      </button>
+                    )}
+                    {billed > 0 && (
+                      <Link
+                        href={`/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}`}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50"
+                      >
+                        <ReceiptText className="h-3.5 w-3.5" /> Bill more owners
+                      </Link>
+                    )}
                   </div>
                 </>
               )}
