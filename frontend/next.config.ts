@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: "/finance",
+        destination: "/expenses",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
