@@ -6,7 +6,7 @@ import { Globe, Lock, Plus, Wrench } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
-import type { MaintenanceRequest, User } from "@/lib/types";
+import type { MaintenanceRequest, User, WorkOrder } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { userName } from "@/lib/lookup";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
@@ -115,6 +115,7 @@ export default function MaintenancePage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const requests = useApi<MaintenanceRequest[]>("/maintenance-requests");
   const users = useApi<User[]>("/users");
+  const workOrders = useApi<WorkOrder[]>("/work-orders");
 
   if (requests.error)
     return <ErrorNote message={requests.error} onRetry={requests.reload} />;
@@ -181,35 +182,53 @@ export default function MaintenancePage() {
             <p className="mt-2 text-xs text-slate-400">
               {userName(users.data, r.createdBy)} · {formatDate(r.createdDate)}
             </p>
-            {canManage && (
-              <div className="mt-3 flex gap-1.5 border-t border-slate-100 pt-3 flex-wrap">
-                {r.status !== "Resolved" && (
-                  <Link
-                    href={`/work-orders?create=1&mr=${r.id}&title=${encodeURIComponent(r.title)}&desc=${encodeURIComponent(r.description)}`}
-                    className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-700"
-                  >
-                    <Wrench className="h-3 w-3" /> Create work order
-                  </Link>
-                )}
-                {STATUSES.filter((s) => s !== r.status).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setStatus(r.id, s)}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
-                  >
-                    Mark {s}
-                  </button>
-                ))}
-                {role === "super_admin" && (
-                  <button
-                    onClick={() => deleteRequest(r.id)}
-                    className="ml-auto rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 hover:border-red-300 hover:bg-red-100 hover:text-red-700"
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
-            )}
+            {(() => {
+              const openWo = (workOrders.data ?? []).find(
+                (w) => w.maintenanceRequestId === r.id && w.stage !== "Closed"
+              );
+              return (
+                <div className="mt-3 flex gap-1.5 border-t border-slate-100 pt-3 flex-wrap">
+                  {openWo ? (
+                    <Link
+                      href={`/work-orders/${openWo.id}`}
+                      className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+                    >
+                      <Wrench className="h-3 w-3" /> View work order ({openWo.stage})
+                    </Link>
+                  ) : (
+                    canManage && r.status !== "Resolved" && (
+                      <Link
+                        href={`/work-orders?create=1&mr=${r.id}&title=${encodeURIComponent(r.title)}&desc=${encodeURIComponent(r.description)}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-700"
+                      >
+                        <Wrench className="h-3 w-3" /> Create work order
+                      </Link>
+                    )
+                  )}
+                  {canManage && (
+                    <>
+                      {STATUSES.filter((s) => s !== r.status).map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setStatus(r.id, s)}
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+                        >
+                          Mark {s}
+                        </button>
+                      ))}
+                      {role === "super_admin" && (
+                        <button
+                          onClick={() => deleteRequest(r.id)}
+                          className="ml-auto rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 hover:border-red-300 hover:bg-red-100 hover:text-red-700"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
           </Card>
         ))}
         {requests.data.length === 0 && (

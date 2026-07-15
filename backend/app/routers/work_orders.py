@@ -63,6 +63,18 @@ async def create_work_order(
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, detail="Maintenance request not found"
             )
+        # One live job per request: a duplicate would split the money story.
+        # A follow-up work order is allowed once the previous one is closed.
+        existing = await db.work_orders.find_one(
+            {"maintenance_request_id": body.maintenance_request_id,
+             "community_id": user.community_id,
+             "stage": {"$ne": "Closed"}}
+        )
+        if existing:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=f"An open work order already exists for this request ({existing['title']}) — close it before creating another",
+            )
     if body.cost_case_id:
         cc = await db.cost_cases.find_one(
             {"id": body.cost_case_id, "community_id": user.community_id}

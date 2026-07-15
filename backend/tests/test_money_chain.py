@@ -159,9 +159,11 @@ async def test_collections_matched_via_work_order_link(client, manager_headers):
 
 
 async def test_chain_links_maintenance_to_work_order(client, manager_headers, owner_headers, db):
+    # Private request: no auto work order (privacy), manager triages manually.
     mr = await client.post(
         "/api/v1/maintenance-requests",
-        json={"title": "Bore well not working", "description": "No water on floor 3"},
+        json={"title": "Bore well not working", "description": "No water on floor 3",
+              "visibility": "private"},
         headers=owner_headers,
     )
     assert mr.status_code == 201
@@ -222,3 +224,35 @@ async def test_chain_links_expense_and_invoices_to_work_order(client, manager_he
     invoices = await client.get("/api/v1/invoices", headers=manager_headers)
     linked = [i for i in invoices.json() if i.get("workOrderId") == wo_id]
     assert len(linked) == 10
+
+
+async def test_no_duplicate_work_order_per_open_request(client, manager_headers, owner_headers, db):
+    mr = await client.post(
+        "/api/v1/maintenance-requests",
+        json={"title": "Lobby light flicker", "visibility": "community"},
+        headers=owner_headers,
+    )
+    mr_id = mr.json()["id"]
+    # Community request auto-created its work order already.
+    auto = await db.work_orders.find_one({"maintenance_request_id": mr_id})
+    assert auto is not None
+
+    dup = await client.post(
+        "/api/v1/work-orders",
+        json={"title": "Duplicate job", "maintenanceRequestId": mr_id},
+        headers=manager_headers,
+    )
+    assert dup.status_code == 409
+
+    # Once the existing job closes, a follow-up is allowed.
+    await client.post(
+        f"/api/v1/work-orders/{auto['id']}/stage",
+        json={"stage": "Closed", "note": "done"},
+        headers=manager_headers,
+    )
+    follow_up = await client.post(
+        "/api/v1/work-orders",
+        json={"title": "Follow-up job", "maintenanceRequestId": mr_id},
+        headers=manager_headers,
+    )
+    assert follow_up.status_code == 201
