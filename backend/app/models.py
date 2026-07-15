@@ -286,6 +286,9 @@ class Invoice(APIModel):
     line_items: list["InvoiceLineItem"] = []
     work_order_id: str | None = None  # money-chain link (cost recovery)
     cost_case_id: str | None = None  # money-chain link (assessment batch)
+    # Allocation weight before any adjust-to-actual run (keeps proportional
+    # re-adjustment stable/idempotent).
+    original_amount: float | None = None
 
 
 class InvoiceLineItem(APIModel):
@@ -325,6 +328,8 @@ class GenerateInvoicesRequest(APIModel):
     amount: float | None = None  # defaults to community.monthly_maintenance
     description: str = "Monthly Maintenance"
     apartment_ids: list[str] | None = None  # None = all apartments
+    # Per-apartment amounts (overrides amount/apartment_ids when given).
+    allocations: list["AssessmentAllocation"] | None = None
     work_order_id: str | None = None  # link cost-recovery invoices to the job
     cost_case_id: str | None = None  # link the assessment batch to its case
 
@@ -349,6 +354,8 @@ class Payment(APIModel):
     status: Literal["pending", "confirmed"] = "confirmed"
     reported_by: str | None = None
     ledger: Literal["community", "manager_fee", "reimbursement"] = "community"
+    # Set on Credit payments that settle a cost case's over-collection.
+    settles_cost_case_id: str | None = None
 
 
 class PaymentReport(APIModel):
@@ -358,6 +365,17 @@ class PaymentReport(APIModel):
     amount: float
     date: str
     method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
+    reference: str = ""
+
+
+class AllocatePaymentRequest(APIModel):
+    """One combined payment (e.g. a family paying for two flats at once)
+    allocated across specific invoices, oldest due first."""
+
+    invoice_ids: list[str]
+    amount: float
+    date: str
+    method: Literal["UPI", "Bank Transfer", "Cash", "Cheque", "Credit"]
     reference: str = ""
 
 
@@ -384,6 +402,10 @@ class Expense(APIModel):
     # draft = vendor bill under financial review (never touches the reserve
     # or any community total); posted = real spend in the books.
     status: Literal["draft", "posted"] = "posted"
+    # Ledger integrity: posted expenses are corrected by reversal, never
+    # edited/deleted. A reversal is a negative expense pointing back.
+    reversal_of: str | None = None
+    reversed_by: str | None = None
 
 
 class ExpenseCreate(APIModel):
@@ -437,6 +459,23 @@ class CostCaseCreate(APIModel):
 class CostCaseClose(APIModel):
     note: str = ""
     force: bool = False  # override the reconciliation guard (audited)
+
+
+class AssessmentAllocation(APIModel):
+    apartment_id: str
+    amount: float  # TOTAL for this apartment (split across installments)
+    installments: int = 1  # 1 = single invoice; N = monthly invoices
+
+
+class AssessmentRequest(APIModel):
+    """Owner assessment batch for a cost case — one invoice per allocation.
+    Allocations default to equal-split in the UI but every row is editable;
+    apartments already invoiced for this case+period are skipped."""
+
+    period: str
+    due_date: str
+    description: str = ""  # defaults to the case title
+    allocations: list[AssessmentAllocation]
 
 
 class ExpenseUpdate(APIModel):
@@ -656,6 +695,9 @@ class StageUpdate(APIModel):
     stage: WorkOrderStage
     note: str = ""
     final_cost: float | None = None
+    # Completed + final cost: post the vendor bill to the books AND adjust
+    # the owner assessments to the actual in the same action.
+    post_and_reconcile: bool = False
 
 
 class CommentCreate(APIModel):
@@ -839,6 +881,8 @@ NotificationStatus = Literal["pending", "processing", "sent", "failed", "cancell
 
 NotificationEventType = Literal[
     "invoice_created",
+    "invoice_adjusted",
+    "credit_applied",
     "payment_reminder",
     "payment_received",
     "common_expense_created",

@@ -7,12 +7,13 @@ import { ArrowLeft, ArrowRight, Camera, Check, ClipboardList, Phone, ReceiptText
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, apiBlob, ApiError, apiUpload } from "@/lib/api";
-import type { Expense, Invoice, User, Vendor, WorkOrder, WorkOrderStage } from "@/lib/types";
+import type { Apartment, Expense, Invoice, User, Vendor, WorkOrder, WorkOrderStage } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { userName, vendorFor } from "@/lib/lookup";
 import { priorityTone, stageTone } from "@/lib/tones";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { AddExpenseDialog } from "@/components/expenses";
+import { AssessDialog } from "@/components/AssessDialog";
 import {
   Avatar,
   Badge,
@@ -42,6 +43,7 @@ function StageDialog({
   );
   const [note, setNote] = useState("");
   const [finalCost, setFinalCost] = useState("");
+  const [reconcile, setReconcile] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +58,9 @@ function StageDialog({
           stage,
           note,
           ...(finalCost ? { finalCost: Number(finalCost) } : {}),
+          ...(stage === "Completed" && finalCost
+            ? { postAndReconcile: reconcile }
+            : {}),
         }),
       });
       onDone();
@@ -86,6 +91,23 @@ function StageDialog({
           <div>
             <label className={labelCls}>Final cost (optional)</label>
             <input type="number" min="0" className={inputCls} value={finalCost} onChange={(e) => setFinalCost(e.target.value)} />
+            {stage === "Completed" && finalCost && (
+              <label className="mt-2 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                <input
+                  type="checkbox"
+                  checked={reconcile}
+                  onChange={(e) => setReconcile(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600"
+                />
+                <span>
+                  <b>Post the ₹{Number(finalCost).toLocaleString("en-IN")} vendor bill to the books and
+                  adjust owner invoices now.</b>{" "}
+                  Shares recalculate to the actual cost, credits appear for
+                  anyone who overpaid, and owners are notified. Untick to
+                  leave it as a draft for review instead.
+                </span>
+              </label>
+            )}
           </div>
         )}
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
@@ -151,8 +173,10 @@ export default function WorkOrderDetailPage({
   // Money chain (manager view): expenses/invoices linked to this job.
   const expenses = useApi<Expense[]>(canWrite ? "/expenses" : null);
   const invoices = useApi<Invoice[]>(canWrite ? "/invoices" : null);
+  const apartments = useApi<Apartment[]>(canWrite ? "/apartments" : null);
   const [stageOpen, setStageOpen] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false);
+  const [assessOpen, setAssessOpen] = useState(false);
   const [comment, setComment] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -206,9 +230,58 @@ export default function WorkOrderDetailPage({
   const eventByStage = new Map(wo.timeline.map((e) => [e.stage, e]));
   const linkedExpenses = (expenses.data ?? []).filter((e) => e.workOrderId === wo.id);
   const linkedInvoices = (invoices.data ?? []).filter((i) => i.workOrderId === wo.id);
-  const spent = linkedExpenses.reduce((s, e) => s + e.amount, 0);
+  const posted = linkedExpenses.filter((e) => e.status !== "draft");
+  const draftBill = linkedExpenses.find((e) => e.status === "draft");
+  const spent = posted.reduce((s, e) => s + e.amount, 0);
   const billed = linkedInvoices.reduce((s, i) => s + i.amount, 0);
   const collected = linkedInvoices.reduce((s, i) => s + i.paidAmount, 0);
+
+  // One contextual primary money action, tracking the lifecycle:
+  // record the spend → post the vendor bill → bill owners → adjust to actual.
+  const nextMoneyAction = !canWrite
+    ? null
+    : draftBill
+      ? {
+          label: `Post vendor bill (${formatINR(draftBill.amount)})`,
+          run: async () => {
+            if (!confirm(`Post "${draftBill.description}" (${formatINR(draftBill.amount)}) to the books? It will count against the reserve.`)) return;
+            try {
+              await api(`/expenses/${draftBill.id}/post`, { method: "POST" });
+              expenses.reload();
+            } catch (err) {
+              alert(err instanceof ApiError ? err.message : "Failed to post");
+            }
+          },
+        }
+      : spent === 0
+        ? { label: "Record expense for this job", run: () => setExpenseOpen(true) }
+        : billed === 0
+          ? wo.costCaseId
+            ? { label: "Bill owners for this job", run: () => setAssessOpen(true) }
+            : { label: "Bill owners for this job", href: `/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}` }
+          : billed !== spent
+            ? {
+                label: "Adjust owner invoices to actual",
+                run: async () => {
+                  if (!confirm(
+                    `Adjust every owner invoice to the actual cost of ${formatINR(spent)}?\n\nBilled today: ${formatINR(billed)}. Shares recalculate proportionally; paid money is never reduced. Owners are notified of their change.`
+                  )) return;
+                  try {
+                    const r = await api<{ adjusted: number; surplusByApartment: Record<string, number> }>(
+                      `/cost-cases/${wo.costCaseId}/adjust-assessments`, { method: "POST" }
+                    );
+                    const surplus = Object.entries(r.surplusByApartment);
+                    alert(`${r.adjusted} invoice(s) adjusted.` + (surplus.length
+                      ? `\n\nOverpaid (apply credit from the cost case):\n` +
+                        surplus.map(([apt, v]) => `  Apt ${apt.replace("apt-", "")}: ${formatINR(v)}`).join("\n")
+                      : ""));
+                    invoices.reload();
+                  } catch (err) {
+                    alert(err instanceof ApiError ? err.message : "Adjustment failed");
+                  }
+                },
+              }
+            : null;
 
   return (
     <div className="space-y-5">
@@ -234,6 +307,23 @@ export default function WorkOrderDetailPage({
             >
               <ArrowRight className="h-4 w-4" /> Update stage
             </button>
+          )}
+          {nextMoneyAction && (
+            nextMoneyAction.href ? (
+              <Link
+                href={nextMoneyAction.href}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+              >
+                <ReceiptText className="h-4 w-4" /> {nextMoneyAction.label}
+              </Link>
+            ) : (
+              <button
+                onClick={nextMoneyAction.run}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+              >
+                <ReceiptText className="h-4 w-4" /> {nextMoneyAction.label}
+              </button>
+            )
           )}
           {role === "super_admin" && (
             <button
@@ -392,18 +482,53 @@ export default function WorkOrderDetailPage({
                     </p>
                   )}
                   <div className="mt-3 flex flex-col gap-1.5">
-                    <button
-                      onClick={() => setExpenseOpen(true)}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                    >
-                      <Wallet className="h-3.5 w-3.5" /> Record expense for this job
-                    </button>
-                    <Link
-                      href={`/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}`}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                    >
-                      <ReceiptText className="h-3.5 w-3.5" /> Bill owners for this job
-                    </Link>
+                    {nextMoneyAction &&
+                      (nextMoneyAction.href ? (
+                        <Link
+                          href={nextMoneyAction.href}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                        >
+                          <ReceiptText className="h-3.5 w-3.5" /> {nextMoneyAction.label}
+                        </Link>
+                      ) : (
+                        <button
+                          onClick={nextMoneyAction.run}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                        >
+                          <ReceiptText className="h-3.5 w-3.5" /> {nextMoneyAction.label}
+                        </button>
+                      ))}
+                    {/* Both paths stay visible — collect-first communities
+                        bill owners BEFORE any expense exists. The primary is
+                        a suggestion, never a gate. */}
+                    {nextMoneyAction?.label !== "Record expense for this job" && !draftBill && (
+                      <button
+                        onClick={() => setExpenseOpen(true)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+                      >
+                        <Wallet className="h-3.5 w-3.5" />
+                        {spent > 0 ? "Add another expense" : "Record expense for this job"}
+                      </button>
+                    )}
+                    {nextMoneyAction?.label !== "Bill owners for this job" && (
+                      wo.costCaseId ? (
+                        <button
+                          onClick={() => setAssessOpen(true)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                        >
+                          <ReceiptText className="h-3.5 w-3.5" />
+                          {billed > 0 ? "Bill more owners" : "Bill owners for this job"}
+                        </button>
+                      ) : (
+                        <Link
+                          href={`/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}`}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                        >
+                          <ReceiptText className="h-3.5 w-3.5" />
+                          {billed > 0 ? "Bill more owners" : "Bill owners for this job"}
+                        </Link>
+                      )
+                    )}
                   </div>
                 </>
               )}
@@ -499,6 +624,16 @@ export default function WorkOrderDetailPage({
       </div>
       {stageOpen && (
         <StageDialog wo={wo} onClose={() => setStageOpen(false)} onDone={workOrder.reload} />
+      )}
+      {assessOpen && wo.costCaseId && (
+        <AssessDialog
+          caseId={wo.costCaseId}
+          caseTitle={wo.title}
+          budget={wo.finalCost ?? wo.estimate ?? 0}
+          apartments={apartments.data ?? []}
+          onClose={() => setAssessOpen(false)}
+          onDone={() => invoices.reload()}
+        />
       )}
       {expenseOpen && (
         <AddExpenseDialog

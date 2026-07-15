@@ -67,23 +67,31 @@ Reconciliation.
 
 ## Phase 3 — Assessments & funding (next session)
 
-- [ ] Funding method on cost case (reserve / collect-first / pay-then-
+- [x] Funding method on cost case (reserve / collect-first / pay-then-
       collect / split / selected apartments / no recovery) driving the
-      assessment generator defaults
-- [ ] Per-apartment allocation editor (default equal across 10)
-- [ ] Installment plans (per-owner schedules), partial payments already
-      supported by invoice/payment model
-- [ ] Payment allocation across multiple invoices in one entry
-- [ ] Waivers/adjustments with approval (Credit method exists — link it)
+      assessment generator defaults — selected_apartments starts unticked;
+      reserve/no-recovery cases warn before billing owners
+- [x] Per-apartment allocation editor — Bill owners dialog on the case page: equal-split default of the approved budget, editable rows, tick apartments in/out, over/under-budget warning, idempotent POST /cost-cases/{id}/assessments (skips already-assessed apartments per period)
+- [x] Installment plans — per-apartment installment count (once/2x/3x/6x/12x) in the Bill owners dialog; N monthly invoices per apartment ("Jul 2026 - 2/3" periods, whole-rupee split, month-end clamping), idempotent; partial payments already supported
+- [x] Payment allocation across multiple invoices in one entry — Combined payment button on Invoices page: tick open invoices, live oldest-first preview, POST /payments/allocate
+- [x] Credit settlement — Apply to next invoice button on the case: records a linked Credit payment (settles_cost_case_id) on the apartment's oldest open invoice outside the case; badge flips to 'credit applied' when settled; partial/repeat application supported
+- [x] Waivers/adjustments — the existing Credit payment method covers waivers (counts toward paid, audited, reference note required by convention); available in Record Payment and Combined Payment dialogs. Formal approval workflow deferred to Phase 4 hardening if needed
 
 ## Phase 4 — Reports & hardening (next session)
 
-- [ ] Reports: open cost cases, WOs awaiting expense entry, collected
-      without posted expense, vendor bills awaiting posting, assessment
-      balances, surpluses/shortfalls
-- [ ] Expense edit-lock once posted (corrections via reversal expense)
-- [ ] Recurring-expense prompts (electricity/water/salary) → monthly cases
-- [ ] Full audit surfacing on the case timeline (who approved/posted)
+- [x] Reports — GET /reports/money-health + "Money health" section on the
+      Reports page: open cost cases (outstanding / reserve-funded shortfall /
+      surplus / no-expense-posted flags), completed jobs missing their
+      expense, draft vendor bills awaiting posting, outstanding assessments;
+      all rows deep-link to the case/work order
+- [x] Expense edit-lock once posted — amount/date/category frozen (409), delete refused; POST /expenses/{id}/reverse creates a negative offsetting entry (links preserved, pair nets to zero, reversal itself irreversible); financial edits on posted rows auto-correct (system posts reversal + corrected replacement in one step — pencil icon); trash = full cancellation via reversal; ledger badges reversed/reversal
+- [x] Recurring expenses — DESCOPED by design: monthly recurring spend
+      (electricity/water/watchman) is funded by monthly maintenance
+      collections and needs no cost case; cases are for special-purpose
+      drives. Revisit only if a recurring drive (e.g. tanker seasons)
+      proves otherwise
+- [x] Audit surfacing on the case timeline — expense entries show who
+      created/posted them (from audit_log)
 
 ## Migration & safety checklist
 

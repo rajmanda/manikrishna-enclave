@@ -63,6 +63,18 @@ async def create_work_order(
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, detail="Maintenance request not found"
             )
+        # One live job per request: a duplicate would split the money story.
+        # A follow-up work order is allowed once the previous one is closed.
+        existing = await db.work_orders.find_one(
+            {"maintenance_request_id": body.maintenance_request_id,
+             "community_id": user.community_id,
+             "stage": {"$ne": "Closed"}}
+        )
+        if existing:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=f"An open work order already exists for this request ({existing['title']}) — close it before creating another",
+            )
     if body.cost_case_id:
         cc = await db.cost_cases.find_one(
             {"id": body.cost_case_id, "community_id": user.community_id}
@@ -77,6 +89,24 @@ async def create_work_order(
         timeline=[{"stage": "Reported", "date": today, "note": f"Created by {user.name}"}],
         **body.model_dump(),
     )
+    if not wo.cost_case_id:
+        # Every job carries money implications — open its cost case with it
+        # so nothing needs manual linking later.
+        from app.models import CostCase
+
+        case = CostCase(
+            community_id=user.community_id,
+            title=body.title,
+            description="Opened automatically with the work order.",
+            approved_budget=body.estimate,
+            maintenance_request_id=body.maintenance_request_id,
+            created_by=user.id,
+            created_date=today,
+        )
+        await db.cost_cases.insert_one(case.model_dump())
+        await record_audit(db, user, "create", "cost_cases", case.id,
+                           {"auto": "work_order_created", "title": case.title})
+        wo.cost_case_id = case.id
     await db.work_orders.insert_one(wo.model_dump())
     if body.maintenance_request_id:
         # The request is being acted on — reflect that for its reporter.
@@ -142,15 +172,17 @@ async def change_stage(
     await record_audit(
         db, user, "update", "work_orders", work_order_id, {"stage": body.stage}
     )
-    # Completed job → a DRAFT vendor bill for financial review (never a
-    # posted expense: an estimate is not a spend). Idempotent — skipped
-    # when any expense already references this work order.
+    # Completed job → a vendor bill. Default: a DRAFT for financial review
+    # (an estimate is not a spend). With post_and_reconcile the manager is
+    # asserting the final cost is real: the bill posts to the books AND the
+    # owner assessments adjust to the actual — the whole loop in one action.
     if body.stage == "Completed":
-        existing = await db.expenses.find_one({"work_order_id": work_order_id})
-        if existing is None:
-            from app.models import Expense
+        from app.models import Expense
 
-            draft = Expense(
+        existing = await db.expenses.find_one({"work_order_id": work_order_id})
+        expense_id = None
+        if existing is None:
+            bill = Expense(
                 community_id=user.community_id,
                 category="Repairs",
                 description=wo["title"],
@@ -160,14 +192,34 @@ async def change_stage(
                 paid_date=date.today().isoformat(),
                 work_order_id=work_order_id,
                 cost_case_id=wo.get("cost_case_id"),
-                status="draft",
+                status="posted" if body.post_and_reconcile else "draft",
             )
-            await db.expenses.insert_one(draft.model_dump())
+            await db.expenses.insert_one(bill.model_dump())
+            expense_id = bill.id
             await record_audit(
-                db, user, "create", "expenses", draft.id,
-                {"status": "draft", "auto": "work_order_completed",
+                db, user, "create", "expenses", bill.id,
+                {"status": bill.status, "auto": "work_order_completed",
                  "work_order_id": work_order_id},
             )
+        elif body.post_and_reconcile and existing.get("status", "posted") == "draft":
+            # Re-completion with the flag posts the waiting draft.
+            amount = body.final_cost if body.final_cost is not None else existing["amount"]
+            await db.expenses.update_one(
+                {"id": existing["id"]},
+                {"$set": {"status": "posted", "amount": amount}},
+            )
+            expense_id = existing["id"]
+            await record_audit(db, user, "update", "expenses", existing["id"],
+                               {"status": "posted", "amount": amount})
+        if body.post_and_reconcile and wo.get("cost_case_id"):
+            case = await db.cost_cases.find_one({"id": wo["cost_case_id"]})
+            has_assessments = await db.invoices.count_documents(
+                {"cost_case_id": wo["cost_case_id"]}
+            )
+            if case and case.get("status") != "closed" and has_assessments:
+                from app.routers.cost_cases import perform_adjustment
+
+                await perform_adjustment(db, user, case)
     # PRD: owners are notified whenever a work-order status changes.
     await notify_members(
         db,
@@ -266,10 +318,22 @@ async def get_photo(
 async def delete_work_order(
     work_order_id: str, db: DB, user: CurrentUser
 ) -> None:
-    result = await db.work_orders.delete_one(
+    wo = await db.work_orders.find_one(
         {"id": work_order_id, "community_id": {"$in": owned_community_ids(user)}}
     )
-    if result.deleted_count == 0:
+    if wo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Work order not found")
+    await db.work_orders.delete_one({"id": work_order_id})
     await record_audit(db, user, "delete", "work_orders", work_order_id)
+    # Cascade: an auto-opened cost case with no money and no other job
+    # vanishes with its work order; anything holding money stays.
+    case_id = wo.get("cost_case_id")
+    if case_id:
+        other_wos = await db.work_orders.count_documents({"cost_case_id": case_id})
+        expenses = await db.expenses.count_documents({"cost_case_id": case_id})
+        invoices = await db.invoices.count_documents({"cost_case_id": case_id})
+        if other_wos == 0 and expenses == 0 and invoices == 0:
+            await db.cost_cases.delete_one({"id": case_id})
+            await record_audit(db, user, "delete", "cost_cases", case_id,
+                               {"cascade_from_work_order": work_order_id})
 

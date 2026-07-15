@@ -7,6 +7,7 @@ import {
   Bell,
   Building2,
   ChevronDown,
+  Database,
   LogOut,
   Menu,
   Search,
@@ -70,6 +71,49 @@ function DevAccountSwitcher() {
       </select>
       <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-slate-400" />
     </label>
+  );
+}
+
+function DevDbRefresher() {
+  const { role } = useSessionUser();
+  const [refreshing, setRefreshing] = useState(false);
+
+  if (role !== "super_admin") return null;
+
+  async function handleRefresh() {
+    const confirm = window.confirm(
+      "⚠️ WARNING: This will drop ALL collections in the local dev database and copy all live data from the production database ('communityhub').\n\n" +
+      "Note: Since your current user session will be overwritten, you may see an 'Internal Server Error' or get logged out when the process completes. This is expected.\n\n" +
+      "Are you sure you want to refresh the dev database?"
+    );
+    if (!confirm) return;
+
+    setRefreshing(true);
+    try {
+      await api("/dev/refresh-db", { method: "POST" });
+      alert("✅ Dev database refreshed successfully with production data!");
+      window.location.reload();
+    } catch (err) {
+      setRefreshing(false);
+      alert(
+        "⚠️ Notice: The refresh operation finished, but the server returned an error (e.g., 'Internal Server Error').\n\n" +
+        "This is expected because your active user session was overwritten/deleted during the sync.\n\n" +
+        "The page will now reload so you can log in with the new database state."
+      );
+      window.location.reload();
+    }
+  }
+
+  return (
+    <button
+      onClick={handleRefresh}
+      disabled={refreshing}
+      title="Refresh Dev DB with Prod Data"
+      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 focus:outline-none disabled:opacity-50 transition-all active:scale-[0.98]"
+    >
+      <Database className={`h-3.5 w-3.5 ${refreshing ? "animate-spin text-brand-600" : "text-slate-500"}`} />
+      <span>{refreshing ? "Refreshing..." : "Sync DB"}</span>
+    </button>
   );
 }
 
@@ -420,8 +464,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <ViewAsSwitcher />
             </div>
             {DEV_LOGIN_ENABLED && (
-              <div className="hidden sm:block">
+              <div className="hidden sm:flex sm:items-center sm:gap-2">
                 <DevAccountSwitcher />
+                <DevDbRefresher />
               </div>
             )}
 
@@ -465,7 +510,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="flex shrink-0 items-center gap-2">
               <MembershipSwitcher />
               <ViewAsSwitcher />
-              {DEV_LOGIN_ENABLED && <DevAccountSwitcher />}
+              {DEV_LOGIN_ENABLED && (
+                <>
+                  <DevAccountSwitcher />
+                  <DevDbRefresher />
+                </>
+              )}
             </span>
           </div>
         </header>

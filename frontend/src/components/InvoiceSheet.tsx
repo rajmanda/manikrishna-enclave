@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Banknote, Camera, Check, Download, Link2, Paperclip, Trash2, X } from "lucide-react";
 import { api, ApiError, downloadFile } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
-import type { Apartment, CommunityDocument, Invoice, Payment, User } from "@/lib/types";
+import type { Apartment, CommunityDocument, CostCaseDetail, Invoice, Payment, User } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
 import { invoiceTone } from "@/lib/tones";
@@ -47,6 +47,13 @@ export function InvoiceSheet({
   // Server already filters visibility: owners only get community docs plus
   // ones scoped to their apartments.
   const documents = useApi<CommunityDocument[]>("/documents");
+  // Credit from the job this invoice funds (over-collection after the
+  // actual cost posted) — owners see it here, not just on the cost case.
+  const costCase = useApi<CostCaseDetail>(
+    invoice.costCaseId ? `/cost-cases/${invoice.costCaseId}` : null
+  );
+  const credit = costCase.data?.credits?.[invoice.apartmentId] ?? 0;
+  const creditApplied = costCase.data?.creditsApplied?.[invoice.apartmentId] ?? 0;
   const receipts = (documents.data ?? []).filter((d) => d.invoiceId === invoice.id);
   const receiptFileRef = useRef<HTMLInputElement>(null);
   const receiptCameraRef = useRef<HTMLInputElement>(null);
@@ -152,6 +159,46 @@ export function InvoiceSheet({
           </div>
         </div>
 
+        {credit > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+            <p className="text-xs text-emerald-800">
+              <b>{formatINR(credit)} credit</b> — this apartment paid over its
+              share of &ldquo;{costCase.data?.title}&rdquo; (final cost came in lower).
+              {!canWrite && " It will be applied to your next invoice or refunded."}
+            </p>
+            {canWrite && (
+              <button
+                onClick={async () => {
+                  try {
+                    const r = await api<{ applied: number; remainingCredit: number }>(
+                      `/cost-cases/${invoice.costCaseId}/apply-credit`,
+                      { method: "POST", body: JSON.stringify({ apartmentId: invoice.apartmentId }) }
+                    );
+                    alert(`${formatINR(r.applied)} credited to their next open invoice.${r.remainingCredit > 0 ? ` ${formatINR(r.remainingCredit)} still to settle.` : ""}`);
+                    costCase.reload();
+                    onChanged();
+                  } catch (err) {
+                    if (err instanceof ApiError && err.message.includes("No unapplied credit")) {
+                      alert("This credit was already applied — refreshing the view.");
+                      costCase.reload();
+                      onChanged();
+                    } else {
+                      alert(err instanceof ApiError ? err.message : "Failed to apply credit");
+                    }
+                  }
+                }}
+                className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+              >
+                Apply to next invoice
+              </button>
+            )}
+          </div>
+        )}
+        {credit === 0 && creditApplied > 0 && (
+          <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+            {formatINR(creditApplied)} credit from &ldquo;{costCase.data?.title}&rdquo; applied ✓
+          </p>
+        )}
         {invoice.lineItems && invoice.lineItems.length > 0 && (
           <div className="rounded-xl border border-slate-200">
             {invoice.lineItems.map((it, i) => (
@@ -363,6 +410,35 @@ export function InvoiceSheet({
         )}
 
         <div className="flex gap-2 pt-1">
+          {canWrite && (
+            <button
+              onClick={async () => {
+                const raw = prompt(
+                  `Correct the invoice amount?\n\nCurrent: ${formatINR(invoice.amount)} (paid so far ${formatINR(invoice.paidAmount)}). The status recomputes automatically.`,
+                  String(invoice.amount)
+                );
+                if (raw == null) return;
+                const amount = Number(raw);
+                if (!amount || amount <= 0 || amount === invoice.amount) return;
+                if (amount < invoice.paidAmount) {
+                  alert(`Cannot set below the ${formatINR(invoice.paidAmount)} already paid — reverse a payment first.`);
+                  return;
+                }
+                try {
+                  await api(`/invoices/${invoice.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ amount }),
+                  });
+                  onChanged();
+                } catch (err) {
+                  alert(err instanceof ApiError ? err.message : "Failed to update amount");
+                }
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Edit amount
+            </button>
+          )}
           {canWrite && balance > 0 && onRecordPayment && (
             <button
               onClick={() => {

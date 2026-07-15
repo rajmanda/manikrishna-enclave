@@ -17,11 +17,15 @@ import {
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
-import type { CostCaseDetail, Vendor } from "@/lib/types";
+import type { Apartment, CostCaseDetail, Vendor } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber } from "@/lib/lookup";
 import { invoiceTone } from "@/lib/tones";
 import { AddExpenseDialog } from "@/components/expenses";
+import { AssessDialog } from "@/components/AssessDialog";
+import { ReceiptPicker } from "@/components/ReceiptPicker";
+import { uploadEach, uploadFileTo } from "@/lib/upload";
+import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { Badge, Card, ErrorNote, PageLoading } from "@/components/ui";
 
 const WRITER_ROLES = ["property_manager", "community_admin", "super_admin"];
@@ -44,7 +48,9 @@ export default function CostCaseDetailPage({
   const canWrite = WRITER_ROLES.includes(role);
   const detail = useApi<CostCaseDetail>(`/cost-cases/${id}`);
   const vendors = useApi<Vendor[]>("/vendors");
+  const apartments = useApi<Apartment[]>("/apartments");
   const [expenseOpen, setExpenseOpen] = useState(false);
+  const [assessOpen, setAssessOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
   if (detail.error) return <ErrorNote message={detail.error} onRetry={detail.reload} />;
@@ -168,6 +174,35 @@ export default function CostCaseDetailPage({
               post below to count them in the books.
             </p>
           )}
+          {canWrite && c.status !== "closed" && s.actualCost > 0 &&
+            s.billedToOwners > 0 && s.billedToOwners !== s.actualCost && (
+            <button
+              onClick={async () => {
+                if (!confirm(
+                  `Adjust every owner invoice to the actual cost of ${formatINR(s.actualCost)}?\n\nBilled today: ${formatINR(s.billedToOwners)}. Each apartment's share is recalculated proportionally; amounts already paid are never reduced (any excess shows as surplus for a credit/refund).`
+                )) return;
+                try {
+                  const r = await api<{ adjusted: number; deleted: number; surplusByApartment: Record<string, number> }>(
+                    `/cost-cases/${c.id}/adjust-assessments`, { method: "POST" }
+                  );
+                  const surplus = Object.entries(r.surplusByApartment);
+                  alert(
+                    `${r.adjusted} invoice(s) adjusted${r.deleted ? `, ${r.deleted} removed` : ""}.` +
+                    (surplus.length
+                      ? `\n\nOverpaid (credit on their next invoice or refund):\n` +
+                        surplus.map(([apt, v]) => `  Apt ${aptNumber(apt)}: ${formatINR(v)}`).join("\n")
+                      : "")
+                  );
+                  detail.reload();
+                } catch (err) {
+                  alert(err instanceof ApiError ? err.message : "Adjustment failed");
+                }
+              }}
+              className="mt-2 w-full rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-700"
+            >
+              Adjust owner invoices to actual ({formatINR(s.actualCost)})
+            </button>
+          )}
         </Card>
 
         {/* Timeline */}
@@ -239,28 +274,94 @@ export default function CostCaseDetailPage({
         <Card className="p-4">
           <h2 className="mb-3 flex items-center justify-between text-sm font-semibold">
             Owner assessments
-            <span className="text-xs font-normal text-slate-400">
-              {c.invoices.length} invoice{c.invoices.length === 1 ? "" : "s"}
+            <span className="flex items-center gap-2">
+              <span className="text-xs font-normal text-slate-400">
+                {c.invoices.length} invoice{c.invoices.length === 1 ? "" : "s"}
+              </span>
+              {canWrite && c.status !== "closed" && (
+                <button
+                  onClick={() => setAssessOpen(true)}
+                  className="rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-700"
+                >
+                  Bill owners
+                </button>
+              )}
             </span>
           </h2>
           <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+            {(Object.keys(c.credits ?? {}).length > 0 ||
+              Object.keys(c.creditsApplied ?? {}).length > 0) && (
+              <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                <p className="font-semibold">Credits (paid over their share)</p>
+                {Object.entries(c.credits ?? {}).map(([apt, v]) => (
+                  <p key={apt} className="mt-1 flex items-center justify-between gap-2">
+                    <span>Apt {aptNumber(apt)}: <b>{formatINR(v)}</b> to settle</span>
+                    {canWrite && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const r = await api<{ applied: number; remainingCredit: number }>(
+                              `/cost-cases/${c.id}/apply-credit`,
+                              { method: "POST", body: JSON.stringify({ apartmentId: apt }) }
+                            );
+                            alert(`${formatINR(r.applied)} credited to their next open invoice.${r.remainingCredit > 0 ? ` ${formatINR(r.remainingCredit)} still to settle.` : ""}`);
+                            detail.reload();
+                          } catch (err) {
+                            if (err instanceof ApiError && err.message.includes("No unapplied credit")) {
+                              alert("This credit was already applied — refreshing the view.");
+                              detail.reload();
+                            } else {
+                              alert(err instanceof ApiError ? err.message : "Failed to apply credit");
+                            }
+                          }
+                        }}
+                        className="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                      >
+                        Apply to next invoice
+                      </button>
+                    )}
+                  </p>
+                ))}
+                {Object.entries(c.creditsApplied ?? {})
+                  .filter(([apt]) => !(c.credits ?? {})[apt])
+                  .map(([apt, v]) => (
+                    <p key={apt} className="mt-1">
+                      Apt {aptNumber(apt)}: {formatINR(v)} <b>credit applied ✓</b>
+                    </p>
+                  ))}
+              </div>
+            )}
             {c.invoices.map((inv) => (
               <div key={inv.id} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs">
                 <ReceiptText className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                 <span className="min-w-0 flex-1 truncate">Apt {aptNumber(inv.apartmentId)} · {formatINR(inv.amount)}</span>
+                {(c.credits ?? {})[inv.apartmentId] != null && (
+                  <Badge tone="green">credit {formatINR((c.credits ?? {})[inv.apartmentId])}</Badge>
+                )}
                 <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
               </div>
             ))}
             {c.invoices.length === 0 && (
               <p className="py-3 text-center text-xs text-slate-400">
-                No assessments — generate them from the Invoices page with this
-                case&apos;s work order.
+                No assessments yet — tap <b>Bill owners</b> to allocate and
+                invoice the apartments.
               </p>
             )}
           </div>
         </Card>
       </div>
 
+      {assessOpen && (
+        <AssessDialog
+          caseId={c.id}
+          caseTitle={c.title}
+          budget={c.approvedBudget ?? 0}
+          fundingMethod={c.fundingMethod}
+          apartments={apartments.data ?? []}
+          onClose={() => setAssessOpen(false)}
+          onDone={detail.reload}
+        />
+      )}
       {expenseOpen && (
         <AddExpenseDialog
           vendors={vendors.data}

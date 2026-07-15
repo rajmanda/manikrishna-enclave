@@ -50,6 +50,38 @@ async def create_request(
     )
     await db.maintenance_requests.insert_one(request.model_dump())
     await record_audit(db, user, "create", "maintenance_requests", request.id)
+    # Automation: a community-visible request opens its work order (and the
+    # work order's cost case) immediately. Private requests do NOT — work
+    # orders are community-visible and would leak the complaint; the manager
+    # triages those via the "Create work order" action instead.
+    if request.visibility == "community":
+        from app.models import CostCase, WorkOrder
+
+        today = date.today().isoformat()
+        case = CostCase(
+            community_id=user.community_id,
+            title=request.title,
+            description="Opened automatically from the maintenance request.",
+            maintenance_request_id=request.id,
+            created_by=user.id,
+            created_date=today,
+        )
+        wo = WorkOrder(
+            community_id=user.community_id,
+            title=request.title,
+            description=request.description,
+            reported_date=today,
+            maintenance_request_id=request.id,
+            cost_case_id=case.id,
+            timeline=[{"stage": "Reported", "date": today,
+                       "note": f"Auto-created from maintenance request by {user.name}"}],
+        )
+        await db.cost_cases.insert_one(case.model_dump())
+        await db.work_orders.insert_one(wo.model_dump())
+        await record_audit(db, user, "create", "work_orders", wo.id,
+                           {"auto": "maintenance_request", "request_id": request.id})
+        await record_audit(db, user, "create", "cost_cases", case.id,
+                           {"auto": "maintenance_request"})
     # Tell the property manager(s) directly.
     managers = await db.users.find(
         {"community_id": user.community_id, "role": "property_manager"}

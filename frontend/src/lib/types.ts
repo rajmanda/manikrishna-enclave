@@ -150,6 +150,8 @@ export interface Expense {
   costCaseId?: string | null;
   // draft = vendor bill under financial review (not yet in the books)
   status?: "draft" | "posted";
+  reversalOf?: string | null;
+  reversedBy?: string | null;
 }
 
 export type WorkOrderStage =
@@ -250,6 +252,8 @@ export interface CostCaseDetail extends CostCase {
   invoices: Invoice[];
   payments: Payment[];
   timeline: { date: string; kind: string; label: string }[];
+  credits?: Record<string, number>;
+  creditsApplied?: Record<string, number>;
 }
 
 export interface MaintenanceRequest {
