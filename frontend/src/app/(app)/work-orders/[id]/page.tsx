@@ -483,7 +483,7 @@ export default function WorkOrderDetailPage({
                     {nextMoneyAction?.label !== "Record expense for this job" && !draftBill && (
                       <button
                         onClick={() => setExpenseOpen(true)}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5 text-xs font-semibold text-brand-700 hover:bg-brand-100"
                       >
                         <Wallet className="h-3.5 w-3.5" />
                         {spent > 0 ? "Add another expense" : "Record expense for this job"}
@@ -493,7 +493,7 @@ export default function WorkOrderDetailPage({
                       wo.costCaseId ? (
                         <button
                           onClick={() => setAssessOpen(true)}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
                         >
                           <ReceiptText className="h-3.5 w-3.5" />
                           {billed > 0 ? "Bill more owners" : "Bill owners for this job"}
@@ -501,7 +501,7 @@ export default function WorkOrderDetailPage({
                       ) : (
                         <Link
                           href={`/invoices?dialog=generate&wo=${wo.id}&desc=${encodeURIComponent(wo.title)}`}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
                         >
                           <ReceiptText className="h-3.5 w-3.5" />
                           {billed > 0 ? "Bill more owners" : "Bill owners for this job"}
