@@ -43,6 +43,7 @@ function StageDialog({
   );
   const [note, setNote] = useState("");
   const [finalCost, setFinalCost] = useState("");
+  const [reconcile, setReconcile] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +58,9 @@ function StageDialog({
           stage,
           note,
           ...(finalCost ? { finalCost: Number(finalCost) } : {}),
+          ...(stage === "Completed" && finalCost
+            ? { postAndReconcile: reconcile }
+            : {}),
         }),
       });
       onDone();
@@ -87,6 +91,23 @@ function StageDialog({
           <div>
             <label className={labelCls}>Final cost (optional)</label>
             <input type="number" min="0" className={inputCls} value={finalCost} onChange={(e) => setFinalCost(e.target.value)} />
+            {stage === "Completed" && finalCost && (
+              <label className="mt-2 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                <input
+                  type="checkbox"
+                  checked={reconcile}
+                  onChange={(e) => setReconcile(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600"
+                />
+                <span>
+                  <b>Post the ₹{Number(finalCost).toLocaleString("en-IN")} vendor bill to the books and
+                  adjust owner invoices now.</b>{" "}
+                  Shares recalculate to the actual cost, credits appear for
+                  anyone who overpaid, and owners are notified. Untick to
+                  leave it as a draft for review instead.
+                </span>
+              </label>
+            )}
           </div>
         )}
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}

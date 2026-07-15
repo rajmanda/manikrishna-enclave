@@ -172,15 +172,17 @@ async def change_stage(
     await record_audit(
         db, user, "update", "work_orders", work_order_id, {"stage": body.stage}
     )
-    # Completed job → a DRAFT vendor bill for financial review (never a
-    # posted expense: an estimate is not a spend). Idempotent — skipped
-    # when any expense already references this work order.
+    # Completed job → a vendor bill. Default: a DRAFT for financial review
+    # (an estimate is not a spend). With post_and_reconcile the manager is
+    # asserting the final cost is real: the bill posts to the books AND the
+    # owner assessments adjust to the actual — the whole loop in one action.
     if body.stage == "Completed":
-        existing = await db.expenses.find_one({"work_order_id": work_order_id})
-        if existing is None:
-            from app.models import Expense
+        from app.models import Expense
 
-            draft = Expense(
+        existing = await db.expenses.find_one({"work_order_id": work_order_id})
+        expense_id = None
+        if existing is None:
+            bill = Expense(
                 community_id=user.community_id,
                 category="Repairs",
                 description=wo["title"],
@@ -190,14 +192,34 @@ async def change_stage(
                 paid_date=date.today().isoformat(),
                 work_order_id=work_order_id,
                 cost_case_id=wo.get("cost_case_id"),
-                status="draft",
+                status="posted" if body.post_and_reconcile else "draft",
             )
-            await db.expenses.insert_one(draft.model_dump())
+            await db.expenses.insert_one(bill.model_dump())
+            expense_id = bill.id
             await record_audit(
-                db, user, "create", "expenses", draft.id,
-                {"status": "draft", "auto": "work_order_completed",
+                db, user, "create", "expenses", bill.id,
+                {"status": bill.status, "auto": "work_order_completed",
                  "work_order_id": work_order_id},
             )
+        elif body.post_and_reconcile and existing.get("status", "posted") == "draft":
+            # Re-completion with the flag posts the waiting draft.
+            amount = body.final_cost if body.final_cost is not None else existing["amount"]
+            await db.expenses.update_one(
+                {"id": existing["id"]},
+                {"$set": {"status": "posted", "amount": amount}},
+            )
+            expense_id = existing["id"]
+            await record_audit(db, user, "update", "expenses", existing["id"],
+                               {"status": "posted", "amount": amount})
+        if body.post_and_reconcile and wo.get("cost_case_id"):
+            case = await db.cost_cases.find_one({"id": wo["cost_case_id"]})
+            has_assessments = await db.invoices.count_documents(
+                {"cost_case_id": wo["cost_case_id"]}
+            )
+            if case and case.get("status") != "closed" and has_assessments:
+                from app.routers.cost_cases import perform_adjustment
+
+                await perform_adjustment(db, user, case)
     # PRD: owners are notified whenever a work-order status changes.
     await notify_members(
         db,

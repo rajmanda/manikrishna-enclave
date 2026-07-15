@@ -447,8 +447,6 @@ async def adjust_assessments_to_actual(
     already received (the excess surfaces as per-apartment surplus for a
     credit/refund). Unpaid zero-remainder invoices are removed. Idempotent.
     """
-    from app.routers.invoices import compute_status
-
     case = await db.cost_cases.find_one(
         {"id": case_id, "community_id": user.community_id}
     )
@@ -456,6 +454,14 @@ async def adjust_assessments_to_actual(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cost case not found")
     if case.get("status") == "closed":
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Cost case is closed")
+    return await perform_adjustment(db, user, case)
+
+
+async def perform_adjustment(db: Any, user: Any, case: dict) -> dict:
+    """Core adjust-to-actual (shared with work-order completion)."""
+    from app.routers.invoices import compute_status
+
+    case_id = case["id"]
     _, expenses, invoices, _ = await _children(db, case_id)
     actual = sum(
         e["amount"] for e in expenses if e.get("status", "posted") == "posted"

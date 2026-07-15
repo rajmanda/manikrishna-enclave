@@ -578,3 +578,60 @@ async def test_adjust_upward_reopens_paid_invoice(client, manager_headers, db):
         {"event_type": "invoice_adjusted"}
     ).to_list(100)
     assert notes and all("increased by Rs 500" in n["message"] for n in notes)
+
+
+async def test_complete_with_post_and_reconcile(client, manager_headers, db):
+    """Raj's parking scenario: estimate 9000 billed to 10 flats (900 each),
+    401 paid 700 partial, 402 paid in full. Completing at 8000 with
+    post_and_reconcile posts the bill AND fixes every invoice + credits."""
+    wo = await client.post(
+        "/api/v1/work-orders",
+        json={"title": "Parking space improvement", "estimate": 9000},
+        headers=manager_headers,
+    )
+    wo_id, case_id = wo.json()["id"], wo.json()["costCaseId"]
+    apts = (await client.get("/api/v1/apartments", headers=manager_headers)).json()
+    await client.post(
+        f"/api/v1/cost-cases/{case_id}/assessments",
+        json={"period": "May 2028", "dueDate": "2028-05-10",
+              "allocations": [{"apartmentId": a["id"], "amount": 900} for a in apts]},
+        headers=manager_headers,
+    )
+    invs = (await client.get("/api/v1/invoices", headers=manager_headers)).json()
+    by_apt = {i["apartmentId"]: i for i in invs if i.get("costCaseId") == case_id}
+    await client.post(
+        "/api/v1/payments",
+        json={"invoiceId": by_apt["apt-401"]["id"], "amount": 700,
+              "date": "2028-05-01", "method": "UPI", "reference": ""},
+        headers=manager_headers,
+    )
+    await client.post(
+        "/api/v1/payments",
+        json={"invoiceId": by_apt["apt-402"]["id"], "amount": 900,
+              "date": "2028-05-01", "method": "UPI", "reference": ""},
+        headers=manager_headers,
+    )
+
+    done = await client.post(
+        f"/api/v1/work-orders/{wo_id}/stage",
+        json={"stage": "Completed", "note": "done", "finalCost": 8000,
+              "postAndReconcile": True},
+        headers=manager_headers,
+    )
+    assert done.status_code == 200
+
+    detail = (
+        await client.get(f"/api/v1/cost-cases/{case_id}", headers=manager_headers)
+    ).json()
+    s = detail["summary"]
+    # Bill posted straight to the books (no draft limbo).
+    assert s["actualCost"] == 8000 and s["draftBills"] == 0
+    rows = {i["apartmentId"]: i for i in detail["invoices"]}
+    # Each share adjusted 900 → 800.
+    assert rows["apt-101"]["amount"] == 800 and rows["apt-101"]["status"] == "due"
+    # 401's partial 700 stands against the new 800 → 100 due.
+    assert rows["apt-401"]["amount"] == 800 and rows["apt-401"]["paidAmount"] == 700
+    assert rows["apt-401"]["status"] == "partial"
+    # 402 paid 900 for an 800 share → invoice floors at 900, credit 100 shown.
+    assert rows["apt-402"]["amount"] == 900 and rows["apt-402"]["status"] == "paid"
+    assert detail["credits"] == {"apt-402": 100}

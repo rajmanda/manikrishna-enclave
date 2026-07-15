@@ -695,6 +695,9 @@ class StageUpdate(APIModel):
     stage: WorkOrderStage
     note: str = ""
     final_cost: float | None = None
+    # Completed + final cost: post the vendor bill to the books AND adjust
+    # the owner assessments to the actual in the same action.
+    post_and_reconcile: bool = False
 
 
 class CommentCreate(APIModel):
