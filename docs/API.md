@@ -112,7 +112,7 @@ cross-tenant, 409 conflict).
 | POST | `/work-orders` | manager/admin | Creates at Reported with initial timeline; notifies members |
 | PATCH | `/work-orders/{id}` | manager/admin | title/desc/priority/vendor/assignee/costs |
 | POST | `/work-orders/{id}/stage` | manager/admin | Appends timeline event, optional finalCost; **notifies all members (PRD)** |
-| POST | `/work-orders/{id}/comments` | any member (not auditor/vendor) | Owner comments |
+| POST | `/work-orders/{id}/comments` | owner/manager/admin (not tenant/auditor/vendor) | Owner comments |
 | POST | `/work-orders/{id}/photos` | manager/admin | Multipart → GCS; GET `/photos/{index}` streams (any member) |
 | GET/POST | `/maintenance-requests` | members | Private requests visible only to creator + managers; creation notifies managers |
 | PATCH | `/maintenance-requests/{id}/status` | manager/admin | Notifies the creator |
@@ -123,6 +123,24 @@ cross-tenant, 409 conflict).
 | DELETE | `/feed/{id}` | author or manager/admin | |
 | GET | `/notifications` | own | Latest 50 |
 | POST | `/notifications/read-all` · `/notifications/{id}/read` | own | |
+
+## Direct messages (resident ↔ manager)
+
+One thread per resident (keyed on the resident's user id). Tenants' ONLY
+communication surface besides maintenance requests.
+
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | `/messages` | owner/tenant: own thread · manager/auditor: `?threadUserId=` | Oldest first; fetching marks the counterparty's messages read (not for auditors) |
+| GET | `/messages/threads` | manager/admin/auditor | Inbox rows: resident, apartment, last message, unread count |
+| POST | `/messages` | owner/tenant (own thread) · manager/admin (`threadUserId` required) | Notifies recipient in-app + enqueues WhatsApp (`direct_message`) when they have a phone |
+
+**Tenant access rule:** the `tenant` role gets 403 on ALL money reads —
+invoices, payments, expenses, reserve fund, finance summary/monthly,
+cost cases, work orders, statements/CSV, owner dashboard — and money
+categories are excluded from `/search`. Enforced server-side via
+`FINANCE_READ_ROLES` (see `app/models.py`); owners keep the transparency
+reads.
 
 ## Manager service fees (private ledger)
 

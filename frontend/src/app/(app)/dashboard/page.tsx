@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
@@ -1254,9 +1255,19 @@ function SetupNudge() {
   );
 }
 
+function TenantRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/maintenance");
+  }, [router]);
+  return <PageLoading />;
+}
+
 export default function DashboardPage() {
   const { role } = useSessionUser();
-  if (role === "owner" || role === "tenant") return <OwnerDashboard />;
+  // Tenants get the lite experience — no money dashboard.
+  if (role === "tenant") return <TenantRedirect />;
+  if (role === "owner") return <OwnerDashboard />;
   return (
     <>
       {role !== "auditor" && <SetupNudge />}

@@ -26,6 +26,8 @@ Status legend: ✅ live end-to-end · 🟡 UI on seed data (backend pending) ·
 | Community feed (posts/reactions/comments/pin) | ✅ | M3 |
 | Polls & voting (one vote/apartment, results, close) | ✅ | M4 |
 | Maintenance requests (private/community, status flow) | ✅ | M3 |
+| Direct messages (resident ↔ manager, WhatsApp fan-out) | ✅ | One thread per resident; manager inbox with unread counts |
+| Tenant lite experience (no money data server-side) | ✅ | Tenants see Maintenance + Messages only; 403 on all finance reads |
 | Documents (versioned GCS uploads, search) | ✅ | M4 |
 | Meeting minutes (CRUD + PDF upload) | ✅ | M4 |
 | In-app notifications (live bell, read state) | ✅ | M3; email/push 📋 (needs provider decision) |

@@ -317,8 +317,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false);
 
   const items = visibleNavItems(role);
-  const primary = items.filter((i) => mobilePrimary.includes(i.href));
-  const secondary = items.filter((i) => !mobilePrimary.includes(i.href));
+  // Tenants' lite nav has none of the default primary tabs — promote their
+  // first items to the bottom bar instead.
+  let primary = items.filter((i) => mobilePrimary.includes(i.href));
+  if (primary.length === 0) primary = items.slice(0, 4);
+  const secondary = items.filter((i) => !primary.includes(i));
   const notifications = useApi<Notification[]>("/notifications");
   const communities = useApi<Community[]>("/communities");
   const badges = useApi<NavBadges>("/dashboard/badges");
@@ -527,7 +530,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile bottom navigation */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-flow-col auto-cols-fr">
           {primary.map(({ label, href, icon: Icon }) => (
             <Link
               key={href}

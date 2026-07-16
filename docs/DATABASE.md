@@ -70,7 +70,7 @@ WhatsApp/email/in-app delivery via OpenClaw agent.
 | recipient_name | string | Display name |
 | recipient_phone | string? | WhatsApp number |
 | channel | string | `whatsapp` \| `email` \| `in_app` |
-| event_type | string | `invoice_created` \| `payment_reminder` \| `payment_received` \| `common_expense_created` \| `work_order_created` \| `work_order_status_updated` \| `owner_approval_required` \| `announcement_posted` |
+| event_type | string | `invoice_created` \| `payment_reminder` \| `payment_received` \| `common_expense_created` \| `work_order_created` \| `work_order_status_updated` \| `owner_approval_required` \| `announcement_posted` \| `direct_message` |
 | title | string | Short title |
 | message | string | Full message body |
 | payload | dict | Event-specific structured data |
@@ -84,6 +84,11 @@ WhatsApp/email/in-app delivery via OpenClaw agent.
 | error_message | string? | Last error |
 | created_at | ISO | Record creation |
 | updated_at | ISO | Last modification |
+
+`messages` — direct messages, one thread per resident with the property
+manager(s): id (`msg-<hex>`), community_id, thread_user_id (the resident's
+user id — the thread key), sender_id, sender_name, sender_role, text, date
+(ISO datetime), read (marked when the counterparty fetches the thread).
 
 ## Indexes (`app/db.py::ensure_indexes`, created at startup)
 

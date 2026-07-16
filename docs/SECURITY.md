@@ -24,8 +24,17 @@ Last updated: 2026-07-03
 - Tenant isolation: `scoped_community_id` pins every query to the caller's
   community; cross-tenant reads return 404 (existence not leaked). Covered by
   tests (`test_apartments.py`, `test_finance.py`).
-- Data-level scoping: owners/tenants receive only their own apartment's
+- Data-level scoping: owners receive only their own apartment's
   invoices/payments.
+- Tenant lite experience: the `tenant` role is blocked (403) from every
+  money read — invoices, payments, expenses, reserve fund, finance
+  summary/monthly, cost cases, work orders, statements, owner dashboard —
+  and money categories are excluded from global search. Tenants keep
+  maintenance requests and direct messages only (`FINANCE_READ_ROLES` in
+  `app/models.py`; covered by `test_tenant_access.py`).
+- Direct messages: residents can read/write only their own thread;
+  the manager inbox (`/messages/threads`) requires manager/admin/auditor.
+  Auditors may read but never send.
 
 ## Audit
 

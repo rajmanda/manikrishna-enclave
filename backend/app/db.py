@@ -59,6 +59,8 @@ async def ensure_indexes(db: Any) -> None:
     await db.expenses.create_index("community_id")
     await db.work_orders.create_index("community_id")
     await db.audit_log.create_index([("community_id", 1), ("timestamp", -1)])
+    # Direct messages — thread fetch is always (community, resident).
+    await db.messages.create_index([("community_id", 1), ("thread_user_id", 1)])
     # Notification queue — polling by status/channel, listing by community.
     await db.notification_queue.create_index(
         [("status", 1), ("channel", 1), ("scheduled_at", 1)]

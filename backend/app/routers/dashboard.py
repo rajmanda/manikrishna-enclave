@@ -4,9 +4,9 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.core.security import CurrentUser
+from app.core.security import CurrentUser, require_roles
 from app.db import get_db
-from app.models import ManagerDashboard, NavBadges, OwnerDashboard
+from app.models import FINANCE_READ_ROLES, ManagerDashboard, NavBadges, OwnerDashboard
 from app.routers.finance import live_reserve
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -55,7 +55,11 @@ async def nav_badges(db: DB, user: CurrentUser) -> NavBadges:
     )
 
 
-@router.get("/owner", response_model=OwnerDashboard)
+@router.get(
+    "/owner",
+    response_model=OwnerDashboard,
+    dependencies=[Depends(require_roles(*FINANCE_READ_ROLES))],
+)
 async def owner_dashboard(db: DB, user: CurrentUser) -> OwnerDashboard:
     if not user.apartment_ids and not user.apartment_id:
         raise HTTPException(

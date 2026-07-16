@@ -5,6 +5,21 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Tenant lite experience + direct messages (2026-07-15)** — tenants now
+  see only Maintenance and Messages; every money surface (invoices,
+  payments, expenses, reserve fund, finance summary/monthly, cost cases,
+  work orders, statements/CSV, owner dashboard, search money categories)
+  returns 403 for the `tenant` role, enforced server-side via
+  `FINANCE_READ_ROLES` (owners keep the transparency reads). New
+  `messages` collection + `/messages` API: one thread per resident with
+  the property manager(s); each message notifies the counterparty in-app
+  and enqueues a WhatsApp `direct_message` (OpenClaw) when they have a
+  phone. UI: chat-style Messages page (resident: single conversation;
+  manager: inbox with unread counts + start-conversation picker),
+  tenant nav trimmed to Maintenance + Messages, `/dashboard` redirects
+  tenants to `/maintenance`, mobile bottom bar falls back to the lite
+  items. 22 new tests (203 total); smoke-tested against Atlas dev.
+
 - **Cost Cases (Phase 1+2)** — one entity per complete financial event
   connecting Maintenance Request → Work Order → Vendor Bill/Expense →
   Owner Assessments → Payments → Reconciliation (plan:

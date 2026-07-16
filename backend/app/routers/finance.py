@@ -1,10 +1,11 @@
 """Read endpoints for the financial module (Phase 1: read-only).
 
 Scoping rules:
-- owners/tenants see invoices and payments for their own apartment only;
+- owners see invoices and payments for their own apartment only;
 - managers, community admins and auditors see everything in their community;
 - expenses, reserve fund, monthly finance and the community summary are
-  visible to every member (PRD transparency requirement).
+  visible to every owner (PRD transparency requirement);
+- tenants see NO money data at all (lite experience: maintenance + messages).
 """
 
 import asyncio
@@ -19,6 +20,7 @@ from app.audit import record_audit
 from app.core.security import CurrentUser, require_roles
 from app.db import get_db
 from app.models import (
+    FINANCE_READ_ROLES,
     WRITE_ROLES,
     CommunitySummary,
     Expense,
@@ -38,6 +40,7 @@ router = APIRouter(tags=["finance"])
 
 DB = Annotated[Any, Depends(get_db)]
 Writer = Depends(require_roles(*WRITE_ROLES))
+FinanceReader = Depends(require_roles(*FINANCE_READ_ROLES))
 
 MEMBER_SCOPED_ROLES = ("owner", "tenant")
 
@@ -56,19 +59,19 @@ def _apartment_scope(user: User) -> dict:
     return query
 
 
-@router.get("/invoices", response_model=list[Invoice])
+@router.get("/invoices", response_model=list[Invoice], dependencies=[FinanceReader])
 async def list_invoices(db: DB, user: CurrentUser) -> list[Invoice]:
     docs = await db.invoices.find(_apartment_scope(user)).to_list(length=10000)
     return [Invoice.model_validate(d) for d in docs]
 
 
-@router.get("/payments", response_model=list[Payment])
+@router.get("/payments", response_model=list[Payment], dependencies=[FinanceReader])
 async def list_payments(db: DB, user: CurrentUser) -> list[Payment]:
     docs = await db.payments.find(_apartment_scope(user)).to_list(length=10000)
     return [Payment.model_validate(d) for d in docs]
 
 
-@router.get("/expenses", response_model=list[Expense])
+@router.get("/expenses", response_model=list[Expense], dependencies=[FinanceReader])
 async def list_expenses(db: DB, user: CurrentUser) -> list[Expense]:
     docs = await db.expenses.find({"community_id": user.community_id}).to_list(
         length=10000
@@ -150,7 +153,9 @@ async def live_reserve(db: Any, community_id: str) -> tuple[float, list[dict]]:
     return balance, derived
 
 
-@router.get("/reserve-fund", response_model=list[ReserveFundEntry])
+@router.get(
+    "/reserve-fund", response_model=list[ReserveFundEntry], dependencies=[FinanceReader]
+)
 async def reserve_fund(db: DB, user: CurrentUser) -> list[ReserveFundEntry]:
     docs = await db.reserve_fund.find({"community_id": user.community_id}).to_list(
         length=1000
@@ -159,7 +164,7 @@ async def reserve_fund(db: DB, user: CurrentUser) -> list[ReserveFundEntry]:
     return [ReserveFundEntry.model_validate(d) for d in [*docs, *derived]]
 
 
-@router.get("/reserve-fund/reconciliation")
+@router.get("/reserve-fund/reconciliation", dependencies=[FinanceReader])
 async def reserve_reconciliation(db: DB, user: CurrentUser) -> dict:
     """Sanity check on the latest reserve anchor: compares money actually
     recorded for the anchor month (confirmed community payments, expenses)
@@ -288,7 +293,9 @@ MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
-@router.get("/finance/monthly", response_model=list[MonthlyFinance])
+@router.get(
+    "/finance/monthly", response_model=list[MonthlyFinance], dependencies=[FinanceReader]
+)
 async def monthly_finance(db: DB, user: CurrentUser) -> list[MonthlyFinance]:
     """Computed from real payments/expenses/invoices, last 6 months.
     Collection rate = paid/billed for invoices due in that month."""
@@ -330,7 +337,9 @@ async def monthly_finance(db: DB, user: CurrentUser) -> list[MonthlyFinance]:
     return out
 
 
-@router.get("/finance/summary", response_model=CommunitySummary)
+@router.get(
+    "/finance/summary", response_model=CommunitySummary, dependencies=[FinanceReader]
+)
 async def community_summary(db: DB, user: CurrentUser) -> CommunitySummary:
     """Computed from real data — current calendar month."""
     cid = user.community_id
@@ -580,9 +589,9 @@ async def upload_receipt(
     return Expense.model_validate(result)
 
 
-@router.get("/expenses/{expense_id}/receipt")
+@router.get("/expenses/{expense_id}/receipt", dependencies=[FinanceReader])
 async def download_receipt(expense_id: str, db: DB, user: CurrentUser) -> Response:
-    # Receipts are community-transparent, like the expenses themselves.
+    # Receipts are owner-transparent, like the expenses themselves.
     expense = await db.expenses.find_one(
         {"id": expense_id, "community_id": user.community_id}
     )

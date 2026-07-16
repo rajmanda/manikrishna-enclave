@@ -25,6 +25,7 @@ from app.routers import (
     maintenance,
     manager_fees,
     meetings,
+    messages,
     notification_queue,
     notifications,
     openclaw,
@@ -94,6 +95,7 @@ app.include_router(statements.router, prefix=API_PREFIX)
 app.include_router(maintenance.router, prefix=API_PREFIX)
 app.include_router(manager_fees.router, prefix=API_PREFIX)
 app.include_router(feed.router, prefix=API_PREFIX)
+app.include_router(messages.router, prefix=API_PREFIX)
 app.include_router(notifications.router, prefix=API_PREFIX)
 app.include_router(polls.router, prefix=API_PREFIX)
 app.include_router(documents.router, prefix=API_PREFIX)

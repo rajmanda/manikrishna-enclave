@@ -5,6 +5,7 @@ import {
   FileText,
   LayoutDashboard,
   MessageSquare,
+  MessagesSquare,
   PiggyBank,
   Receipt,
   Store,
@@ -33,21 +34,33 @@ export interface NavItem {
   roles?: Role[]; // undefined = visible to all roles
 }
 
+// Tenants get the lite experience — Maintenance + Messages only. Everything
+// else (money, work orders, governance) is owner/staff territory; the
+// backend enforces the same split server-side.
+const FULL: Role[] = [
+  "property_manager",
+  "community_admin",
+  "auditor",
+  "super_admin",
+  "owner",
+];
+
 export const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, group: "Overview" },
-  { label: "Community", href: "/community", icon: Building2, group: "Overview" },
-  { label: "Feed", href: "/feed", icon: MessageSquare, group: "Overview" },
-  { label: "Invoices", href: "/invoices", icon: Receipt, group: "Money" },
-  { label: "Payments", href: "/payments", icon: Banknote, group: "Money", roles: ["property_manager", "community_admin", "auditor", "super_admin", "owner", "tenant"] },
-  { label: "Expenses", href: "/expenses", icon: Wallet, group: "Money" },
-  { label: "Cost Cases", href: "/cost-cases", icon: FolderKanban, group: "Money" },
-  { label: "Reserve Fund", href: "/reserve-fund", icon: PiggyBank, group: "Money" },
-  { label: "Work Orders", href: "/work-orders", icon: Wrench, group: "Operations" },
-  { label: "Maintenance", href: "/maintenance", icon: ClipboardList, group: "Operations" },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, group: "Overview", roles: FULL },
+  { label: "Community", href: "/community", icon: Building2, group: "Overview", roles: FULL },
+  { label: "Feed", href: "/feed", icon: MessageSquare, group: "Overview", roles: FULL },
+  { label: "Messages", href: "/messages", icon: MessagesSquare, group: "Overview", roles: [...FULL, "tenant"] },
+  { label: "Invoices", href: "/invoices", icon: Receipt, group: "Money", roles: FULL },
+  { label: "Payments", href: "/payments", icon: Banknote, group: "Money", roles: FULL },
+  { label: "Expenses", href: "/expenses", icon: Wallet, group: "Money", roles: FULL },
+  { label: "Cost Cases", href: "/cost-cases", icon: FolderKanban, group: "Money", roles: FULL },
+  { label: "Reserve Fund", href: "/reserve-fund", icon: PiggyBank, group: "Money", roles: FULL },
+  { label: "Work Orders", href: "/work-orders", icon: Wrench, group: "Operations", roles: FULL },
+  { label: "Maintenance", href: "/maintenance", icon: ClipboardList, group: "Operations", roles: [...FULL, "tenant"] },
   { label: "Vendors", href: "/vendors", icon: Store, group: "Operations", roles: ["property_manager", "community_admin", "auditor", "super_admin"] },
-  { label: "Polls", href: "/polls", icon: Vote, group: "Governance" },
-  { label: "Meetings", href: "/meetings", icon: CalendarDays, group: "Governance" },
-  { label: "Documents", href: "/documents", icon: FileText, group: "Governance" },
+  { label: "Polls", href: "/polls", icon: Vote, group: "Governance", roles: FULL },
+  { label: "Meetings", href: "/meetings", icon: CalendarDays, group: "Governance", roles: FULL },
+  { label: "Documents", href: "/documents", icon: FileText, group: "Governance", roles: FULL },
   { label: "Setup", href: "/setup", icon: ClipboardList, group: "Admin", roles: ["property_manager", "community_admin", "super_admin"] },
   { label: "Portfolio", href: "/portfolio", icon: LayoutGrid, group: "Admin", roles: ["super_admin"] },
   { label: "Insights", href: "/insights", icon: LineChart, group: "Admin", roles: ["super_admin"] },
@@ -65,7 +78,9 @@ export const NAV_GROUP_ORDER: NavGroup[] = [
   "Admin",
 ];
 
-// The 4 primary destinations on the mobile bottom bar (plus "More").
+// The 4 primary destinations on the mobile bottom bar (plus "More"). Roles
+// whose visible items don't include any of these (tenants) fall back to
+// their first visible items in AppShell.
 export const mobilePrimary = ["/dashboard", "/community", "/feed", "/work-orders"];
 
 export function visibleNavItems(role: Role): NavItem[] {
@@ -79,4 +94,9 @@ export function groupedNavItems(role: Role): { group: NavGroup; items: NavItem[]
     group,
     items: visible.filter((i) => i.group === group),
   })).filter((g) => g.items.length > 0);
+}
+
+/** Where a freshly signed-in user should land. */
+export function homePath(role: Role): string {
+  return role === "tenant" ? "/maintenance" : "/dashboard";
 }

@@ -20,6 +20,10 @@ def _match(q: str, *fields: str | None) -> bool:
     return any(q in (f or "").lower() for f in fields)
 
 
+async def _empty() -> list:
+    return []
+
+
 @router.get("/search", response_model=list[SearchResult])
 async def global_search(
     db: DB, user: CurrentUser, q: Annotated[str, Query(min_length=2)]
@@ -34,21 +38,23 @@ async def global_search(
                 SearchResult(category=category, title=title, subtitle=subtitle, href=href)
             )
 
+    # Tenants get the lite experience: no money data or work orders in search.
+    money_visible = user.role != "tenant"
     invoice_query: dict = {"community_id": cid}
-    if user.role in ("owner", "tenant") and user.apartment_ids:
+    if user.role == "owner" and user.apartment_ids:
         invoice_query["apartment_id"] = {"$in": user.apartment_ids}
-    elif user.role in ("owner", "tenant") and user.apartment_id:
+    elif user.role == "owner" and user.apartment_id:
         invoice_query["apartment_id"] = user.apartment_id
     (apartments, users, vendors, invoices, work_orders, documents,
      meetings, expenses, feed_posts) = await asyncio.gather(
         db.apartments.find({"community_id": cid}).to_list(1000),
         db.users.find({"community_id": cid}).to_list(1000),
         db.vendors.find({"community_id": cid}).to_list(1000),
-        db.invoices.find(invoice_query).to_list(10000),
-        db.work_orders.find({"community_id": cid}).to_list(1000),
+        db.invoices.find(invoice_query).to_list(10000) if money_visible else _empty(),
+        db.work_orders.find({"community_id": cid}).to_list(1000) if money_visible else _empty(),
         db.documents.find({"community_id": cid}).to_list(1000),
         db.meetings.find({"community_id": cid}).to_list(1000),
-        db.expenses.find({"community_id": cid}).to_list(1000),
+        db.expenses.find({"community_id": cid}).to_list(1000) if money_visible else _empty(),
         db.feed_posts.find({"community_id": cid}).to_list(1000),
     )
 

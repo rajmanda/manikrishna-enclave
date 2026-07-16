@@ -118,12 +118,12 @@ async def test_super_user_switches_through_all_roles(client, manager_headers):
     )
     assert write.status_code == 403
 
-    # Tenant view: invoice scoping applies.
+    # Tenant view: no money data at all (lite experience).
     await client.post(
         "/api/v1/auth/switch-role", json={"role": "tenant"}, headers=manager_headers
     )
     inv = await client.get("/api/v1/invoices", headers=manager_headers)
-    assert all(i["apartmentId"] == "apt-101" for i in inv.json())
+    assert inv.status_code == 403
 
     # Super admin view: full powers again.
     await client.post(

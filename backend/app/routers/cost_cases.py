@@ -16,6 +16,7 @@ from app.audit import record_audit
 from app.core.security import CurrentUser, require_roles
 from app.db import get_db
 from app.models import (
+    FINANCE_READ_ROLES,
     WRITE_ROLES,
     AssessmentRequest,
     CostCase,
@@ -32,6 +33,7 @@ router = APIRouter(prefix="/cost-cases", tags=["cost-cases"])
 
 DB = Annotated[Any, Depends(get_db)]
 Writer = Depends(require_roles(*WRITE_ROLES))
+FinanceReader = Depends(require_roles(*FINANCE_READ_ROLES))
 
 
 async def _children(db: Any, case_id: str) -> tuple[list, list, list, list]:
@@ -73,7 +75,7 @@ def _summary(case: dict, work_orders: list, expenses: list, invoices: list) -> d
     }
 
 
-@router.get("")
+@router.get("", dependencies=[FinanceReader])
 async def list_cost_cases(db: DB, user: CurrentUser) -> list[dict]:
     """Community-transparent, like expenses — every member sees the cases."""
     cases = await db.cost_cases.find({"community_id": user.community_id}).to_list(1000)
@@ -156,7 +158,7 @@ async def create_cost_case(body: CostCaseCreate, db: DB, user: CurrentUser) -> d
     return {**case.model_dump(by_alias=True), "summary": _summary(case.model_dump(), wos, expenses, invoices)}
 
 
-@router.get("/{case_id}")
+@router.get("/{case_id}", dependencies=[FinanceReader])
 async def get_cost_case(case_id: str, db: DB, user: CurrentUser) -> dict:
     case = await db.cost_cases.find_one(
         {"id": case_id, "community_id": user.community_id}

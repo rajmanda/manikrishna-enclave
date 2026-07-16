@@ -8,6 +8,7 @@ from app.audit import record_audit
 from app.core.security import CurrentUser, owned_community_ids, require_roles
 from app.db import get_db
 from app.models import (
+    FINANCE_READ_ROLES,
     WRITE_ROLES,
     CommentCreate,
     StageUpdate,
@@ -22,17 +23,21 @@ router = APIRouter(prefix="/work-orders", tags=["work-orders"])
 
 DB = Annotated[Any, Depends(get_db)]
 
+# Work orders carry estimates/actual costs, so tenants are excluded — they
+# follow progress through their maintenance requests instead.
+FinanceReader = Depends(require_roles(*FINANCE_READ_ROLES))
 
-@router.get("", response_model=list[WorkOrder])
+
+@router.get("", response_model=list[WorkOrder], dependencies=[FinanceReader])
 async def list_work_orders(db: DB, user: CurrentUser) -> list[WorkOrder]:
-    # Common-area work orders are visible to every member (PRD).
+    # Common-area work orders are visible to every owner (PRD).
     docs = await db.work_orders.find({"community_id": user.community_id}).to_list(
         length=10000
     )
     return [WorkOrder.model_validate(d) for d in docs]
 
 
-@router.get("/{work_order_id}", response_model=WorkOrder)
+@router.get("/{work_order_id}", response_model=WorkOrder, dependencies=[FinanceReader])
 async def get_work_order(work_order_id: str, db: DB, user: CurrentUser) -> WorkOrder:
     doc = await db.work_orders.find_one(
         {"id": work_order_id, "community_id": user.community_id}
@@ -43,7 +48,8 @@ async def get_work_order(work_order_id: str, db: DB, user: CurrentUser) -> WorkO
 
 
 Writer = Depends(require_roles(*WRITE_ROLES))
-COMMENT_ROLES = ("owner", "tenant", "property_manager", "community_admin", "super_admin")
+# No tenants: they can't see work orders, so they can't comment on them.
+COMMENT_ROLES = ("owner", "property_manager", "community_admin", "super_admin")
 
 
 @router.post(
@@ -297,7 +303,7 @@ async def upload_photo(
     return WorkOrder.model_validate(result)
 
 
-@router.get("/{work_order_id}/photos/{index}")
+@router.get("/{work_order_id}/photos/{index}", dependencies=[FinanceReader])
 async def get_photo(
     work_order_id: str, index: int, db: DB, user: CurrentUser
 ) -> Response:

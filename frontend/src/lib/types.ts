@@ -469,6 +469,28 @@ export interface Notification {
   text: string;
   date: string;
   read: boolean;
-  type: "invoice" | "work_order" | "poll" | "announcement" | "meeting";
+  type: "invoice" | "work_order" | "poll" | "announcement" | "meeting" | "message";
   href?: string | null;
+}
+
+// Direct messages — one thread per resident with the property manager(s).
+export interface Message {
+  id: string;
+  communityId: string;
+  threadUserId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+  text: string;
+  date: string;
+  read: boolean;
+}
+
+export interface MessageThread {
+  threadUserId: string;
+  threadUserName: string;
+  apartmentId?: string | null;
+  lastText: string;
+  lastDate: string;
+  unreadCount: number;
 }

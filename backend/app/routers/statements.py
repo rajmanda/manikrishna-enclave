@@ -1,7 +1,8 @@
 """Owner statements (server-side PDF) and CSV export (M2).
 
-Owners/tenants may fetch only their own apartment's statement; managers,
-admins and auditors may fetch any apartment in their community.
+Owners may fetch only their own apartment's statement; managers, admins and
+auditors may fetch any apartment in their community. Tenants get no money
+data at all.
 """
 
 import csv
@@ -10,15 +11,15 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.core.security import CurrentUser
+from app.core.security import CurrentUser, require_roles
 from app.db import get_db
-from app.models import User
+from app.models import FINANCE_READ_ROLES, User
 
 
 def _latin1(text) -> str:
     return str(text).encode("latin-1", "replace").decode("latin-1")
 
-router = APIRouter(tags=["statements"])
+router = APIRouter(tags=["statements"], dependencies=[Depends(require_roles(*FINANCE_READ_ROLES))])
 
 DB = Annotated[Any, Depends(get_db)]
 

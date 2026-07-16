@@ -36,6 +36,17 @@ Role = Literal[
 
 WRITE_ROLES: tuple[str, ...] = ("super_admin", "property_manager", "community_admin")
 
+# Roles that may READ community money data (invoices, payments, expenses,
+# reserve fund, cost cases, work orders). Tenants and vendors are excluded —
+# tenants get the lite experience: maintenance requests + messages only.
+FINANCE_READ_ROLES: tuple[str, ...] = (
+    "super_admin",
+    "property_manager",
+    "community_admin",
+    "owner",
+    "auditor",
+)
+
 
 # ---------- Community / Apartment / User ----------
 
@@ -623,6 +634,35 @@ class Notification(APIModel):
     href: str | None = None  # in-app deep link
 
 
+# ---------- Direct messages (resident ↔ property manager) ----------
+
+
+class Message(APIModel):
+    id: str = Field(default_factory=lambda: new_id("msg"))
+    community_id: str
+    thread_user_id: str  # the resident whose conversation this is
+    sender_id: str
+    sender_name: str
+    sender_role: str
+    text: str
+    date: str  # ISO datetime
+    read: bool = False  # read by the counterparty
+
+
+class MessageCreate(APIModel):
+    text: str
+    thread_user_id: str | None = None  # managers must say which resident
+
+
+class MessageThread(APIModel):
+    thread_user_id: str
+    thread_user_name: str
+    apartment_id: str | None = None
+    last_text: str
+    last_date: str
+    unread_count: int = 0  # messages from the resident not yet read
+
+
 # ---------- Work orders ----------
 
 WorkOrderStage = Literal[
@@ -891,6 +931,7 @@ NotificationEventType = Literal[
     "owner_approval_required",
     "announcement_posted",
     "lead_captured",
+    "direct_message",
 ]
 
 
