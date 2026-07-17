@@ -290,14 +290,19 @@ async def test_combined_payment_allocation(client, manager_headers):
     statuses = sorted(i["status"] for i in detail2["invoices"])
     assert statuses == ["paid", "partial"]
 
-    # Overpayment across the batch is rejected.
+    # Overpayment across the batch becomes advance credit, not an error.
     over = await client.post(
         "/api/v1/payments/allocate",
-        json={"invoiceIds": ids, "amount": 99999, "date": "2027-06-05",
+        json={"invoiceIds": ids, "amount": 3000, "date": "2027-06-05",
               "method": "UPI", "reference": ""},
         headers=manager_headers,
     )
-    assert over.status_code == 400
+    assert over.status_code == 201
+    body = over.json()
+    assert sum(a["amount"] for a in body["applied"]) == 1500  # what was left due
+    assert body["excessCredit"] == 1500
+    credits = (await client.get("/api/v1/credits", headers=manager_headers)).json()
+    assert any(c["remaining"] == 1500 and c["status"] == "confirmed" for c in credits)
 
 
 async def test_money_health_report(client, manager_headers):

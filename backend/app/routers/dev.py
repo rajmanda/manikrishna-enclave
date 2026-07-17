@@ -50,6 +50,16 @@ async def refresh_dev_db(db: DB) -> dict[str, str]:
                 detail="Production database has no collections or cannot be reached."
             )
 
+        # True mirror: also drop dev-only collections (ones prod doesn't have
+        # yet, e.g. a new feature's collection like `credits`) — otherwise
+        # their stale data silently survives every refresh.
+        dst_names = [
+            n for n in await dst_db.list_collection_names()
+            if not n.startswith("system.")
+        ]
+        for name in set(dst_names) - set(names):
+            await dst_db[name].drop()
+
         for name in names:
             # 1. Drop target dev collection
             await dst_db[name].drop()

@@ -73,14 +73,30 @@ async def test_report_scoping_and_validation(client, owner_headers, manager_head
     )
     assert other.status_code == 404
 
-    # Over the outstanding amount.
+    # Paying more than owed is allowed — the excess becomes a PENDING
+    # advance credit that only counts once the manager confirms the money.
     over = await client.post(
         "/api/v1/payments/report",
-        json={"invoiceId": "inv-2606-502", "amount": 99999, "date": "2026-07-04",
+        json={"invoiceId": "inv-2606-502", "amount": 5000, "date": "2026-07-04",
               "method": "UPI"},
         headers=owner_headers,
     )
-    assert over.status_code == 400
+    assert over.status_code == 201
+    assert over.json()["amount"] == 3500  # capped at the outstanding
+    credits = (await client.get("/api/v1/credits", headers=owner_headers)).json()
+    assert [c["remaining"] for c in credits if c["status"] == "pending"] == [1500]
+    # An overpaid report is one transfer (payment + credit share a batch), so
+    # it resolves through the batch endpoints — the single reject refuses.
+    single = await client.post(
+        f"/api/v1/payments/{over.json()['id']}/reject", headers=manager_headers
+    )
+    assert single.status_code == 400
+    reject = await client.post(
+        f"/api/v1/payments/batch/{over.json()['batchId']}/reject",
+        headers=manager_headers,
+    )
+    assert reject.status_code == 204
+    assert (await client.get("/api/v1/credits", headers=owner_headers)).json() == []
 
     # Managers use the direct endpoint, not report.
     mgr = await client.post(
