@@ -35,6 +35,14 @@ const roleTone: Record<string, "brand" | "green" | "violet" | "slate" | "amber" 
   vendor: "slate",
 };
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** "raj.manda@gmail.com" → "Raj Manda" — starting name for bulk-added members. */
+function nameFromEmail(addr: string): string {
+  const words = addr.split("@")[0].split(/[._\-+\d]+/).filter(Boolean);
+  return words.map((w) => w[0].toUpperCase() + w.slice(1)).join(" ") || addr;
+}
+
 function MemberDialog({
   member,
   apartments,
@@ -61,6 +69,15 @@ function MemberDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The email field accepts a comma-delimited list — every address gets
+  // whitelisted. In edit mode the first one stays with this member and the
+  // rest are added as new members.
+  const emails = email
+    .split(/[,;\s]+/)
+    .map((a) => a.trim().toLowerCase())
+    .filter(Boolean);
+  const bulkAdd = !member && emails.length > 1;
+
   const nameParts = name.trim().split(/\s+/);
   const derivedDisplayName =
     nameParts.length >= 2 ? `${nameParts[0]} ${nameParts[nameParts.length - 1]}` : name.trim();
@@ -70,23 +87,37 @@ function MemberDialog({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const bad = emails.filter((a) => !EMAIL_RE.test(a));
+    if (emails.length === 0 || bad.length) {
+      setError(
+        bad.length
+          ? `Not a valid email: ${bad.join(", ")}`
+          : "Enter an email address"
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
+    const [first, ...rest] = emails;
+    const roles = !customRoleSet
+      ? managerRole && dualOwner && apartmentId
+        ? [role, "owner"]
+        : [role]
+      : undefined;
     const body: Record<string, unknown> = {
-      name,
-      email,
+      name: bulkAdd ? nameFromEmail(first) : name,
+      email: first,
       role,
       accountId,
       ...(apartmentId ? { apartmentId } : {}),
-      ...(phone ? { phone } : {}),
+      ...(phone && !bulkAdd ? { phone } : {}),
       // Always sent on edit so clearing the field clears the override ("" resets).
-      ...(member || preferredName.trim() ? { preferredName: preferredName.trim() } : {}),
+      ...((member || preferredName.trim()) && !bulkAdd
+        ? { preferredName: preferredName.trim() }
+        : {}),
     };
     // Custom multi-role sets (super users) are preserved, not overwritten.
-    if (!customRoleSet) {
-      body.roles =
-        managerRole && dualOwner && apartmentId ? [role, "owner"] : [role];
-    }
+    if (roles) body.roles = roles;
     try {
       if (member) {
         await api(`/users/${member.id}`, { method: "PATCH", body: JSON.stringify(body) });
@@ -94,6 +125,37 @@ function MemberDialog({
         await api("/users", { method: "POST", body: JSON.stringify(body) });
         // roles list isn't part of create — set it when dual-role requested
         // (create defaults to the single role).
+      }
+      // Every additional email becomes a new whitelisted member with the
+      // same role/apartment/account; names start from the email address.
+      const failed: string[] = [];
+      for (const addr of rest) {
+        try {
+          await api("/users", {
+            method: "POST",
+            body: JSON.stringify({
+              name: nameFromEmail(addr),
+              email: addr,
+              role,
+              accountId,
+              ...(apartmentId ? { apartmentId } : {}),
+              ...(roles ? { roles } : {}),
+            }),
+          });
+        } catch (err) {
+          failed.push(
+            `${addr} (${err instanceof ApiError ? err.message : "failed"})`
+          );
+        }
+      }
+      if (failed.length) {
+        onDone();
+        setBusy(false);
+        setError(
+          `Whitelisted ${emails.length - failed.length} of ${emails.length} — ` +
+            `skipped ${failed.join("; ")}`
+        );
+        return;
       }
       onDone();
       onClose();
@@ -108,25 +170,52 @@ function MemberDialog({
       <form className="space-y-4" onSubmit={submit}>
         <div>
           <label className={labelCls}>Name</label>
-          <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} required />
-        </div>
-        <div>
-          <label className={labelCls}>Display name (optional)</label>
           <input
             className={inputCls}
-            value={preferredName}
-            onChange={(e) => setPreferredName(e.target.value)}
-            placeholder={derivedDisplayName}
+            value={bulkAdd ? "" : name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={bulkAdd ? "Taken from each email address" : undefined}
+            disabled={bulkAdd}
+            required={!bulkAdd}
           />
-          <p className="mt-1 text-xs text-slate-400">
-            Shown in group messages — apartment number is added automatically.
-            Leave blank to use the name above.
-          </p>
+          {bulkAdd && (
+            <p className="mt-1 text-xs text-slate-400">
+              Adding {emails.length} members — names start from their email
+              addresses; you can edit each afterwards.
+            </p>
+          )}
         </div>
+        {!bulkAdd && (
+          <div>
+            <label className={labelCls}>Display name (optional)</label>
+            <input
+              className={inputCls}
+              value={preferredName}
+              onChange={(e) => setPreferredName(e.target.value)}
+              placeholder={derivedDisplayName}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Shown in group messages — apartment number is added automatically.
+              Leave blank to use the name above.
+            </p>
+          </div>
+        )}
         <div>
           <label className={labelCls}>Google email (this is the login whitelist)</label>
-          <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} required />
-          {member && email !== member.email && (
+          <input
+            type="text"
+            inputMode="email"
+            className={inputCls}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="one@example.com, two@example.com"
+            required
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Paste several emails separated by commas to whitelist them all at
+            once{member && " — the first stays with this member, the rest are added as new members"}.
+          </p>
+          {member && emails[0] !== member.email.toLowerCase() && (
             <p className="mt-1 text-xs text-amber-600">
               Changing the email means they must sign in with the new address —
               the old one stops working immediately.
@@ -163,10 +252,12 @@ function MemberDialog({
             ))}
           </select>
         </div>
-        <div>
-          <label className={labelCls}>Phone (optional)</label>
-          <input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </div>
+        {!bulkAdd && (
+          <div>
+            <label className={labelCls}>Phone (optional)</label>
+            <input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+        )}
         {customRoleSet && (
           <p className="rounded-xl bg-violet-50 px-3 py-2 text-xs text-violet-700">
             This account has a custom role set ({member!.roles!.join(", ")}) —
@@ -192,8 +283,20 @@ function MemberDialog({
           </label>
         )}
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-        <button type="submit" disabled={busy || !name.trim() || !email.trim()} className={primaryBtnCls}>
-          {busy ? "Saving…" : member ? "Save changes" : "Whitelist member"}
+        <button
+          type="submit"
+          disabled={busy || (!bulkAdd && !name.trim()) || emails.length === 0}
+          className={primaryBtnCls}
+        >
+          {busy
+            ? "Saving…"
+            : member
+              ? emails.length > 1
+                ? `Save + whitelist ${emails.length - 1} more`
+                : "Save changes"
+              : bulkAdd
+                ? `Whitelist ${emails.length} members`
+                : "Whitelist member"}
         </button>
       </form>
     </Modal>
