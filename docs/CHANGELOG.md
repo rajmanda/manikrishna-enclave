@@ -5,6 +5,52 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Paid invoices hidden from the manager's delete button (2026-07-16)** —
+  the backend already blocks property managers from deleting paid-off
+  invoices (403, super admins may still); the Invoices UI now mirrors the
+  rule and hides the delete icon (table row, card, invoice sheet) for
+  property managers when an invoice is fully paid.
+
+- **Bulk whitelist via comma-delimited emails (2026-07-16)** — the
+  Add/Edit Member dialog accepts several emails separated by commas (or
+  spaces/semicolons) and whitelists them all with the shared
+  role/apartment/account; names start from each email's local part
+  (`raj.manda@…` → "Raj Manda", editable afterwards). In edit mode the
+  first email stays with the member being edited, the rest become new
+  members. Already-whitelisted addresses are skipped and reported without
+  aborting the rest.
+
+- **Pay multiple invoices in one shot + advance credits (2026-07-16)** —
+  owners can now settle any number of invoices with ONE transfer: tick
+  invoices directly on their cards — a sticky pay bar totals the selection
+  (select-all, clear) and opens the payment dialog (oldest-first allocation
+  preview) → `POST /payments/report-batch` creates one PENDING payment per invoice
+  (identical rows to paying individually — balancing unchanged) sharing a
+  `batchId`; the Payments page groups the batch into one card the manager
+  confirms/rejects in one click (`/payments/batch/{id}/confirm|reject`,
+  per-invoice recompute each, one aggregate notification + WhatsApp).
+  **Overpayment → advance credit:** paying more than owed (single report,
+  batch report, or manager's Combined payment) banks the excess in the new
+  `credits` collection (pending until the batch is confirmed).
+  **Batches are ALL-OR-NONE:** one transfer either arrived or it didn't, so
+  portions of a batch cannot be confirmed/rejected individually (400) — the
+  manager decides the whole claim; rejecting discards its pending credit.
+  Rejections persist as `payment_rejections`, shown on the owner's invoice
+  card with the manager's reason. Money-conservation guards: confirming a
+  payment never overshoots its invoice (the excess is banked as credit) and
+  apply-credit skips invoices with pending claims. (An owner-initiated
+  "correction request" flow was prototyped and removed pending a better
+  design — misbooked payments are handled by the manager's reverse for now.)
+  **Pay from credit:**
+  `GET /credits` + `POST /payments/apply-credit` spend the balance FIFO on
+  open invoices oldest-first as confirmed Credit-method payments (no
+  confirmation round-trip — the money is already held). UI: owner
+  "Advance Credit" tile + entries modal with one-tap apply, credit-aware
+  Pay-multiple dialog ("use my credit first", excess preview), manager
+  "Advance credits held" card with per-apartment apply, overpayment hints
+  in the single-report and Combined dialogs. 7 new tests + 2 updated
+  (188 total); smoke-tested end-to-end against Atlas dev.
+
 - **Cost Cases (Phase 1+2)** — one entity per complete financial event
   connecting Maintenance Request → Work Order → Vendor Bill/Expense →
   Owner Assessments → Payments → Reconciliation (plan:

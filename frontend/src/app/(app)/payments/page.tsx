@@ -1,13 +1,13 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { Banknote, Check, ChevronDown, Trash2, X } from "lucide-react";
+import { Banknote, Check, ChevronDown, PiggyBank, Trash2, X } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError } from "@/lib/api";
 import { useSessionUser } from "@/context/AuthContext";
 import { useUrlFilters } from "@/hooks/useUrlFilters";
 import { FilterBar } from "@/components/FilterBar";
-import type { Account, Apartment, Invoice, Payment, User } from "@/lib/types";
+import type { Account, Apartment, CreditEntry, Invoice, Payment, User } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor } from "@/lib/lookup";
 import { ledgerAccent } from "@/lib/tones";
@@ -48,6 +48,7 @@ function PaymentsPageInner() {
   const [collapsedApts, setCollapsedApts] = useState<Record<string, boolean>>({});
   const payments = useApi<Payment[]>("/payments");
   const invoices = useApi<Invoice[]>("/invoices");
+  const credits = useApi<CreditEntry[]>("/credits");
   const apartments = useApi<Apartment[]>("/apartments");
   const users = useApi<User[]>("/users");
   const accounts = useApi<Account[]>(mine ? null : "/accounts");
@@ -83,6 +84,45 @@ function PaymentsPageInner() {
   const confirmed = visible.filter((p) => p.status !== "pending");
   const sorted = [...confirmed].sort((a, b) => b.date.localeCompare(a.date));
 
+  // Pending rows that arrived as ONE reported transfer share a batch id —
+  // the manager confirms or rejects them as a unit.
+  const pendingBatches = (() => {
+    const map = new Map<string, Payment[]>();
+    for (const p of pending) {
+      if (p.batchId) {
+        const rows = map.get(p.batchId) ?? [];
+        rows.push(p);
+        map.set(p.batchId, rows);
+      }
+    }
+    return [...map.entries()];
+  })();
+  const pendingSingles = pending.filter((p) => !p.batchId);
+  const pendingCreditByBatch = new Map<string, number>();
+  for (const cr of credits.data ?? []) {
+    if (cr.status === "pending" && cr.batchId) {
+      pendingCreditByBatch.set(
+        cr.batchId, (pendingCreditByBatch.get(cr.batchId) ?? 0) + cr.remaining
+      );
+    }
+  }
+  // Spendable advance credit per apartment (manager card).
+  const creditByApt = new Map<string, number>();
+  for (const cr of credits.data ?? []) {
+    if (cr.status === "confirmed" && cr.remaining > 0) {
+      creditByApt.set(cr.apartmentId, (creditByApt.get(cr.apartmentId) ?? 0) + cr.remaining);
+    }
+  }
+  // What credit can actually land on: open invoices WITHOUT a pending claim
+  // (matches the server's apply-credit rule).
+  const claimedInvoiceIds = new Set(pending.map((p) => p.invoiceId));
+  const openByApt = new Map<string, number>();
+  for (const inv of invoices.data ?? []) {
+    const due = inv.amount - inv.paidAmount;
+    if (due > 0 && !claimedInvoiceIds.has(inv.id))
+      openByApt.set(inv.apartmentId, (openByApt.get(inv.apartmentId) ?? 0) + due);
+  }
+
   // Group by the month the payment was received, newest first (insertion
   // order follows the date sort above).
   function monthLabel(date: string): string {
@@ -108,12 +148,84 @@ function PaymentsPageInner() {
     .reduce((s, p) => s + p.amount, 0);
 
   async function act(p: Payment, action: "confirm" | "reject") {
-    if (action === "reject" && !confirm(`Reject the reported payment of ${formatINR(p.amount)}? The owner will be notified.`)) return;
+    let reason = "";
+    if (action === "reject") {
+      const input = prompt(
+        `Reject the reported payment of ${formatINR(p.amount)}?\n\nReason for rejection (shown to the owner):`
+      );
+      if (input === null) return; // cancelled
+      reason = input.trim();
+    }
     try {
-      await api(`/payments/${p.id}/${action}`, { method: "POST" });
+      await api(`/payments/${p.id}/${action}`, {
+        method: "POST",
+        ...(action === "reject" ? { body: JSON.stringify({ reason }) } : {}),
+      });
       payments.reload();
+      invoices.reload();
+      credits.reload();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "Action failed");
+    }
+  }
+
+  async function actBatch(batchId: string, rows: Payment[], action: "confirm" | "reject") {
+    const total = rows.reduce((s, p) => s + p.amount, 0);
+    const label = `${rows.length} payment${rows.length > 1 ? "s" : ""} totaling ${formatINR(total)}`;
+    const batchCredit = pendingCreditByBatch.get(batchId) ?? 0;
+    const creditNote =
+      batchCredit > 0
+        ? `\n\nNote: this discards the claim's ${formatINR(batchCredit)} advance credit too.`
+        : "";
+    let reason = "";
+    if (action === "reject") {
+      const input = prompt(
+        `Reject the reported ${label}?${creditNote}\n\nReason for rejection (shown to the owner):`
+      );
+      if (input === null) return; // cancelled
+      reason = input.trim();
+    }
+    if (action === "confirm" && !confirm(`Confirm ${label} in one go?`)) return;
+    try {
+      await api(`/payments/batch/${batchId}/${action}`, {
+        method: "POST",
+        ...(action === "reject" ? { body: JSON.stringify({ reason }) } : {}),
+      });
+      payments.reload();
+      invoices.reload();
+      credits.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Action failed");
+    }
+  }
+
+  async function applyCredit(apartmentId: string, balance: number) {
+    // Credit is pooled per account — settle dues across ALL of the
+    // account's apartments, not just the one holding the credit.
+    const acct = (accounts.data ?? []).find((a) => a.apartmentIds.includes(apartmentId));
+    const targets = acct?.apartmentIds ?? [apartmentId];
+    const pool0 = targets.reduce((s, a) => s + (creditByApt.get(a) ?? 0), 0) || balance;
+    const dues = targets.reduce((s, a) => s + (openByApt.get(a) ?? 0), 0);
+    const usable = Math.min(pool0, dues);
+    if (usable <= 0) return;
+    if (!confirm(`Apply ${formatINR(usable)} of advance credit to the account's open dues (oldest first)?`)) return;
+    try {
+      let pool = usable;
+      for (const apt of targets) {
+        if (pool <= 0) break;
+        const slice = Math.min(pool, openByApt.get(apt) ?? 0);
+        if (slice <= 0) continue;
+        await api("/payments/apply-credit", {
+          method: "POST",
+          body: JSON.stringify({ apartmentId: apt, amount: slice }),
+        });
+        pool -= slice;
+      }
+      payments.reload();
+      invoices.reload();
+      credits.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Could not apply credit");
     }
   }
 
@@ -203,54 +315,169 @@ function PaymentsPageInner() {
       </div>
 
       {pending.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-sm font-semibold text-amber-700">
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-amber-700">
             Awaiting confirmation ({pending.length})
           </h2>
-          <Card className="divide-y divide-amber-100 border-amber-200">
-            {pending.map((p) => (
-              <div
-                key={p.id}
-                onClick={() => setDetailId(p.invoiceId)}
-                className={`flex cursor-pointer flex-wrap items-center justify-between gap-3 p-4 hover:bg-amber-50/40 ${ledgerAccent(p.ledger)}`}
-              >
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                    {paymentTitle(p)}
-                    <LedgerBadge ledger={p.ledger} />
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {ownerNameFor(users.data, apartments.data, p.apartmentId)} ·{" "}
-                    {formatINR(p.amount)} · {p.method} · {formatDate(p.date)}
-                    {p.reference && ` · ref ${p.reference}`}
-                  </p>
-                </div>
-                {canWrite ? (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        act(p, "confirm");
-                      }}
-                      className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-                    >
-                      <Check className="h-3.5 w-3.5" /> Confirm
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        act(p, "reject");
-                      }}
-                      className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
-                    >
-                      <X className="h-3.5 w-3.5" /> Reject
-                    </button>
+
+          {/* Combined claims first: one transfer covering several invoices —
+              confirm or reject the whole thing in one action. */}
+          {pendingBatches.map(([batchId, rows]) => {
+            const total = rows.reduce((s, p) => s + p.amount, 0);
+            const excess = pendingCreditByBatch.get(batchId) ?? 0;
+            const first = rows[0];
+            return (
+              <Card key={batchId} className="border-amber-200">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-100 bg-amber-50/50 p-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">
+                      One payment · {formatINR(total + excess)} covering {rows.length} invoice{rows.length > 1 ? "s" : ""}
+                      {excess > 0 && (
+                        <span className="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                          + {formatINR(excess)} advance credit
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {ownerNameFor(users.data, apartments.data, first.apartmentId)} ·{" "}
+                      {first.method} · {formatDate(first.date)}
+                      {first.reference && ` · ref ${first.reference}`}
+                    </p>
                   </div>
-                ) : (
-                  <Badge tone="amber">awaiting manager confirmation</Badge>
-                )}
-              </div>
-            ))}
+                  {canWrite ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => actBatch(batchId, rows, "confirm")}
+                        className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                      >
+                        <Check className="h-3.5 w-3.5" /> Confirm all
+                      </button>
+                      <button
+                        onClick={() => actBatch(batchId, rows, "reject")}
+                        className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                      >
+                        <X className="h-3.5 w-3.5" /> Reject all
+                      </button>
+                    </div>
+                  ) : (
+                    <Badge tone="amber">awaiting manager confirmation</Badge>
+                  )}
+                </div>
+                <div className="divide-y divide-amber-50">
+                  {rows.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => setDetailId(p.invoiceId)}
+                      className={`flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-2.5 hover:bg-amber-50/40 ${ledgerAccent(p.ledger)}`}
+                    >
+                      <p className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-medium text-slate-700">
+                        {paymentTitle(p)}
+                        <LedgerBadge ledger={p.ledger} />
+                      </p>
+                      <span className="shrink-0 text-xs font-semibold">{formatINR(p.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            );
+          })}
+
+          {pendingSingles.length > 0 && (
+            <Card className="divide-y divide-amber-100 border-amber-200">
+              {pendingSingles.map((p) => (
+                <div
+                  key={p.id}
+                  onClick={() => setDetailId(p.invoiceId)}
+                  className={`flex cursor-pointer flex-wrap items-center justify-between gap-3 p-4 hover:bg-amber-50/40 ${ledgerAccent(p.ledger)}`}
+                >
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                      {paymentTitle(p)}
+                      <LedgerBadge ledger={p.ledger} />
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {ownerNameFor(users.data, apartments.data, p.apartmentId)} ·{" "}
+                      {formatINR(p.amount)} · {p.method} · {formatDate(p.date)}
+                      {p.reference && ` · ref ${p.reference}`}
+                    </p>
+                  </div>
+                  {canWrite ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          act(p, "confirm");
+                        }}
+                        className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                      >
+                        <Check className="h-3.5 w-3.5" /> Confirm
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          act(p, "reject");
+                        }}
+                        className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                      >
+                        <X className="h-3.5 w-3.5" /> Reject
+                      </button>
+                    </div>
+                  ) : (
+                    <Badge tone="amber">awaiting manager confirmation</Badge>
+                  )}
+                </div>
+              ))}
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Advance credits held per apartment (money received beyond dues). */}
+      {!mine && creditByApt.size > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-semibold text-violet-700">
+            Advance credits held
+          </h2>
+          <Card className="divide-y divide-violet-100 border-violet-200">
+            {[...creditByApt.entries()]
+              .sort((a, b) => a[0].localeCompare(b[0]))
+              .map(([aptId, balance]) => {
+                // Credit serves the whole account, so dues are counted
+                // across every apartment the account holds.
+                const acct = (accounts.data ?? []).find((a) => a.apartmentIds.includes(aptId));
+                const targets = acct?.apartmentIds ?? [aptId];
+                const accountDue = targets.reduce((s, a) => s + (openByApt.get(a) ?? 0), 0);
+                return (
+                  <div key={aptId} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                        <PiggyBank className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">
+                          Apt {aptNumber(aptId)} · {ownerNameFor(users.data, apartments.data, aptId)}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {accountDue > 0
+                            ? `${formatINR(accountDue)} currently due across the account`
+                            : "Nothing due — credit stays banked"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-sm font-semibold text-violet-700">{formatINR(balance)}</span>
+                      {canWrite && accountDue > 0 && (
+                        <button
+                          onClick={() => applyCredit(aptId, balance)}
+                          className="inline-flex items-center gap-1 rounded-xl bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+                        >
+                          Apply to dues
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
           </Card>
         </div>
       )}

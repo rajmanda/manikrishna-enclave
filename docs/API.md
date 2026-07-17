@@ -93,11 +93,18 @@ cross-tenant, 409 conflict).
 | POST | `/invoices/{id}/receipt` | manager/admin | Multipart paper receipt (photo/PDF) → saved as a `Receipts` document scoped to the invoice's apartment (`apartmentIds`, `invoiceId`) |
 | PATCH | `/invoices/{id}` | manager/admin | description/amount/dueDate; status recomputed |
 | DELETE | `/invoices/{id}` | manager/admin | 409 if payments exist; `?cascade=true` deletes the payments too (both audited) |
-| POST | `/payments` | manager/admin | Records payment (or `method: "Credit"` for waivers); recomputes invoice paid/status; rejects overpayment |
+| POST | `/payments` | manager/admin | Records payment (or `method: "Credit"` for waivers); recomputes invoice paid/status; rejects overpayment (use `/payments/allocate` for amounts beyond one invoice) |
 | DELETE | `/payments/{id}` | manager/admin | Reversal; recomputes invoice |
-| POST | `/payments/report` | owner/tenant (own apartment) | Claims an offline payment → **pending** (not counted); notifies managers; one open report per invoice |
-| POST | `/payments/{id}/confirm` | manager/admin | Pending → confirmed; recomputes invoice; notifies reporter |
-| POST | `/payments/{id}/reject` | manager/admin | Removes pending claim; notifies reporter |
+| POST | `/payments/report` | owner/tenant (own apartment) | Claims an offline payment → **pending** (not counted); notifies managers; one open report per invoice; amount beyond the outstanding becomes a pending advance credit |
+| POST | `/payments/report-batch` | owner/tenant (own apartments) | ONE transfer covering several invoices: pending Payment per portion (oldest due first, shared `batchId`); excess → pending advance credit; 409 if any invoice already has an open report |
+| POST | `/payments/allocate` | manager/admin | One received amount split across selected invoices oldest-first (confirmed immediately); excess → confirmed advance credit |
+| POST | `/payments/{id}/confirm` | manager/admin | Pending → confirmed; recomputes invoice; notifies reporter. 400 on batch portions — batches are ALL-OR-NONE (one transfer either arrived or it didn't) |
+| POST | `/payments/{id}/reject` | manager/admin | Removes pending claim; optional body `{reason}` is relayed to the owner (in-app + WhatsApp `payment_rejected`) and audited; durable `payment_rejections` record. 400 on batch portions |
+| POST | `/payments/batch/{batchId}/confirm` | manager/admin | Confirms every row of a reported batch (per-invoice recompute each) + its advance credit; one aggregate notification/WhatsApp to the reporter |
+| POST | `/payments/batch/{batchId}/reject` | manager/admin | Deletes every row of the batch + its pending credit (a rejected claim never mints credit); optional `{reason}` relayed; notifies reporter once |
+| GET | `/payments/rejections` | owners: own apartments · managers/auditors: all | Durable rejection records (invoice, amount, reason, date) — surfaced on the owner's invoice card |
+| GET | `/credits` | owners: own apartments · managers/auditors: all | Advance credit entries (amount/remaining/status) |
+| POST | `/payments/apply-credit` | owner (own apartment) / manager/admin | Spends confirmed advance credit on the target apartment's open invoices oldest-first as confirmed Credit-method payments (no manager confirmation — the money is already held). The credit SOURCE pools across the account's apartments (owner: all their apartments; manager: the target's account), consumed FIFO; skips invoices with pending claims; body: `apartmentId`, optional `amount`/`invoiceIds` |
 | POST/PATCH/DELETE | `/expenses[/{id}]` | manager/admin | Expense CRUD |
 | POST | `/expenses/{id}/receipt` | manager/admin | Multipart upload → GCS (pdf/jpeg/png/webp, ≤10 MB) |
 | GET | `/expenses/{id}/receipt` | any member | Streams the receipt (community-transparent) |

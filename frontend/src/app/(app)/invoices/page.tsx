@@ -2,11 +2,11 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlarmClock, ArrowUpDown, Banknote, ChevronDown, Download, FileDown, HandCoins, LayoutGrid, PlusCircle, ReceiptText, Table2, Trash2 } from "lucide-react";
+import { AlarmClock, ArrowUpDown, Banknote, ChevronDown, Download, FileDown, HandCoins, LayoutGrid, PiggyBank, PlusCircle, ReceiptText, Table2, Trash2, X } from "lucide-react";
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError, downloadFile } from "@/lib/api";
-import type { Account, Apartment, FeeEnrollment, Invoice, Payment, User, WorkOrder } from "@/lib/types";
+import type { Account, Apartment, CreditEntry, FeeEnrollment, Invoice, Payment, PaymentRejection, User, WorkOrder } from "@/lib/types";
 import { useUrlFilters } from "@/hooks/useUrlFilters";
 import { FilterBar } from "@/components/FilterBar";
 import { formatDate, formatINR } from "@/lib/format";
@@ -81,13 +81,19 @@ function ReportPaymentDialog({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Amount paid</label>
-            <input type="number" min="1" max={outstanding} className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+            <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
           </div>
           <div>
             <label className={labelCls}>Date</label>
             <input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} required />
           </div>
         </div>
+        {Number(amount) > outstanding && (
+          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+            {formatINR(Number(amount) - outstanding)} beyond this invoice will be
+            held as advance credit for your apartment once the manager confirms.
+          </p>
+        )}
         <div>
           <label className={labelCls}>Method</label>
           <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value as (typeof OWNER_METHODS)[number])}>
@@ -101,6 +107,276 @@ function ReportPaymentDialog({
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button type="submit" disabled={busy} className={primaryBtnCls}>
           {busy ? "Submitting…" : `Report ${formatINR(Number(amount) || 0)} paid`}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+/** Owner pays several invoices in one shot: one transfer, allocated oldest
+ * due first — with the option to spend advance credit first. Each portion
+ * lands as a normal per-invoice payment, so the books balance exactly as if
+ * every invoice were paid individually. */
+function PayMultipleDialog({
+  invoices,
+  totalCredit,
+  multiApt,
+  onClose,
+  onDone,
+}: {
+  invoices: Invoice[]; // the owner's open invoices without pending reports
+  totalCredit: number; // the account's pooled confirmed advance credit
+  multiApt: boolean;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const open = [...invoices].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const [selected, setSelected] = useState<Set<string>>(new Set(open.map((i) => i.id)));
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [method, setMethod] = useState<(typeof OWNER_METHODS)[number]>("UPI");
+  const [reference, setReference] = useState("");
+  const [useCredit, setUseCredit] = useState(true);
+  const [amountTouched, setAmountTouched] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const chosen = open.filter((i) => selected.has(i.id));
+  const outstanding = chosen.reduce((s, i) => s + (i.amount - i.paidAmount), 0);
+
+  // Credit is pooled across the account: spend it oldest due first over the
+  // chosen invoices, regardless of which apartment holds it.
+  const creditAlloc = (() => {
+    const alloc = new Map<string, number>();
+    if (!useCredit) return alloc;
+    let pool = totalCredit;
+    for (const inv of chosen) {
+      if (pool <= 0) break;
+      const take = Math.min(pool, inv.amount - inv.paidAmount);
+      alloc.set(inv.id, take);
+      pool -= take;
+    }
+    return alloc;
+  })();
+  const creditUsed = [...creditAlloc.values()].reduce((s, v) => s + v, 0);
+  const cashDue = Math.max(0, outstanding - creditUsed);
+  const cash = amountTouched ? Number(amount) || 0 : cashDue;
+  const excess = Math.max(0, cash - cashDue);
+
+  // Preview mirrors the server: credit first, then the transfer oldest due
+  // first across what's left.
+  const preview = (() => {
+    const cashMap = new Map<string, number>();
+    let remaining = cash;
+    for (const inv of chosen) {
+      if (remaining <= 0) break;
+      const due = inv.amount - inv.paidAmount - (creditAlloc.get(inv.id) ?? 0);
+      if (due <= 0) continue;
+      const take = Math.min(remaining, due);
+      cashMap.set(inv.id, take);
+      remaining -= take;
+    }
+    return { credit: creditAlloc, cash: cashMap };
+  })();
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      // 1) Spend advance credit (already with the community — applies
+      //    instantly, no confirmation needed). The pool is shared, but the
+      //    API targets one apartment per call — group the allocation.
+      const byApt = new Map<string, { amount: number; invoiceIds: string[] }>();
+      for (const inv of chosen) {
+        const take = creditAlloc.get(inv.id) ?? 0;
+        if (take <= 0) continue;
+        const slot = byApt.get(inv.apartmentId) ?? { amount: 0, invoiceIds: [] };
+        slot.amount += take;
+        slot.invoiceIds.push(inv.id);
+        byApt.set(inv.apartmentId, slot);
+      }
+      for (const [apt, slot] of byApt) {
+        await api("/payments/apply-credit", {
+          method: "POST",
+          body: JSON.stringify({
+            apartmentId: apt,
+            amount: slot.amount,
+            invoiceIds: slot.invoiceIds,
+          }),
+        });
+      }
+      // 2) Report the transfer covering the rest (pending until confirmed).
+      if (cash > 0) {
+        await api("/payments/report-batch", {
+          method: "POST",
+          body: JSON.stringify({
+            invoiceIds: chosen.map((i) => i.id),
+            amount: cash,
+            date,
+            method,
+            reference,
+          }),
+        });
+      }
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to report payment");
+      setBusy(false);
+    }
+  }
+
+  const allSelected = selected.size === open.length;
+
+  return (
+    <Modal title="Pay Multiple Invoices" onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <p className="text-xs text-slate-500">
+          One transfer can cover everything you owe — it&apos;s applied oldest
+          due date first, and each invoice is settled exactly as if paid on its
+          own. It shows as pending until the manager confirms.
+        </p>
+        <div className="flex items-center justify-between">
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() =>
+                setSelected(allSelected ? new Set() : new Set(open.map((i) => i.id)))
+              }
+              className="h-4 w-4 rounded border-slate-300 text-brand-600"
+            />
+            Select all
+          </label>
+          <span className="text-xs text-slate-400">
+            {chosen.length} of {open.length} selected
+          </span>
+        </div>
+        <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
+          {open.map((inv) => {
+            const bal = inv.amount - inv.paidAmount;
+            const viaCredit = preview.credit.get(inv.id);
+            const viaCash = preview.cash.get(inv.id);
+            return (
+              <label key={inv.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={selected.has(inv.id)}
+                  onChange={() => toggle(inv.id)}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {multiApt && <b>Apt {aptNumber(inv.apartmentId)} · </b>}
+                  {inv.description} — {inv.period}
+                </span>
+                <span className="shrink-0 text-slate-500">{formatINR(bal)}</span>
+                {viaCredit != null && (
+                  <span className="shrink-0 font-semibold text-violet-600">credit {formatINR(viaCredit)}</span>
+                )}
+                {viaCash != null && (
+                  <span className="shrink-0 font-semibold text-emerald-600">→ {formatINR(viaCash)}</span>
+                )}
+              </label>
+            );
+          })}
+          {open.length === 0 && (
+            <p className="py-3 text-center text-xs text-slate-400">Nothing left to pay. 🎉</p>
+          )}
+        </div>
+        {totalCredit > 0 && (
+          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
+            <span className="flex items-center gap-2 text-xs font-semibold text-violet-700">
+              <input
+                type="checkbox"
+                checked={useCredit}
+                onChange={(e) => setUseCredit(e.target.checked)}
+                className="h-4 w-4 rounded border-violet-300 text-violet-600"
+              />
+              Use my advance credit first ({formatINR(totalCredit)} available)
+            </span>
+            {creditUsed > 0 && (
+              <span className="text-xs font-bold text-violet-700">−{formatINR(creditUsed)}</span>
+            )}
+          </label>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>{creditUsed > 0 ? "Amount you transfer" : "Amount paid"}</label>
+            <input
+              type="number"
+              min={creditUsed > 0 ? "0" : "1"}
+              className={inputCls}
+              value={amountTouched ? amount : String(cashDue)}
+              onChange={(e) => {
+                setAmountTouched(true);
+                setAmount(e.target.value);
+              }}
+              required
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Date</label>
+            <input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} required />
+          </div>
+        </div>
+        {cash > 0 && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Method</label>
+              <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value as (typeof OWNER_METHODS)[number])}>
+                {OWNER_METHODS.map((m) => <option key={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Reference (UPI/NEFT id)</label>
+              <input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. UPI-4821" />
+            </div>
+          </div>
+        )}
+        <div className="space-y-1 rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold">
+          <p className="flex justify-between">
+            <span>{chosen.length} invoice{chosen.length === 1 ? "" : "s"} · total due</span>
+            <span>{formatINR(outstanding)}</span>
+          </p>
+          {creditUsed > 0 && (
+            <p className="flex justify-between text-violet-700">
+              <span>Advance credit applied</span>
+              <span>−{formatINR(creditUsed)}</span>
+            </p>
+          )}
+          <p className="flex justify-between text-slate-800">
+            <span>You transfer</span>
+            <span>{formatINR(cash)}</span>
+          </p>
+          {excess > 0 && (
+            <p className="flex justify-between text-emerald-700">
+              <span>Held as advance credit for next time</span>
+              <span>+{formatINR(excess)}</span>
+            </p>
+          )}
+        </div>
+        <ClosedMonthNote date={date} />
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={busy || chosen.length === 0 || (cash <= 0 && creditUsed <= 0)}
+          className={primaryBtnCls}
+        >
+          {busy
+            ? "Submitting…"
+            : cash > 0
+              ? `Report ${formatINR(cash)} paid${creditUsed > 0 ? ` + use ${formatINR(creditUsed)} credit` : ""}`
+              : `Use ${formatINR(creditUsed)} credit`}
         </button>
       </form>
     </Modal>
@@ -808,7 +1084,7 @@ function CombinedPaymentDialog({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Amount received</label>
-            <input type="number" min="1" max={outstanding || undefined} className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+            <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
           </div>
           <div>
             <label className={labelCls}>Date</label>
@@ -831,11 +1107,17 @@ function CombinedPaymentDialog({
           <span>{chosen.length} invoice{chosen.length === 1 ? "" : "s"} · combined outstanding</span>
           <span>{formatINR(outstanding)}</span>
         </p>
+        {Number(amount) > outstanding && (
+          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+            {formatINR(Number(amount) - outstanding)} beyond the selected
+            invoices will be held as advance credit for the apartment.
+          </p>
+        )}
         <ClosedMonthNote date={date} />
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button
           type="submit"
-          disabled={busy || chosen.length === 0 || !amount || Number(amount) > outstanding}
+          disabled={busy || chosen.length === 0 || !amount}
           className={primaryBtnCls}
         >
           {busy ? "Allocating…" : `Allocate ${formatINR(Number(amount) || 0)}`}
@@ -924,8 +1206,18 @@ function InvoicesPageInner() {
   const mine = role === "owner" || role === "tenant";
   const canWrite = WRITER_ROLES.includes(role);
   const canDelete = role === "super_admin" || role === "property_manager";
+  // Mirrors the backend rule: property managers may not delete paid-off
+  // invoices (super admins still can).
+  const canDeleteInv = (inv: Invoice) =>
+    canDelete &&
+    !(
+      role === "property_manager" &&
+      (inv.status === "paid" || inv.amount - inv.paidAmount <= 0)
+    );
   const invoices = useApi<Invoice[]>("/invoices");
   const payments = useApi<Payment[]>("/payments");
+  const credits = useApi<CreditEntry[]>(mine ? "/credits" : null);
+  const rejections = useApi<PaymentRejection[]>(mine ? "/payments/rejections" : null);
   const apartments = useApi<Apartment[]>(mine ? null : "/apartments");
   const users = useApi<User[]>(mine ? null : "/users");
   const accounts = useApi<Account[]>(mine ? null : "/accounts");
@@ -966,6 +1258,10 @@ function InvoicesPageInner() {
   const [aptTab, setAptTab] = useState<string>("all");
   const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
   const [reportInvoice, setReportInvoice] = useState<Invoice | null>(null);
+  const [payMulti, setPayMulti] = useState(false);
+  const [creditModal, setCreditModal] = useState(false);
+  // Owner multi-pay: invoices ticked directly on their cards.
+  const [selectedPay, setSelectedPay] = useState<Set<string>>(new Set());
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [statModal, setStatModal] = useState<"billed" | "paid" | "due" | null>(null);
@@ -995,6 +1291,106 @@ function InvoicesPageInner() {
   const pendingInvoiceIds = new Set(
     (payments.data ?? []).filter((p) => p.status === "pending").map((p) => p.invoiceId)
   );
+
+  // Advance credit (owners): spendable balance per apartment + what's still
+  // waiting on a manager confirmation.
+  const creditByApt = new Map<string, number>();
+  let pendingCreditTotal = 0;
+  for (const c of credits.data ?? []) {
+    if (c.status === "confirmed" && c.remaining > 0) {
+      creditByApt.set(c.apartmentId, (creditByApt.get(c.apartmentId) ?? 0) + c.remaining);
+    } else if (c.status === "pending") {
+      pendingCreditTotal += c.remaining;
+    }
+  }
+  const creditBalance = [...creditByApt.values()].reduce((s, v) => s + v, 0);
+  // What can be ticked for payment: open invoices that aren't already claimed.
+  const payableInvoices = (invoices.data ?? []).filter(
+    (i) => i.amount - i.paidAmount > 0 && !pendingInvoiceIds.has(i.id)
+  );
+  // Selections survive reloads only while still payable.
+  const selectedPayable = payableInvoices.filter((i) => selectedPay.has(i.id));
+  const selectedPayTotal = selectedPayable.reduce(
+    (s, i) => s + (i.amount - i.paidAmount), 0
+  );
+  // Select-all follows the apartment tab an owner is looking at.
+  const visiblePayable = payableInvoices.filter(
+    (i) => aptTab === "all" || i.apartmentId === aptTab
+  );
+  const visiblePayableTotal = visiblePayable.reduce(
+    (s, i) => s + (i.amount - i.paidAmount), 0
+  );
+  const allPayableSelected =
+    visiblePayable.length > 0 && visiblePayable.every((i) => selectedPay.has(i.id));
+
+  function togglePaySelect(id: string) {
+    setSelectedPay((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Latest rejection per invoice (list arrives newest first) — shown on the
+  // card while the invoice is still open and unclaimed.
+  const rejectionByInvoice = new Map<string, PaymentRejection>();
+  for (const r of rejections.data ?? []) {
+    if (!rejectionByInvoice.has(r.invoiceId)) rejectionByInvoice.set(r.invoiceId, r);
+  }
+
+  async function payFromCredit(inv: Invoice) {
+    const due = inv.amount - inv.paidAmount;
+    // Credit is pooled across the whole account — any apartment's invoice
+    // can draw from it.
+    const usable = Math.min(creditBalance, due);
+    if (usable <= 0) return;
+    if (!confirm(`Pay ${formatINR(usable)} of this invoice from your advance credit?`)) return;
+    try {
+      await api("/payments/apply-credit", {
+        method: "POST",
+        body: JSON.stringify({
+          apartmentId: inv.apartmentId,
+          amount: usable,
+          invoiceIds: [inv.id],
+        }),
+      });
+      invoices.reload();
+      payments.reload();
+      credits.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Could not apply credit");
+    }
+  }
+
+  async function applyAllCredit() {
+    if (!confirm(`Apply ${formatINR(creditBalance)} of advance credit to your open dues (oldest first)?`)) return;
+    try {
+      // One shared pool across the account — walk apartments with dues and
+      // hand each an explicit slice until the pool runs out.
+      let pool = creditBalance;
+      const apts = [...new Set(payableInvoices.map((i) => i.apartmentId))];
+      for (const apt of apts) {
+        if (pool <= 0) break;
+        const aptDue = payableInvoices
+          .filter((i) => i.apartmentId === apt)
+          .reduce((s, i) => s + (i.amount - i.paidAmount), 0);
+        const slice = Math.min(pool, aptDue);
+        if (slice <= 0) continue;
+        await api("/payments/apply-credit", {
+          method: "POST",
+          body: JSON.stringify({ apartmentId: apt, amount: slice }),
+        });
+        pool -= slice;
+      }
+      setCreditModal(false);
+      invoices.reload();
+      payments.reload();
+      credits.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Could not apply credit");
+    }
+  }
 
   async function handleDelete(inv: Invoice) {
     const label = `${inv.description} — ${inv.period} (${formatINR(inv.amount)})`;
@@ -1234,7 +1630,7 @@ function InvoicesPageInner() {
 
       {/* Owner headline: my totals for the selected apartment(s). */}
       {mine && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat
             label="Billed"
             value={formatINR(c.billed + p.billed)}
@@ -1254,6 +1650,19 @@ function InvoicesPageInner() {
             tone={c.due + p.due > 0 ? "negative" : "positive"}
             hint={c.due + p.due > 0 ? "Tap for what's due" : "All clear"}
             onClick={() => setStatModal("due")}
+          />
+          <Stat
+            label="Advance Credit"
+            value={formatINR(creditBalance)}
+            tone={creditBalance > 0 ? "positive" : undefined}
+            hint={
+              pendingCreditTotal > 0
+                ? `+ ${formatINR(pendingCreditTotal)} awaiting confirmation`
+                : creditBalance > 0
+                  ? "Tap to view / apply"
+                  : "Overpayments are banked here"
+            }
+            onClick={() => setCreditModal(true)}
           />
         </div>
       )}
@@ -1392,7 +1801,7 @@ function InvoicesPageInner() {
                             Record
                           </button>
                         )}
-                        {canDelete && (
+                        {canDeleteInv(inv) && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1416,6 +1825,42 @@ function InvoicesPageInner() {
           </table>
         </Card>
       ) : null}
+
+      {/* Owner bulk selection: one tap to select or clear every unpaid
+          invoice in the current apartment tab. */}
+      {mine && visiblePayable.length > 0 && (
+        <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm hover:border-brand-300">
+          <input
+            type="checkbox"
+            checked={allPayableSelected}
+            onChange={() =>
+              setSelectedPay(
+                allPayableSelected
+                  ? new Set()
+                  : new Set(visiblePayable.map((i) => i.id))
+              )
+            }
+            className="h-5 w-5 cursor-pointer rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+          />
+          <span className="min-w-0 flex-1 text-sm font-medium text-slate-700">
+            {allPayableSelected ? "Clear all" : "Select all unpaid"}
+            <span className="ml-1 text-xs font-normal text-slate-400">
+              — {visiblePayable.length} invoice{visiblePayable.length === 1 ? "" : "s"} · {formatINR(visiblePayableTotal)}
+            </span>
+          </span>
+          {selectedPayable.length > 0 && !allPayableSelected && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                setSelectedPay(new Set());
+              }}
+              className="shrink-0 text-xs font-semibold text-slate-500 hover:text-slate-700"
+            >
+              Clear ({selectedPayable.length})
+            </button>
+          )}
+        </label>
+      )}
 
       <div className={!mine && f.view === "table" ? "space-y-5 md:hidden" : "space-y-5"} key={`boxes-${JSON.stringify(f)}-${aptTab}`}>
       {periodGroups.map(({ period, items }) => {
@@ -1479,12 +1924,25 @@ function InvoicesPageInner() {
                         <Card className="divide-y divide-slate-100">
                           {aptItems.map((inv) => {
                             const balance = inv.amount - inv.paidAmount;
+                            const selectable =
+                              mine && balance > 0 && !pendingInvoiceIds.has(inv.id);
                             return (
                               <div
                                 key={inv.id}
                                 onClick={() => setDetailId(inv.id)}
-                                className={`cursor-pointer p-4 hover:bg-slate-50/60 ${ledgerAccent(inv.ledger)}`}
+                                className={`flex cursor-pointer gap-3 p-4 hover:bg-slate-50/60 ${ledgerAccent(inv.ledger)} ${selectable && selectedPay.has(inv.id) ? "bg-brand-50/60" : ""}`}
                               >
+                                {selectable && (
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`Select ${inv.description} for payment`}
+                                    checked={selectedPay.has(inv.id)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={() => togglePaySelect(inv.id)}
+                                    className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                  />
+                                )}
+                                <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-start justify-between gap-2">
                                   <div className="min-w-0">
                                     <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
@@ -1507,7 +1965,7 @@ function InvoicesPageInner() {
                                   <div className="flex items-center gap-2.5">
                                     <span className="tabular text-sm font-bold text-slate-900">{formatINR(inv.amount)}</span>
                                     <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
-                                    {canDelete && (
+                                    {canDeleteInv(inv) && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -1534,24 +1992,71 @@ function InvoicesPageInner() {
                                     Record payment
                                   </button>
                                 )}
+                                {mine && balance > 0 && !pendingInvoiceIds.has(inv.id) &&
+                                  rejectionByInvoice.has(inv.id) && (() => {
+                                    const rej = rejectionByInvoice.get(inv.id)!;
+                                    return (
+                                      <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                                        Your {formatINR(rej.amount)} payment was not accepted
+                                        {rej.reason ? <> — {rej.reason}</> : " — contact the property manager"}
+                                        <span className="ml-1 text-red-400">({formatDate(rej.date.slice(0, 10))})</span>
+                                      </p>
+                                    );
+                                  })()}
                                 {mine && balance > 0 && (
                                   pendingInvoiceIds.has(inv.id) ? (
                                     <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
                                       Payment reported — awaiting confirmation from the manager
                                     </p>
-                                  ) : (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setReportInvoice(inv);
-                                      }}
-                                      className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700"
-                                    >
-                                      <Banknote className="h-3.5 w-3.5" />
-                                      I&apos;ve paid this — report payment
-                                    </button>
-                                  )
+                                  ) : (() => {
+                                    // Pooled: any of the account's credit can
+                                    // settle any of its invoices.
+                                    const aptCredit = creditBalance;
+                                    // Credit that fully covers the invoice is
+                                    // the obvious move — lead with it.
+                                    const creditFirst = aptCredit >= balance;
+                                    const reportBtn = (
+                                      <button
+                                        key="report"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setReportInvoice(inv);
+                                        }}
+                                        className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold ${
+                                          creditFirst
+                                            ? "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                                            : "bg-brand-600 text-white hover:bg-brand-700"
+                                        }`}
+                                      >
+                                        <Banknote className="h-3.5 w-3.5" />
+                                        I&apos;ve paid this — report payment
+                                      </button>
+                                    );
+                                    const creditBtn = aptCredit > 0 && (
+                                      <button
+                                        key="credit"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          payFromCredit(inv);
+                                        }}
+                                        className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold ${
+                                          creditFirst
+                                            ? "bg-violet-600 text-white hover:bg-violet-700"
+                                            : "border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                                        }`}
+                                      >
+                                        <PiggyBank className="h-3.5 w-3.5" />
+                                        Pay {formatINR(Math.min(aptCredit, balance))} from credit
+                                      </button>
+                                    );
+                                    return (
+                                      <span className="mt-3 flex flex-wrap gap-1.5">
+                                        {creditFirst ? [creditBtn, reportBtn] : [reportBtn, creditBtn]}
+                                      </span>
+                                    );
+                                  })()
                                 )}
+                                </div>
                               </div>
                             );
                           })}
@@ -1573,6 +2078,9 @@ function InvoicesPageInner() {
         </Card>
       )}
       </div>
+
+      {/* Keep the last card reachable while the sticky pay bar is up. */}
+      {mine && selectedPayable.length > 0 && <div aria-hidden className="h-24" />}
 
       {dialog === "generate" && (
         <GenerateDialog
@@ -1634,8 +2142,100 @@ function InvoicesPageInner() {
           onDone={() => {
             invoices.reload();
             payments.reload();
+            credits.reload();
           }}
         />
+      )}
+      {/* Sticky pay bar — appears as soon as the owner ticks an invoice. */}
+      {mine && selectedPayable.length > 0 && !payMulti && (
+        <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-40 flex justify-center px-4 lg:bottom-6 lg:pl-60">
+          <div className="animate-rise flex w-full max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-slate-800">{formatINR(selectedPayTotal)}</p>
+              <p className="text-xs text-slate-500">
+                {selectedPayable.length} invoice{selectedPayable.length === 1 ? "" : "s"} selected
+                {!allPayableSelected && (
+                  <>
+                    {" · "}
+                    <button
+                      onClick={() => setSelectedPay(new Set(visiblePayable.map((i) => i.id)))}
+                      className="font-semibold text-brand-600 hover:text-brand-700"
+                    >
+                      select all {visiblePayable.length}
+                    </button>
+                  </>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={() => setSelectedPay(new Set())}
+              aria-label="Clear selection"
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setPayMulti(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+            >
+              <Banknote className="h-4 w-4" /> Pay selected
+            </button>
+          </div>
+        </div>
+      )}
+      {payMulti && (
+        <PayMultipleDialog
+          invoices={selectedPayable}
+          totalCredit={creditBalance}
+          multiApt={myApts.length > 1}
+          onClose={() => setPayMulti(false)}
+          onDone={() => {
+            setSelectedPay(new Set());
+            invoices.reload();
+            payments.reload();
+            credits.reload();
+          }}
+        />
+      )}
+      {creditModal && (
+        <Modal title="Advance Credit" onClose={() => setCreditModal(false)}>
+          <div className="space-y-4">
+            <div>
+              <p className="text-2xl font-bold text-emerald-600">{formatINR(creditBalance)}</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Money you paid beyond what was owed — it&apos;s yours, waiting
+                to cover future invoices.
+              </p>
+            </div>
+            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
+              {(credits.data ?? [])
+                .filter((cr) => cr.remaining > 0)
+                .map((cr) => (
+                  <div key={cr.id} className="flex items-center justify-between gap-2 px-3 py-2.5 text-xs">
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-700">
+                        {myApts.length > 1 && `Apt ${aptNumber(cr.apartmentId)} · `}
+                        {cr.reference || "Overpayment"}
+                      </p>
+                      <p className="text-[10px] text-slate-400">{formatDate(cr.date)}</p>
+                    </div>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="font-semibold text-slate-800">{formatINR(cr.remaining)}</span>
+                      {cr.status === "pending" && <Badge tone="amber">awaiting confirmation</Badge>}
+                    </span>
+                  </div>
+                ))}
+              {(credits.data ?? []).filter((cr) => cr.remaining > 0).length === 0 && (
+                <p className="px-3 py-6 text-center text-xs text-slate-400">No credit right now.</p>
+              )}
+            </div>
+            {creditBalance > 0 && payableInvoices.length > 0 && (
+              <button onClick={applyAllCredit} className={primaryBtnCls}>
+                Apply {formatINR(Math.min(creditBalance, payableInvoices.reduce((s, i) => s + i.amount - i.paidAmount, 0)))} to my dues
+              </button>
+            )}
+          </div>
+        </Modal>
       )}
       {statModal && (
         <Modal
@@ -2131,7 +2731,7 @@ function InvoicesPageInner() {
           onRecordPayment={setPayInvoice}
           onReportPaid={setReportInvoice}
           onDelete={
-            canDelete
+            canDeleteInv(detailInvoice)
               ? (inv) => {
                   setDetailId(null);
                   handleDelete(inv);

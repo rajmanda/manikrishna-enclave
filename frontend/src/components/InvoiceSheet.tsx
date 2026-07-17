@@ -113,12 +113,29 @@ export function InvoiceSheet({
     }
   }
 
+  // Batch portions resolve as a whole — one transfer either arrived or not.
   function confirmPayment(p: Payment) {
+    if (p.batchId) {
+      if (!confirm("This payment is part of ONE reported transfer covering several invoices — confirming accepts the whole transfer. Continue?")) return;
+      run(p.id, () => api(`/payments/batch/${p.batchId}/confirm`, { method: "POST" }));
+      return;
+    }
     run(p.id, () => api(`/payments/${p.id}/confirm`, { method: "POST" }));
   }
   function rejectPayment(p: Payment) {
-    if (!confirm(`Reject the reported payment of ${formatINR(p.amount)}? The owner will be notified.`)) return;
-    run(p.id, () => api(`/payments/${p.id}/reject`, { method: "POST" }));
+    const batchNote = p.batchId
+      ? "\n\nThis payment is part of ONE reported transfer — rejecting rejects the whole transfer (and discards any advance credit from it)."
+      : "";
+    const input = prompt(
+      `Reject the reported payment of ${formatINR(p.amount)}?${batchNote}\n\nReason for rejection (shown to the owner):`
+    );
+    if (input === null) return; // cancelled
+    const path = p.batchId
+      ? `/payments/batch/${p.batchId}/reject`
+      : `/payments/${p.id}/reject`;
+    run(p.id, () =>
+      api(path, { method: "POST", body: JSON.stringify({ reason: input.trim() }) })
+    );
   }
   function reversePayment(p: Payment) {
     if (!confirm(`Reverse this payment of ${formatINR(p.amount)} (${p.method}, ${formatDate(p.date)})?\n\nThe amount is added back to this invoice's outstanding balance.`)) return;

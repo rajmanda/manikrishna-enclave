@@ -356,6 +356,9 @@ class Payment(APIModel):
     ledger: Literal["community", "manager_fee", "reimbursement"] = "community"
     # Set on Credit payments that settle a cost case's over-collection.
     settles_cost_case_id: str | None = None
+    # Set when one reported amount covered several invoices — the portions
+    # share a batch id so the manager can confirm/reject them as a unit.
+    batch_id: str | None = None
 
 
 class PaymentReport(APIModel):
@@ -366,6 +369,71 @@ class PaymentReport(APIModel):
     date: str
     method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
     reference: str = ""
+
+
+class PaymentBatchReport(APIModel):
+    """Owner-submitted claim that ONE transfer paid several invoices.
+
+    The amount is allocated oldest due date first — one pending Payment per
+    invoice portion, exactly as if each were reported individually. Anything
+    beyond the combined outstanding becomes an advance credit entry."""
+
+    invoice_ids: list[str]
+    amount: float
+    date: str
+    method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
+    reference: str = ""
+
+
+class CreditEntry(APIModel):
+    """Advance credit held for an apartment (money received beyond what was
+    owed). Consumed FIFO by `POST /payments/apply-credit`, which books
+    Credit-method payments against open invoices — the cash was already
+    counted when it arrived, the credit books it against future dues."""
+
+    id: str = Field(default_factory=lambda: new_id("cr"))
+    community_id: str
+    apartment_id: str
+    amount: float  # original credit
+    remaining: float  # unused portion
+    source: Literal["overpayment", "manual", "correction"] = "overpayment"
+    # Owner-reported overpayments stay pending (invisible to the balance)
+    # until the manager confirms the batch they arrived in.
+    status: Literal["pending", "confirmed"] = "confirmed"
+    reference: str = ""
+    date: str
+    created_by: str
+    batch_id: str | None = None
+
+
+class RejectPaymentRequest(APIModel):
+    """Why the manager rejected a reported payment — relayed to the owner."""
+
+    reason: str = ""
+
+
+class PaymentRejection(APIModel):
+    """Durable record of a rejected payment claim, so the owner sees WHY an
+    invoice bounced back on the invoice itself (notifications scroll away)."""
+
+    id: str = Field(default_factory=lambda: new_id("rej"))
+    community_id: str
+    invoice_id: str
+    apartment_id: str
+    amount: float
+    reason: str = ""
+    rejected_by: str  # the manager who rejected
+    reporter_id: str | None = None
+    date: str  # ISO datetime
+
+
+class ApplyCreditRequest(APIModel):
+    """Use an apartment's advance credit to settle open invoices,
+    oldest due date first."""
+
+    apartment_id: str
+    amount: float | None = None  # default: min(balance, total outstanding)
+    invoice_ids: list[str] | None = None  # default: all open invoices
 
 
 class AllocatePaymentRequest(APIModel):
@@ -885,6 +953,7 @@ NotificationEventType = Literal[
     "credit_applied",
     "payment_reminder",
     "payment_received",
+    "payment_rejected",
     "common_expense_created",
     "work_order_created",
     "work_order_status_updated",

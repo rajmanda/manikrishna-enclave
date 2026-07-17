@@ -19,6 +19,8 @@ Status legend: ✅ live end-to-end · 🟡 UI on seed data (backend pending) ·
 | Whitelist management API | ✅ | Admin UI screen 📋 |
 | Invoices (full: generate/bulk/late fees/CRUD) | ✅ | M2 |
 | Payments (record/reverse, credits) | ✅ | M2; owner online payment still 📋 (gateway TBD) |
+| Pay multiple invoices in one shot (owner batch report, manager one-click confirm) | ✅ | Per-invoice rows — balancing identical to individual payments |
+| Advance credits (overpayment banked, pay future dues from credit) | ✅ | FIFO, applied oldest-invoice-first; owner tile + manager card |
 | Expenses (CRUD + GCS receipts), reserve fund entries | ✅ | M2; community-transparent |
 | Work orders (full lifecycle: create/stage/comments/photos) | ✅ | M3; members notified on stage changes |
 | Vendors (full CRUD, delete guard) | ✅ | M3 |

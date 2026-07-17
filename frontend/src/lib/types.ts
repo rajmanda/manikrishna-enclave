@@ -124,6 +124,39 @@ export interface Payment {
   status?: "pending" | "confirmed";
   reportedBy?: string | null;
   ledger?: "community" | "manager_fee" | "reimbursement";
+  // Set when one reported amount covered several invoices — the portions
+  // share a batch id so the manager can confirm/reject them together.
+  batchId?: string | null;
+}
+
+// Durable record of a rejected payment claim — shown on the invoice so the
+// owner knows why it bounced.
+export interface PaymentRejection {
+  id: string;
+  communityId: string;
+  invoiceId: string;
+  apartmentId: string;
+  amount: number;
+  reason: string;
+  rejectedBy: string;
+  reporterId?: string | null;
+  date: string;
+}
+
+// Advance credit held for an apartment (money received beyond what was
+// owed). Spent via POST /payments/apply-credit, oldest entries first.
+export interface CreditEntry {
+  id: string;
+  communityId: string;
+  apartmentId: string;
+  amount: number;
+  remaining: number;
+  source: "overpayment" | "manual";
+  status: "pending" | "confirmed";
+  reference: string;
+  date: string;
+  createdBy: string;
+  batchId?: string | null;
 }
 
 export type ExpenseCategory =

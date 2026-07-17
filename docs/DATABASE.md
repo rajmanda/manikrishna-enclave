@@ -22,7 +22,9 @@ scoped by it (see `scoped_community_id` in `backend/app/core/security.py`).
 | `users` | Members **and the login whitelist** | id, community_id, name, email (unique), role (active), roles[] (switchable set), apartment_id?, phone? |
 | `apartments` | Units | id, community_id, number (unique per community), floor, owner_ids[] |
 | `invoices` | Charges per apartment | id, community_id, apartment_id, period, description, amount, paid_amount, due_date, status, parent_invoice_id (late fees), ledger (community \| manager_fee \| reimbursement), line_items[] |
-| `payments` | Receipts | id, community_id, invoice_id, apartment_id, amount, date, method (incl. "Credit"), reference, status (pending/confirmed — owner-reported start pending), reported_by? |
+| `payments` | Receipts | id, community_id, invoice_id, apartment_id, amount, date, method (incl. "Credit"), reference, status (pending/confirmed — owner-reported start pending), reported_by?, batch_id? (portions of one reported multi-invoice transfer) |
+| `credits` | Advance credit per apartment (money received beyond dues) | id, community_id, apartment_id, amount, remaining, source (overpayment/manual), status (pending until the batch is confirmed), reference, date, created_by, batch_id? — spent FIFO via `POST /payments/apply-credit` |
+| `payment_rejections` | Durable record of rejected payment claims (shown on the owner's invoice) | id, community_id, invoice_id, apartment_id, amount, reason, rejected_by, reporter_id?, date |
 | `expenses` | Community spend | id, community_id, category, description, vendor_id?, amount, paid_date, has_receipt, receipt_path (GCS) |
 | `work_orders` | Common-area jobs | id, community_id, title, description, priority, stage, vendor_id?, assigned_to?, estimate?, final_cost?, reported_date, photo_count, timeline[], comments[] |
 | `vendors` | Service providers | id, community_id, name, service, phone, gst?, amc_expiry?, rating, active_contracts |
