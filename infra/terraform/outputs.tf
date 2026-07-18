@@ -19,6 +19,10 @@ output "deployer_service_account" {
   value = google_service_account.deployer.email
 }
 
+output "marketing_url" {
+  value = google_cloud_run_v2_service.marketing.uri
+}
+
 output "lb_ip" {
   description = "Create DNS A record: community.rajmanda.com → this IP"
   value       = google_compute_global_address.lb_ip.address

@@ -71,8 +71,8 @@ const TESTIMONIALS = [
   {
     quote:
       "I can see exactly what I owe, what the community spent, and where the reserve stands — without asking anyone.",
-    name: "M.V. Shanmukha Datta",
-    role: "Owner, Apt 101",
+    name: "Bhupendra Sangam",
+    role: "Owner, Apt 301",
   },
   {
     quote:

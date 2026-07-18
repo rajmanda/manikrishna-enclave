@@ -6,6 +6,11 @@ name: Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy_marketing:
+        description: "Also build & deploy the nivaasos.com marketing site"
+        type: boolean
+        default: false
 
 env:
   PROJECT_ID: mm-owners-5b8611
@@ -13,6 +18,7 @@ env:
   AR_REPO: asia-south1-docker.pkg.dev/mm-owners-5b8611/communityhub
   API_SERVICE: communityhub-backend
   FRONTEND_SERVICE: communityhub-frontend
+  MARKETING_SERVICE: nivaasos-marketing
   # Same-origin via the load balancer: /api/* routes to the API service.
   API_URL: https://community.rajmanda.com/api/v1
 
@@ -87,3 +93,42 @@ jobs:
           curl -sf https://communityhub-backend-ht4p2vwsjq-el.a.run.app/health
           curl -sf -o /dev/null https://communityhub-frontend-ht4p2vwsjq-el.a.run.app/
           echo "Health checks passed"
+
+  # nivaasos.com marketing site — opt-in via the deploy_marketing input.
+  # Fully static, no secrets; build args default sensibly in the app.
+  deploy-marketing:
+    name: Build, push, deploy marketing (nivaasos.com)
+    if: ${{ inputs.deploy_marketing }}
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1048909334838/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: github-deployer@mm-owners-5b8611.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build & push marketing image
+        run: |
+          docker build -t $AR_REPO/nivaasos-marketing:${{ github.sha }} marketing
+          docker push $AR_REPO/nivaasos-marketing:${{ github.sha }}
+
+      - name: Deploy marketing
+        run: |
+          gcloud run deploy $MARKETING_SERVICE \
+            --project $PROJECT_ID --region $REGION \
+            --image $AR_REPO/nivaasos-marketing:${{ github.sha }}
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -sf -o /dev/null https://nivaasos.com/
+          curl -sf -o /dev/null https://nivaasos.com/robots.txt
+          echo "Marketing health checks passed"

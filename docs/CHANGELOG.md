@@ -3,6 +3,30 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [Unreleased] — nivaasos marketing site
+
+- **Nivaasos public marketing site (2026-07-18)** — new isolated
+  `marketing/` Next.js app for the nivaasos.com domain (public brand for
+  the CommunityHub platform). Fully static (24 prerendered routes, no auth,
+  no API access): landing page (hero with fictional "Greenwood Residency"
+  dashboard mock, problem/solution, transparency chain MR→WO→expense→
+  invoice→payment→ledger, role benefits, mobile section, trust, FAQ) plus
+  18 dedicated intent pages (/product, /features, /community-accounting,
+  /maintenance-management, /resident-portal, /apartment-communities,
+  /property-managers, /nri-property-owners, /mobile-app, /how-it-works,
+  /security, /product-facts, /faq, /about, /contact, /request-demo,
+  /privacy, /terms). SEO/AEO: per-page metadata + canonicals, JSON-LD
+  (Organization, WebSite, SoftwareApplication, FAQPage, BreadcrumbList,
+  About/ContactPage — parse-validated), robots.ts (search + AI-search
+  crawlers allowed; training-crawler policy = documented owner decision),
+  sitemap.ts (public canonical pages only), llms.txt, custom 404,
+  answer-first copy, internal-link strips. Accessibility: skip link,
+  keyboard nav, focus rings, reduced motion, no-JS FAQ accordions. Lead
+  forms are honest mailto flows pending an approved public endpoint.
+  No app/backend/infra files touched; deployment (Terraform host rule +
+  DNS) documented but NOT executed — see docs/NIVAASOS_PUBLIC_SITE.md.
+  Build verified: static output, ~106 kB first-load JS, leak-grep clean.
+
 ## [Unreleased] — feature/growth-center
 
 - **Growth Center Leads CRM + Firecrawl discovery (2026-07-18)** —

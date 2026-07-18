@@ -24,6 +24,12 @@ variable "domain" {
   default = "community.rajmanda.com"
 }
 
+variable "marketing_domain" {
+  description = "Public marketing site (Nivaasos) domain, same LB/IP"
+  type        = string
+  default     = "nivaasos.com"
+}
+
 variable "db_name" {
   description = "MongoDB database name for production"
   type        = string
