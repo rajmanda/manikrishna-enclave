@@ -119,8 +119,17 @@ jobs:
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
       - name: Build & push marketing image
+        # APP_URL stays on community.rajmanda.com until the OAuth client
+        # registers community.nivaasos.com as an authorized JS origin
+        # (verified 2026-07-18: sign-in works on rajmanda.com, origin error
+        # on nivaasos.com). Flip via the MARKETING_APP_URL repo variable.
+        # GOOGLE_CLIENT_ID powers the Resident Login popup's Google button;
+        # it also needs https://nivaasos.com registered as an origin.
         run: |
-          docker build -t $AR_REPO/nivaasos-marketing:${{ github.sha }} marketing
+          docker build \
+            --build-arg NEXT_PUBLIC_APP_URL=${{ vars.MARKETING_APP_URL || 'https://community.rajmanda.com' }} \
+            --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }} \
+            -t $AR_REPO/nivaasos-marketing:${{ github.sha }} marketing
           docker push $AR_REPO/nivaasos-marketing:${{ github.sha }}
 
       - name: Deploy marketing

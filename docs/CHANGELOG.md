@@ -3,6 +3,28 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [Unreleased] — resident-login popup + mobile modal fix
+
+- **Resident Login popup on nivaasos.com (2026-07-18)** — header, hero and
+  final-CTA "Resident Login" buttons now open a popup
+  (`marketing/src/components/ResidentLogin.tsx`) instead of navigating to
+  the app's login page. With `NEXT_PUBLIC_GOOGLE_CLIENT_ID` set (and
+  nivaasos.com registered as an authorized JS origin on the same OAuth
+  client), the popup renders Google sign-in directly and hands the ID
+  token to the app via `#gcred=` fragment; the app login page
+  (`frontend/src/app/page.tsx`) consumes it once, scrubs the URL, and
+  exchanges it through the existing `/auth/google` flow → straight to the
+  dashboard. Without the client ID the popup falls back to a link (old
+  behavior, one extra click). Marketing still makes no backend/API calls.
+  Footer/contact/product-facts login *text links* stay plain links.
+- **Mobile modal fix (2026-07-18)** — shared app `Modal` is now a centered
+  dialog on every viewport (was a flush bottom sheet on phones, which read
+  as "scroll down to find it" and had no side margins): overlay gets
+  `p-4` + safe-area padding, panel uses new `.modal-panel-max`
+  (`85dvh` with `85vh` fallback) so it never hides behind mobile browser
+  toolbars. Applies to all tile popups on /community and every other
+  Modal-based dialog.
+
 ## [Unreleased] — nivaasos marketing site
 
 - **Nivaasos public marketing site (2026-07-18)** — new isolated

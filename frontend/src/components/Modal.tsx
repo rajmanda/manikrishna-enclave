@@ -41,14 +41,18 @@ export function Modal({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
     >
       <button
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px]"
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="animate-rise relative max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-lg sm:rounded-3xl">
+      {/* Centered on every viewport (no mobile bottom-sheet): the panel opens
+          where the user tapped, with breathing room on all sides from the
+          container's p-4. `modal-panel-max` caps height in dvh so the panel
+          stays fully visible above mobile browser toolbars. */}
+      <div className="animate-rise modal-panel-max relative w-full max-w-md overflow-y-auto rounded-3xl bg-white p-5 shadow-lg">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold">{title}</h2>
           <button onClick={onClose} aria-label="Close">
