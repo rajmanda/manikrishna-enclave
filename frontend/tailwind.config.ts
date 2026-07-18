@@ -6,18 +6,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Brand — indigo, kept for equity, tuned steps.
+        // Brand — CSS-variable driven so a wrapper class can re-theme a
+        // subtree (see .theme-nivaasos in globals.css). Defaults in :root
+        // are the same indigo steps as before — no visual change anywhere.
         brand: {
-          50: "#eef2ff",
-          100: "#e0e7ff",
-          200: "#c7d2fe",
-          300: "#a5b4fc",
-          400: "#818cf8",
-          500: "#6366f1",
-          600: "#4f46e5",
-          700: "#4338ca",
-          800: "#3730a3",
-          900: "#312e81",
+          50: "rgb(var(--brand-50) / <alpha-value>)",
+          100: "rgb(var(--brand-100) / <alpha-value>)",
+          200: "rgb(var(--brand-200) / <alpha-value>)",
+          300: "rgb(var(--brand-300) / <alpha-value>)",
+          400: "rgb(var(--brand-400) / <alpha-value>)",
+          500: "rgb(var(--brand-500) / <alpha-value>)",
+          600: "rgb(var(--brand-600) / <alpha-value>)",
+          700: "rgb(var(--brand-700) / <alpha-value>)",
+          800: "rgb(var(--brand-800) / <alpha-value>)",
+          900: "rgb(var(--brand-900) / <alpha-value>)",
+          accent: "rgb(var(--brand-accent) / <alpha-value>)",
         },
         // Semantic surfaces / borders driven by CSS variables (dark-mode ready).
         surface: {
@@ -64,7 +67,7 @@ const config: Config = {
         sm: "0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04)",
         md: "0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.05)",
         lg: "0 12px 32px -8px rgb(15 23 42 / 0.12), 0 6px 12px -6px rgb(15 23 42 / 0.06)",
-        "brand-glow": "0 8px 28px -6px rgb(79 70 229 / 0.35)",
+        "brand-glow": "0 8px 28px -6px rgb(var(--brand-600) / 0.35)",
       },
       keyframes: {
         "fade-rise": {
