@@ -80,6 +80,38 @@ async def test_email_change_rekeys_whitelist(client, manager_headers, db):
     assert any(e["details"].get("email") == "prof.ramakrishna@gmail.com" for e in entries)
 
 
+async def test_created_member_keeps_account_link(client, manager_headers, db):
+    # A household account spanning two apartments — a second login email
+    # whitelisted with that accountId must see both, not just apartmentId.
+    await db.accounts.insert_one(
+        {
+            "id": "acct-dual",
+            "community_id": "mke",
+            "name": "Dual Owner Family",
+            "apartment_ids": ["apt-401", "apt-402"],
+        }
+    )
+    created = await client.post(
+        "/api/v1/users",
+        json={
+            "name": "Second Login",
+            "email": "second.login@example.com",
+            "role": "owner",
+            "accountId": "acct-dual",
+            "apartmentId": "apt-402",
+        },
+        headers=manager_headers,
+    )
+    assert created.status_code == 201
+    assert created.json()["accountId"] == "acct-dual"
+
+    login = await client.post(
+        "/api/v1/auth/dev-login", json={"email": "second.login@example.com"}
+    )
+    assert login.status_code == 200
+    assert login.json()["user"]["apartmentIds"] == ["apt-401", "apt-402"]
+
+
 async def test_email_change_duplicate_rejected(client, manager_headers):
     dup = await client.patch(
         "/api/v1/users/u-501",

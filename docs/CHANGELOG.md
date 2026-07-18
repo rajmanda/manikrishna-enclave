@@ -5,6 +5,14 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Fix: POST /users dropped accountId (2026-07-17)** — `create_user`
+  never persisted `account_id`, so any member whitelisted via the API
+  (including extra emails added through the comma-delimited member
+  dialog) lost their multi-apartment Account link and saw only their
+  single `apartment_id` after login. Now persisted; regression test
+  `test_created_member_keeps_account_link` covers create → login →
+  both apartments visible.
+
 - **Removed: manager-side Combined Payment (2026-07-17)** — the Invoices-page
   "Combined payment" button, `CombinedPaymentDialog`, and
   `POST /payments/allocate` are gone. Owner decision: the tool allowed
