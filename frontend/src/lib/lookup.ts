@@ -15,6 +15,18 @@ export function ownerNameFor(
   return userName(users, ownerId);
 }
 
+/** The apartment's active tenant on the whitelist, if any. */
+export function tenantFor(
+  users: User[] | undefined,
+  apartmentId: string
+): User | undefined {
+  return users?.find(
+    (u) =>
+      (u.role === "tenant" || u.roles?.includes("tenant")) &&
+      (u.apartmentId === apartmentId || u.apartmentIds?.includes(apartmentId))
+  );
+}
+
 export function vendorFor(
   vendors: Vendor[] | undefined,
   id?: string | null

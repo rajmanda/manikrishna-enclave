@@ -6,7 +6,7 @@ import { api, ApiError, downloadFile } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import type { Apartment, CommunityDocument, CostCaseDetail, Invoice, Payment, User } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
-import { aptNumber, ownerNameFor } from "@/lib/lookup";
+import { aptNumber, ownerNameFor, tenantFor, userName } from "@/lib/lookup";
 import { invoiceTone } from "@/lib/tones";
 import { Modal } from "@/components/Modal";
 import { uploadFileTo } from "@/lib/upload";
@@ -90,7 +90,29 @@ export function InvoiceSheet({
     .filter((p) => p.invoiceId === invoice.id)
     .sort((a, b) => b.date.localeCompare(a.date));
   const pending = linked.filter((p) => p.status === "pending");
-  const confirmed = linked.filter((p) => p.status !== "pending");
+  const confirmed = linked.filter((p) => p.status !== "pending" && p.status !== "voided");
+  const voided = linked.filter((p) => p.status === "voided");
+  const tenant = tenantFor(users, invoice.apartmentId);
+  // Who the payment request is routed to — the owner stays responsible.
+  const requestedFromTenant = invoice.paymentRequestRecipientType === "tenant";
+
+  /** "Paid by X on behalf of owner" line for third-party payments. */
+  function payerLine(p: Payment): string | null {
+    if (!p.payerType || p.payerType === "owner" || !p.payerName) return null;
+    return `Paid by ${p.payerName}${p.payerType === "tenant" ? " (tenant)" : ""} on behalf of owner`;
+  }
+
+  async function setPaymentRequestRecipient(type: "owner" | "tenant") {
+    try {
+      await api(`/invoices/${invoice.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ paymentRequestRecipientType: type }),
+      });
+      onChanged();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to update");
+    }
+  }
   const balance = invoice.amount - invoice.paidAmount;
   const pct =
     invoice.amount > 0
@@ -137,9 +159,18 @@ export function InvoiceSheet({
       api(path, { method: "POST", body: JSON.stringify({ reason: input.trim() }) })
     );
   }
-  function reversePayment(p: Payment) {
-    if (!confirm(`Reverse this payment of ${formatINR(p.amount)} (${p.method}, ${formatDate(p.date)})?\n\nThe amount is added back to this invoice's outstanding balance.`)) return;
-    run(p.id, () => api(`/payments/${p.id}`, { method: "DELETE" }));
+  // Posted payments are voided (kept with who/when/why), never deleted.
+  function voidPayment(p: Payment) {
+    const input = prompt(
+      `Void this payment of ${formatINR(p.amount)} (${p.method}, ${formatDate(p.date)})?\n\nThe amount is added back to this invoice's outstanding balance; the voided record stays in the history. To correct a mistake, void it and record the right payment.\n\nReason for voiding:`
+    );
+    if (input === null) return; // cancelled
+    run(p.id, () =>
+      api(`/payments/${p.id}/void`, {
+        method: "POST",
+        body: JSON.stringify({ reason: input.trim() }),
+      })
+    );
   }
 
   return (
@@ -155,6 +186,34 @@ export function InvoiceSheet({
             {invoice.period} · due {formatDate(invoice.dueDate)}
             {!mine &&
               ` · ${ownerNameFor(users, apartments, invoice.apartmentId)}`}
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span>
+              Responsible owner:{" "}
+              <span className="font-medium text-slate-700">
+                {ownerNameFor(users, apartments, invoice.apartmentId)}
+              </span>
+            </span>
+            {(requestedFromTenant || (canWrite && tenant)) && (
+              <span>
+                · Payment requested from:{" "}
+                <span className="font-medium text-slate-700">
+                  {requestedFromTenant
+                    ? `${userName(users, invoice.paymentRequestRecipientId) === "—" ? tenant?.name ?? "tenant" : userName(users, invoice.paymentRequestRecipientId)} (tenant, on behalf of owner)`
+                    : "Owner"}
+                </span>
+                {canWrite && tenant && invoice.status !== "paid" && (
+                  <button
+                    onClick={() =>
+                      setPaymentRequestRecipient(requestedFromTenant ? "owner" : "tenant")
+                    }
+                    className="ml-1.5 font-semibold text-brand-600 hover:text-brand-700"
+                  >
+                    {requestedFromTenant ? "Request from owner" : "Request from tenant"}
+                  </button>
+                )}
+              </span>
+            )}
           </p>
         </div>
 
@@ -290,22 +349,55 @@ export function InvoiceSheet({
                     <p className="text-sm font-medium">
                       {formatINR(p.amount)} · {p.method}
                     </p>
+                    {payerLine(p) && (
+                      <p className="truncate text-xs font-medium text-sky-700">
+                        {payerLine(p)}
+                      </p>
+                    )}
                     <p className="truncate text-xs text-slate-500">
                       {formatDate(p.date)}
                       {p.reference && ` · ref ${p.reference}`}
                     </p>
                   </div>
                 </div>
-                {canWrite && (
+                <div className="flex shrink-0 items-center gap-1">
                   <button
-                    onClick={() => reversePayment(p)}
-                    disabled={busyId === p.id}
-                    title="Reverse payment"
-                    className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                    onClick={() =>
+                      downloadFile(`/payments/${p.id}/receipt.pdf`, `receipt-${p.id}.pdf`)
+                    }
+                    title="Download receipt"
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-brand-600"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Download className="h-3.5 w-3.5" />
                   </button>
-                )}
+                  {canWrite && (
+                    <button
+                      onClick={() => voidPayment(p)}
+                      disabled={busyId === p.id}
+                      title="Void payment (kept in history)"
+                      className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {voided.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-3 opacity-75"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-400 line-through">
+                    {formatINR(p.amount)} · {p.method}
+                  </p>
+                  <p className="truncate text-xs text-slate-400">
+                    Voided{p.voidedAt ? ` ${formatDate(p.voidedAt.slice(0, 10))}` : ""}
+                    {p.voidReason && ` — ${p.voidReason}`}
+                  </p>
+                </div>
+                <Badge tone="slate">voided</Badge>
               </div>
             ))}
           </div>

@@ -131,6 +131,127 @@ async def _m007_cost_cases_borewell(db: Any) -> None:
             )
 
 
+async def _m008_third_party_payments(db: Any) -> None:
+    """Backfill payer attribution and invoice responsibility fields.
+
+    Invoices: the owner is stamped as the responsible party, the payment
+    request defaults to the owner, occupancy snapshots from the current
+    whitelist, and the billing month/year is parsed from `period`.
+
+    Payments/credits: rows reported by a tenant are reclassified as
+    tenant-paid-on-behalf-of-owner (payment stays on the SAME owner
+    invoice — no new invoices or payments are created, no dates/amounts/
+    references touched). Everything else defaults to owner-paid.
+
+    A per-community report of every reclassification (and rows needing
+    manual review) is stored in `migration_reports` (id "m008").
+    """
+    from app.routers.invoices import active_tenants, period_month_year
+
+    users_by_id = {u["id"]: u async for u in db.users.find({})}
+    apartments = {a["id"]: a async for a in db.apartments.find({})}
+    tenant_maps: dict[str, dict[str, dict]] = {}
+
+    async def tenants_for(cid: str) -> dict[str, dict]:
+        if cid not in tenant_maps:
+            tenant_maps[cid] = await active_tenants(db, cid)
+        return tenant_maps[cid]
+
+    async for inv in db.invoices.find(
+        {"responsible_party_type": {"$exists": False}}
+    ):
+        apt = apartments.get(inv["apartment_id"], {})
+        owner_ids = apt.get("owner_ids") or []
+        owner_id = owner_ids[0] if owner_ids else None
+        tmap = await tenants_for(inv["community_id"])
+        month, year = period_month_year(inv.get("period", ""))
+        await db.invoices.update_one(
+            {"id": inv["id"]},
+            {"$set": {
+                "responsible_party_type": "owner",
+                "responsible_owner_id": owner_id,
+                "payment_request_recipient_type": "owner",
+                "payment_request_recipient_id": owner_id,
+                "apartment_occupancy_status":
+                    "rented" if inv["apartment_id"] in tmap else "owner_occupied",
+                "billing_period_month": month,
+                "billing_period_year": year,
+            }},
+        )
+
+    report: list[dict] = []
+    async for p in db.payments.find({"payer_type": {"$exists": False}}):
+        reporter = users_by_id.get(p.get("reported_by") or "")
+        apt = apartments.get(p["apartment_id"], {})
+        owner_ids = apt.get("owner_ids") or []
+        owner = users_by_id.get(owner_ids[0]) if owner_ids else None
+        if reporter and (
+            reporter.get("role") == "tenant" or "tenant" in (reporter.get("roles") or [])
+        ):
+            payer_type, payer_id = "tenant", reporter["id"]
+            payer_name = reporter["name"]
+            needs_review = False
+        else:
+            # Recorded by a manager or reported by the owner — classified as
+            # owner-paid; rows with no reporter can't be verified from data.
+            payer_type = "owner"
+            payer_id = reporter["id"] if reporter else (owner or {}).get("id")
+            payer_name = (reporter or owner or {}).get("name", "")
+            needs_review = reporter is None and p.get("method") != "Credit"
+        await db.payments.update_one(
+            {"id": p["id"]},
+            {"$set": {
+                "payer_type": payer_type,
+                "payer_entity_id": payer_id,
+                "payer_name": payer_name,
+                "collected_by": None,
+                "collection_date": None,
+                "deposit_status": "not_required",
+                "deposit_date": None,
+                "notes": "[m008] payer classification backfilled from reporter",
+            }},
+        )
+        if payer_type != "owner" or needs_review:
+            report.append({
+                "community_id": p["community_id"],
+                "apartment_id": p["apartment_id"],
+                "invoice_id": p["invoice_id"],
+                "payment_id": p["id"],
+                "amount": p["amount"],
+                "date": p["date"],
+                "previous_classification": "owner (implicit)",
+                "updated_classification": payer_type,
+                "payer_name": payer_name,
+                "needs_manual_review": needs_review,
+            })
+
+    async for cr in db.credits.find({"payer_type": {"$exists": False}}):
+        funder = users_by_id.get(cr.get("created_by") or "")
+        is_tenant = bool(funder) and (
+            funder.get("role") == "tenant" or "tenant" in (funder.get("roles") or [])
+        )
+        await db.credits.update_one(
+            {"id": cr["id"]},
+            {"$set": {
+                "payer_type": "tenant" if is_tenant else "owner",
+                "payer_entity_id": funder["id"] if funder else None,
+                "payer_name": (funder or {}).get("name", ""),
+                "collected_by": None,
+                "notes": "[m008] payer classification backfilled from creator",
+            }},
+        )
+
+    await db.migration_reports.update_one(
+        {"id": "m008"},
+        {"$set": {"id": "m008", "title": "Third-party payment reclassification",
+                  "entries": report}},
+        upsert=True,
+    )
+    logger.info(
+        "m008: payer attribution backfilled; %d reclassified/review rows", len(report)
+    )
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], Awaitable[None]]]] = [
     (1, _m001_community_monthly_maintenance),
     (2, _m002_backfill_m3_collections),
@@ -139,6 +260,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], Awaitable[None]]]] = [
     (5, _m005_invoice_ledger),
     (6, _m006_apartment_in_invoice_description),
     (7, _m007_cost_cases_borewell),
+    (8, _m008_third_party_payments),
 ]
 
 

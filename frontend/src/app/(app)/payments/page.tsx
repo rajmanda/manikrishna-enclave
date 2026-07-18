@@ -1,15 +1,15 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { Banknote, Check, ChevronDown, PiggyBank, Trash2, X } from "lucide-react";
+import { Banknote, Check, ChevronDown, Download, HandCoins, PiggyBank, Trash2, Undo2, X } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, downloadFile } from "@/lib/api";
 import { useSessionUser } from "@/context/AuthContext";
 import { useUrlFilters } from "@/hooks/useUrlFilters";
 import { FilterBar } from "@/components/FilterBar";
-import type { Account, Apartment, CreditEntry, Invoice, Payment, User } from "@/lib/types";
+import type { Account, Apartment, CreditEntry, DepositStatus, Invoice, Payment, PayerType, User } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
-import { aptNumber, ownerNameFor } from "@/lib/lookup";
+import { aptNumber, ownerNameFor, tenantFor } from "@/lib/lookup";
 import { ledgerAccent } from "@/lib/tones";
 import {
   Badge,
@@ -21,7 +21,134 @@ import {
   Stat,
 } from "@/components/ui";
 import { InvoiceSheet } from "@/components/InvoiceSheet";
-import { Modal } from "@/components/Modal";
+import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
+
+const ADVANCE_METHODS = ["UPI", "Bank Transfer", "Cash", "Cheque"] as const;
+
+/** Manager records money received BEFORE its invoice exists (e.g. a tenant
+ * paying next month's HOA fee early). Held as an unapplied credit on the
+ * owner's account with the payer preserved. */
+function AdvancePaymentDialog({
+  apartments,
+  users,
+  onClose,
+  onDone,
+}: {
+  apartments: Apartment[] | undefined;
+  users: User[] | undefined;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { user: me } = useSessionUser();
+  const sorted = [...(apartments ?? [])].sort((a, b) => a.number.localeCompare(b.number));
+  const [apartmentId, setApartmentId] = useState(sorted[0]?.id ?? "");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [method, setMethod] = useState<(typeof ADVANCE_METHODS)[number]>("UPI");
+  const [reference, setReference] = useState("");
+  const [payerType, setPayerType] = useState<PayerType>("owner");
+  const [payerName, setPayerName] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const tenant = apartmentId ? tenantFor(users, apartmentId) : undefined;
+  const ownerName = apartmentId ? ownerNameFor(users, apartments, apartmentId) : "—";
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/payments/advance", {
+        method: "POST",
+        body: JSON.stringify({
+          apartmentId,
+          amount: Number(amount),
+          date,
+          method,
+          reference,
+          payerType,
+          payerEntityId: payerType === "tenant" ? tenant?.id ?? null : null,
+          payerName:
+            payerType === "tenant" ? tenant?.name ?? payerName : payerType === "other" ? payerName : "",
+          notes,
+        }),
+      });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to record advance payment");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Record Advance Payment" onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        <p className="text-sm text-slate-500">
+          For money received before its invoice exists. It is held as advance
+          credit on the owner&apos;s account — apply it once the invoice is
+          created, or refund it to the payer.
+        </p>
+        <div>
+          <label className={labelCls}>Apartment</label>
+          <select className={inputCls} value={apartmentId} onChange={(e) => { setApartmentId(e.target.value); setPayerType("owner"); }}>
+            {sorted.map((a) => (
+              <option key={a.id} value={a.id}>Apt {a.number}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Paid by</label>
+          <select className={inputCls} value={payerType} onChange={(e) => setPayerType(e.target.value as PayerType)}>
+            <option value="owner">Owner — {ownerName}</option>
+            {tenant && (
+              <option value="tenant">Tenant paid on behalf of owner — {tenant.name}</option>
+            )}
+            <option value="other">Other person</option>
+          </select>
+        </div>
+        {payerType === "other" && (
+          <div>
+            <label className={labelCls}>Payer name</label>
+            <input className={inputCls} value={payerName} onChange={(e) => setPayerName(e.target.value)} required />
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Amount received</label>
+            <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          </div>
+          <div>
+            <label className={labelCls}>Date</label>
+            <input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} required />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Method</label>
+            <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value as (typeof ADVANCE_METHODS)[number])}>
+              {ADVANCE_METHODS.map((m) => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Reference</label>
+            <input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UPI-1234" />
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Notes (optional)</label>
+          <input className={inputCls} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Aug 2026 HOA fee paid early" />
+        </div>
+        <p className="text-xs text-slate-400">Collected by {me.name}</p>
+        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+        <button type="submit" disabled={busy || !apartmentId} className={primaryBtnCls}>
+          {busy ? "Saving…" : `Hold ${formatINR(Number(amount) || 0)} as advance credit`}
+        </button>
+      </form>
+    </Modal>
+  );
+}
 
 function PaymentsPageInner() {
   const { role, user } = useSessionUser();
@@ -35,6 +162,7 @@ function PaymentsPageInner() {
       : [];
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [advanceOpen, setAdvanceOpen] = useState(false);
   const [statModal, setStatModal] = useState<"community" | "personal" | null>(null);
   const [selectedStatPaymentInvoiceId, setSelectedStatPaymentInvoiceId] = useState<string | null>(null);
   const [collapsedModalPeriods, setCollapsedModalPeriods] = useState<Record<string, boolean>>({});
@@ -81,7 +209,10 @@ function PaymentsPageInner() {
   }
 
   const pending = visible.filter((p) => p.status === "pending");
-  const confirmed = visible.filter((p) => p.status !== "pending");
+  // Voided payments stay in the invoice sheet's history but count nowhere.
+  const confirmed = visible.filter(
+    (p) => p.status !== "pending" && p.status !== "voided"
+  );
   const sorted = [...confirmed].sort((a, b) => b.date.localeCompare(a.date));
 
   // Pending rows that arrived as ONE reported transfer share a batch id —
@@ -229,25 +360,60 @@ function PaymentsPageInner() {
     }
   }
 
-  async function reverse(p: Payment) {
-    if (!confirm(`Reverse this payment of ${formatINR(p.amount)} (${p.method}, ${formatDate(p.date)})?\n\nThe amount is added back to the invoice's outstanding balance. This cannot be undone.`)) return;
+  // Posted payments are voided (kept with who/when/why), never deleted.
+  async function voidPayment(p: Payment) {
+    const input = prompt(
+      `Void this payment of ${formatINR(p.amount)} (${p.method}, ${formatDate(p.date)})?\n\nThe amount is added back to the invoice's outstanding balance; the voided record stays in the invoice's history.\n\nReason for voiding:`
+    );
+    if (input === null) return; // cancelled
     setDeletingId(p.id);
     try {
-      await api(`/payments/${p.id}`, { method: "DELETE" });
+      await api(`/payments/${p.id}/void`, {
+        method: "POST",
+        body: JSON.stringify({ reason: input.trim() }),
+      });
       payments.reload();
+      invoices.reload();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to reverse payment");
+      alert(err instanceof ApiError ? err.message : "Failed to void payment");
     } finally {
       setDeletingId(null);
     }
   }
 
+  async function refundCredit(cr: CreditEntry) {
+    const to = cr.payerName ? ` to ${cr.payerName}` : "";
+    const input = prompt(
+      `Refund this ${formatINR(cr.remaining)} unapplied credit${to}?\n\nThe refund goes back to the person who funded it. Record the actual transfer separately.\n\nNote (optional):`
+    );
+    if (input === null) return; // cancelled
+    try {
+      await api(`/credits/${cr.id}/refund`, {
+        method: "POST",
+        body: JSON.stringify({ note: input.trim() }),
+      });
+      credits.reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to refund credit");
+    }
+  }
+
   return (
     <div className="space-y-5">
-      <PageTitle
-        title={mine ? "My Payments" : "Payments Received"}
-        subtitle={mine ? "Every payment from your apartments" : "All payment records with references"}
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageTitle
+          title={mine ? "My Payments" : "Payments Received"}
+          subtitle={mine ? "Every payment from your apartments" : "All payment records with references"}
+        />
+        {canWrite && (
+          <button
+            onClick={() => setAdvanceOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            <HandCoins className="h-3.5 w-3.5" /> Record advance payment
+          </button>
+        )}
+      </div>
 
       <FilterBar
         filters={[
@@ -447,33 +613,65 @@ function PaymentsPageInner() {
                 const acct = (accounts.data ?? []).find((a) => a.apartmentIds.includes(aptId));
                 const targets = acct?.apartmentIds ?? [aptId];
                 const accountDue = targets.reduce((s, a) => s + (openByApt.get(a) ?? 0), 0);
+                const aptEntries = (credits.data ?? []).filter(
+                  (cr) => cr.apartmentId === aptId && cr.status === "confirmed" && cr.remaining > 0
+                );
                 return (
-                  <div key={aptId} className="flex flex-wrap items-center justify-between gap-3 p-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-                        <PiggyBank className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">
-                          Apt {aptNumber(aptId)} · {ownerNameFor(users.data, apartments.data, aptId)}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {accountDue > 0
-                            ? `${formatINR(accountDue)} currently due across the account`
-                            : "Nothing due — credit stays banked"}
-                        </p>
+                  <div key={aptId} className="p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                          <PiggyBank className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">
+                            Apt {aptNumber(aptId)} · {ownerNameFor(users.data, apartments.data, aptId)}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {accountDue > 0
+                              ? `${formatINR(accountDue)} currently due across the account`
+                              : "Nothing due — credit stays banked"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="text-sm font-semibold text-violet-700">{formatINR(balance)}</span>
+                        {canWrite && accountDue > 0 && (
+                          <button
+                            onClick={() => applyCredit(aptId, balance)}
+                            className="inline-flex items-center gap-1 rounded-xl bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+                          >
+                            Apply to dues
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-sm font-semibold text-violet-700">{formatINR(balance)}</span>
-                      {canWrite && accountDue > 0 && (
-                        <button
-                          onClick={() => applyCredit(aptId, balance)}
-                          className="inline-flex items-center gap-1 rounded-xl bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+                    {/* Entries with their funder — refunds go back to the payer. */}
+                    <div className="mt-2 space-y-1">
+                      {aptEntries.map((cr) => (
+                        <div
+                          key={cr.id}
+                          className="ml-12 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"
                         >
-                          Apply to dues
-                        </button>
-                      )}
+                          <span className="min-w-0 truncate">
+                            {formatINR(cr.remaining)}
+                            {cr.source === "advance" ? " advance" : ""} ·{" "}
+                            {cr.payerType && cr.payerType !== "owner" && cr.payerName
+                              ? `paid by ${cr.payerName}${cr.payerType === "tenant" ? " (tenant)" : ""} on behalf of owner`
+                              : "paid by owner"}{" "}
+                            · {formatDate(cr.date)}
+                          </span>
+                          {canWrite && (
+                            <button
+                              onClick={() => refundCredit(cr)}
+                              title="Refund to the payer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 font-semibold text-slate-500 hover:bg-slate-50 hover:text-red-600"
+                            >
+                              <Undo2 className="h-3 w-3" /> Refund
+                            </button>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );
@@ -555,6 +753,12 @@ function PaymentsPageInner() {
                                       <span className="truncate">{paymentTitle(p)}</span>
                                       <LedgerBadge ledger={p.ledger} />
                                     </p>
+                                    {p.payerType && p.payerType !== "owner" && p.payerName && (
+                                      <p className="truncate text-xs font-medium text-sky-700">
+                                        Paid by {p.payerName}
+                                        {p.payerType === "tenant" ? " (tenant)" : ""} on behalf of owner
+                                      </p>
+                                    )}
                                     <p className="truncate text-xs text-slate-500">
                                       {ownerNameFor(users.data, apartments.data, p.apartmentId)} ·{" "}
                                       {formatDate(p.date)}
@@ -565,14 +769,24 @@ function PaymentsPageInner() {
                                 <div className="flex shrink-0 items-center gap-2">
                                   <span className="text-sm font-semibold">{formatINR(p.amount)}</span>
                                   <Badge tone="slate">{p.method}</Badge>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      downloadFile(`/payments/${p.id}/receipt.pdf`, `receipt-${p.id}.pdf`);
+                                    }}
+                                    title="Download receipt"
+                                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-brand-600"
+                                  >
+                                    <Download className="h-3.5 w-3.5" />
+                                  </button>
                                   {canDelete && (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        reverse(p);
+                                        voidPayment(p);
                                       }}
                                       disabled={deletingId === p.id}
-                                      title="Reverse payment"
+                                      title="Void payment (kept in history)"
                                       className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
                                     >
                                       <Trash2 className="h-3.5 w-3.5" />
@@ -807,6 +1021,14 @@ function PaymentsPageInner() {
             Tap a row for the invoice this payment settled.
           </p>
         </Modal>
+      )}
+      {advanceOpen && (
+        <AdvancePaymentDialog
+          apartments={apartments.data}
+          users={users.data}
+          onClose={() => setAdvanceOpen(false)}
+          onDone={() => credits.reload()}
+        />
       )}
       {detailId && (() => {
         const inv = invoices.data?.find((i) => i.id === detailId);
