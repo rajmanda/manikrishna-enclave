@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import JsonLd from "@/components/JsonLd";
+import ThemeSwitch from "@/components/ThemeSwitch";
 import {
   CONTACT_EMAIL,
   DESCRIPTION,
@@ -76,6 +77,7 @@ export default function RootLayout({
           {children}
         </main>
         <Footer />
+        <ThemeSwitch />
       </body>
     </html>
   );
