@@ -2,6 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Default theme: Nivaasos evergreen (RGB channels for alpha support). */
+  --pine-50: 242 247 244;
+  --pine-100: 223 236 229;
+  --pine-200: 193 217 204;
+  --pine-300: 151 191 170;
+  --pine-400: 105 159 131;
+  --pine-500: 73 130 102;
+  --pine-600: 54 104 80;
+  --pine-700: 43 83 65;
+  --pine-800: 36 67 54;
+  --pine-900: 30 55 45;
+  --pine-950: 15 31 25;
+  --ivory: 250 248 244;
+  --sand: 243 239 231;
+}
+
+/* Alternate theme: the application's classic indigo look. Applied to
+ * <body> by the ThemeSwitch component; visitor choice persists locally. */
+.theme-classic {
+  --pine-50: 238 242 255;
+  --pine-100: 224 231 255;
+  --pine-200: 199 210 254;
+  --pine-300: 165 180 252;
+  --pine-400: 129 140 248;
+  --pine-500: 99 102 241;
+  --pine-600: 79 70 229;
+  --pine-700: 67 56 202;
+  --pine-800: 55 48 163;
+  --pine-900: 49 46 129;
+  --pine-950: 30 27 75;
+  --ivory: 248 250 252;
+  --sand: 241 245 249;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

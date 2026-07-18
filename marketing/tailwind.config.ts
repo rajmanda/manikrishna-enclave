@@ -10,21 +10,24 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // CSS-variable driven so the visitor-facing theme switch can swap
+        // the whole palette (defaults in globals.css :root = evergreen;
+        // .theme-classic = the app's indigo).
         pine: {
-          50: "#f2f7f4",
-          100: "#dfece5",
-          200: "#c1d9cc",
-          300: "#97bfaa",
-          400: "#699f83",
-          500: "#498266",
-          600: "#366850",
-          700: "#2b5341",
-          800: "#244336",
-          900: "#1e372d",
-          950: "#0f1f19",
+          50: "rgb(var(--pine-50) / <alpha-value>)",
+          100: "rgb(var(--pine-100) / <alpha-value>)",
+          200: "rgb(var(--pine-200) / <alpha-value>)",
+          300: "rgb(var(--pine-300) / <alpha-value>)",
+          400: "rgb(var(--pine-400) / <alpha-value>)",
+          500: "rgb(var(--pine-500) / <alpha-value>)",
+          600: "rgb(var(--pine-600) / <alpha-value>)",
+          700: "rgb(var(--pine-700) / <alpha-value>)",
+          800: "rgb(var(--pine-800) / <alpha-value>)",
+          900: "rgb(var(--pine-900) / <alpha-value>)",
+          950: "rgb(var(--pine-950) / <alpha-value>)",
         },
-        ivory: "#faf8f4",
-        sand: "#f3efe7",
+        ivory: "rgb(var(--ivory) / <alpha-value>)",
+        sand: "rgb(var(--sand) / <alpha-value>)",
         amberglow: "#d97706",
       },
       fontFamily: {
