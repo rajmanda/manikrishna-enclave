@@ -3,6 +3,46 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [Unreleased] — feature/growth-center
+
+- **Growth Center Leads CRM + Firecrawl discovery (2026-07-18)** —
+  lightweight sales CRM at `/super-admin/growth-center/crm` inside the
+  same isolated boundary (`growth_leads`/`growth_lead_activities`
+  collections in the Growth Center DB): 9-stage pipeline (new → … →
+  won/lost with lost-reason capture), per-lead activity timeline,
+  follow-up tracker (`next_follow_up_at`/`next_action`, overdue/due-today
+  /due-week overview + filters, first outreach auto-advances new →
+  contacted), manual lead capture (source-tagged: Facebook, LinkedIn,
+  WhatsApp, referral…), and **web lead discovery via Firecrawl**
+  (`FIRECRAWL_API_KEY`, 503 when unset): operator-typed query + area →
+  public-web search → phone/email extraction (Indian formats) →
+  human-reviewed import with domain/phone/email dedupe; social networks
+  are never scraped. New dep `httpx`; dev proxy covers the namespace.
+  6 new tests (233 total).
+
+- **Growth Center — isolated Super Admin marketing workspace (2026-07-18)**
+  — internal business-development module at `/super-admin/growth-center`
+  (nav: Super Admin → Growth Center, super_admin only) with its own API
+  namespace `/api/super-admin/growth-center` and its own MongoDB database
+  (`GROWTH_CENTER_MONGO_URI`; unset ⇒ 503, **never** falls back to the
+  operational DB). Stores marketing strategy and sales copy only:
+  playbooks with editable sections, outreach/follow-up templates,
+  objection-handling scripts, personas, module-local audit trail
+  (`growth_` collections). Seeds a default Hyderabad property-manager
+  acquisition playbook (7 lead magnets, qualification framework,
+  micro-conversion path, 5-step outreach sequences across
+  WhatsApp/email/LinkedIn/Facebook, 10 objection scripts, pilot-pricing
+  positioning, 3 personas). Draft/Under-Review/Approved/Archived
+  lifecycle, duplicate, rename, one-level restore, copy message/sequence,
+  Markdown/text/JSON export, module-scoped search. NO interaction with
+  operational data — the only approved reuse is authentication/role
+  verification (`app.core.security`) and visual components; a static test
+  fails the suite if the package imports operational code. 17 new tests
+  (227 total: role matrix 401/403, no-fallback-on-missing-config,
+  operational-DB fingerprint unchanged, search/export leak checks). Docs:
+  `docs/GROWTH_CENTER.md`. Operational files touched: `app/main.py`
+  (router include only), `shell/nav.ts` (nav item + "Super Admin" group).
+
 ## [Unreleased] — feature/community-switching
 
 - **Owner-reported claims can name the actual payer (2026-07-17)** — the
