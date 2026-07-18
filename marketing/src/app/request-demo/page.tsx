@@ -17,8 +17,8 @@ export default function RequestDemoPage() {
     <>
       <PageHero
         eyebrow="Get started"
-        title="See Nivaasos with your community's eyes"
-        answer="Tell us a little about your community and we'll set up a walkthrough: billing and collections, expenses with receipts, maintenance from request to completion, and what owners and residents will see. If you're ready, the same conversation starts your community's workspace."
+        title="Request a demo"
+        answer="Tell us a little about your community and we'll walk you through Nivaasos — billing and collections, expenses with receipts, maintenance tracking, and what owners and residents will see. When you're ready, we'll set up your community's workspace."
         breadcrumb={{ label: "Request a demo", path: "/request-demo" }}
       />
       <Block>
