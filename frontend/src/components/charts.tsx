@@ -206,30 +206,36 @@ export function ExpensePie({
   onSliceClick?: (category: string) => void;
 }) {
   return (
-    <ResponsiveContainer width="100%" height={260}>
-      <PieChart>
-        <Pie
-          data={data}
-          dataKey="value"
-          nameKey="name"
-          innerRadius={55}
-          outerRadius={85}
-          paddingAngle={2}
-          strokeWidth={0}
-          style={onSliceClick ? { cursor: "pointer" } : undefined}
-          onClick={(entry) => {
-            if (onSliceClick && entry && typeof entry.name === "string") {
-              onSliceClick(entry.name);
-            }
-          }}
-        >
-          {data.map((_, i) => (
-            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-          ))}
-        </Pie>
-        <Tooltip contentStyle={tooltipStyle} formatter={(v) => formatINR(Number(v))} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
-      </PieChart>
-    </ResponsiveContainer>
+    // overflow-hidden + min-w-0: once the SVG has a rendered width it counts
+    // as min-content, so without this a grid/flex parent can be pushed wider
+    // than the phone viewport (grid blowout → browser zooms the page out and
+    // fixed-position dialogs land off-center).
+    <div className="w-full min-w-0 overflow-hidden">
+      <ResponsiveContainer width="100%" height={260}>
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            innerRadius={55}
+            outerRadius={85}
+            paddingAngle={2}
+            strokeWidth={0}
+            style={onSliceClick ? { cursor: "pointer" } : undefined}
+            onClick={(entry) => {
+              if (onSliceClick && entry && typeof entry.name === "string") {
+                onSliceClick(entry.name);
+              }
+            }}
+          >
+            {data.map((_, i) => (
+              <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip contentStyle={tooltipStyle} formatter={(v) => formatINR(Number(v))} />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

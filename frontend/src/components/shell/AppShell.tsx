@@ -520,7 +520,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 pb-safe-nav sm:px-6 lg:pb-8">
+        {/* overflow-x-clip (not hidden — keeps position:sticky working):
+            an overflowing child (wide chart/table) must never widen the
+            page beyond the phone viewport, or mobile browsers zoom out and
+            fixed-position dialogs render off-center. */}
+        <main className="mx-auto w-full max-w-6xl flex-1 overflow-x-clip px-4 py-5 pb-safe-nav sm:px-6 lg:pb-8">
           {children}
         </main>
       </div>

@@ -135,14 +135,14 @@ export default function CommunityPage() {
 
       <div className="grid gap-6 lg:grid-cols-5">
         {/* Expense breakdown chart */}
-        <Card className="p-4 lg:col-span-2">
+        <Card className="min-w-0 overflow-hidden p-4 lg:col-span-2">
           <h2 className="mb-2 text-sm font-semibold">Expense Breakdown</h2>
           <p className="mb-1 text-xs text-slate-400">Tap a slice for the line items</p>
           <ExpensePie data={pieData} onSliceClick={setCategoryModal} />
         </Card>
 
         {/* Recent expenses — full ledger lives at /expenses */}
-        <section className="lg:col-span-3">
+        <section className="min-w-0 lg:col-span-3">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-semibold text-slate-900">Recent Expenses</h2>
             {canWrite && (
