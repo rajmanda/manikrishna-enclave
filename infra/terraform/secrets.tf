@@ -11,6 +11,12 @@ locals {
     "communityhub-jwt-secret",
     "communityhub-google-client-id",
     "communityhub-openclaw-api-key",
+    # Growth Center (isolated super-admin module): dedicated Mongo URI —
+    # deliberately a separate secret from communityhub-mongodb-uri so the
+    # module can never point at the operational database by accident.
+    "communityhub-growth-center-mongo-uri",
+    # Firecrawl key for Growth Center lead discovery.
+    "communityhub-firecrawl-api-key",
   ]
 }
 

@@ -85,6 +85,27 @@ resource "google_cloud_run_v2_service" "api" {
           }
         }
       }
+      # Growth Center — isolated super-admin module. DB name uses the
+      # backend default ("growth_center"); the URI must point at a
+      # dedicated database, never the operational one.
+      env {
+        name = "GROWTH_CENTER_MONGO_URI"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.secrets["communityhub-growth-center-mongo-uri"].secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "FIRECRAWL_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.secrets["communityhub-firecrawl-api-key"].secret_id
+            version = "latest"
+          }
+        }
+      }
     }
   }
 
