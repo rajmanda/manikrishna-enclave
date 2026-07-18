@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  CreditCard,
   FileText,
   Globe,
   Home,
@@ -553,7 +554,7 @@ interface Slide {
 
 function whatsappSlide(): Slide {
   return {
-    title: "Smart WhatsApp Alerts",
+    title: "Smart WhatsApp Alerts (Premium Add-on)",
     subtitle: "We ended the WhatsApp chaos — and kept WhatsApp",
     content: (
       <SplitSlide
@@ -562,7 +563,7 @@ function whatsappSlide(): Slide {
             <FeatureRow
               icon={MessageSquare}
               title="Updates Where People Already Are"
-              desc="New invoices, payment confirmations, work-order progress, and official announcements are delivered straight to residents' WhatsApp — no new app habit needed, and elders feel right at home."
+              desc="New invoices, payment confirmations, work-order progress, and official announcements are delivered straight to residents' WhatsApp. (Requires a dedicated OpenClaw service instance)."
             />
             <FeatureRow
               icon={Megaphone}
@@ -770,8 +771,8 @@ function buildDeck(audience: Audience): Slide[] {
               left={
                 <>
                   <FeatureRow icon={Receipt} title="1-Click Bulk Generation" desc="Generate monthly recurring maintenance bills for all flats simultaneously, with customizable calculation metrics." />
-                  <FeatureRow icon={Percent} title="Auto Late Fees & Credits" desc="Apply fine percentages automatically on overdue balances, with granular control over grace periods." />
-                  <FeatureRow icon={FileText} title="Digital PDF Statements" desc="Residents receive clean itemized invoices they can download or print, complete with past payment logs." />
+                  <FeatureRow icon={Percent} title="Multi-Invoice & Advance Credits" desc="Accept single bank transfers for multiple outstanding bills. Excess funds are automatically tracked as advance credits." />
+                  <FeatureRow icon={UserCheck} title="Payer & Tenant Attribution" desc="Tenants can pay directly. The system registers the payment with clear tenant-attribution and separate owner/tenant receipts." />
                 </>
               }
               right={<InvoiceMockup />}
@@ -785,7 +786,7 @@ function buildDeck(audience: Audience): Slide[] {
             <SplitSlide
               left={
                 <>
-                  <FeatureRow icon={Wrench} title="Complete Lifecycle Pipeline" desc="Move every issue — lift, generator, plumbing — through Estimate → Approval → In Progress → Closed, with nothing falling through the cracks." />
+                  <FeatureRow icon={Wrench} title="1-Click Resolve & Reconcile" desc="Close work orders, post expenses, and reconcile vendor payouts in one action—keeping your books perfectly balanced." />
                   <FeatureRow icon={User} title="Your Vendor Black Book" desc="Electricians, plumbers, AMC agencies — contacts, contracts, ratings, and payout history in one place." />
                   <FeatureRow icon={MessageSquare} title="Fewer Phone Calls" desc="Residents see status updates automatically, so 'any update on the lift?' calls stop reaching your phone." />
                 </>
@@ -879,8 +880,8 @@ function buildDeck(audience: Audience): Slide[] {
             <SplitSlide
               left={
                 <>
-                  <FeatureRow icon={Receipt} title="Bills Go Out On Time, Every Time" desc="Monthly invoices are generated for all flats in one click — no treasurer burnout, no missed cycles." />
-                  <FeatureRow icon={Percent} title="Late Fees Without the Friction" desc="The system applies agreed late fees automatically. The rules do the enforcing, not a neighbour." />
+                  <FeatureRow icon={Receipt} title="Multi-Invoice & Advance Credits" desc="Settle multiple outstanding months in a single transfer. Overpayments automatically track as advance credits." />
+                  <FeatureRow icon={Percent} title="Late Fees & Payer Attribution" desc="Late fees apply automatically. Supports direct tenant payments on behalf of landlords with clean split receipts." />
                   <FeatureRow icon={BarChart3} title="Collection Health at a Glance" desc="See outstanding dues per flat instantly and watch your collection rate climb month over month." />
                 </>
               }
@@ -1019,9 +1020,9 @@ function buildDeck(audience: Audience): Slide[] {
             <SplitSlide
               left={
                 <>
-                  <FeatureRow icon={Receipt} title="Itemized Monthly Invoices" desc="See exactly what you're being charged and why — maintenance, surcharges, and any late fees, line by line." />
-                  <FeatureRow icon={FileText} title="Statements & PDF Receipts" desc="Download clean PDF invoices and full payment history anytime — handy for records and tax filing." />
-                  <FeatureRow icon={ShieldCheck} title="Elder-Friendly by Design" desc="Large text, high contrast, and one-tap downloads — built so every generation in the family can use it." />
+                  <FeatureRow icon={Receipt} title="Multi-Invoice & Advance Credits" desc="Pay multiple outstanding invoices in one go. Excess payments automatically sit as advance credits for future dues." />
+                  <FeatureRow icon={UserCheck} title="Payer & Tenant Attribution" desc="Tenants can pay directly. The system registers the payment with clear tenant-attribution and separate owner/tenant receipts." />
+                  <FeatureRow icon={FileText} title="Download Clean PDF Receipts" desc="Get immediate receipts for payments. Clear history means no disputes when it's time to settle accounts." />
                 </>
               }
               right={<InvoiceMockup />}
@@ -1087,6 +1088,22 @@ function buildDeck(audience: Audience): Slide[] {
                 </>
               }
               right={<NoticeFeedMockup />}
+            />
+          ),
+        },
+        {
+          title: "Direct Tenant Payments",
+          subtitle: "Settle landlord maintenance dues with clean attribution",
+          content: (
+            <SplitSlide
+              left={
+                <>
+                  <FeatureRow icon={CreditCard} title="Pay on Behalf of Owner" desc="Settle outstanding invoices directly through your tenant login. The landlord is updated instantly." />
+                  <FeatureRow icon={UserCheck} title="Payer Attribution" desc="Every transaction clearly shows that you paid it, keeping your rent-reimbursement records 100% clean." />
+                  <FeatureRow icon={FileText} title="Download Split Receipts" desc="Get your own PDF receipt immediately upon payment, preserving clear proof of your financial contribution." />
+                </>
+              }
+              right={<InvoiceMockup />}
             />
           ),
         },
