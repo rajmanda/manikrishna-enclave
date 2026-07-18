@@ -15,7 +15,7 @@ repo github.com/rajmanda/manikrishna-enclave (public).
 | Direct URLs | api: communityhub-backend-ht4p2vwsjq-el.a.run.app · frontend: communityhub-frontend-ht4p2vwsjq-el.a.run.app | Useful before DNS cutover |
 | Database | MongoDB Atlas cluster0.sod5j | `DB_NAME=communityhub` |
 | Images | Artifact Registry `asia-south1-docker.pkg.dev/mm-owners-5b8611/communityhub` | `api:<sha>`, `frontend:<sha>` |
-| Secrets | Secret Manager (`communityhub-*` prefix — shared project) | mongodb-uri, jwt-secret, google-client-id |
+| Secrets | Secret Manager (`communityhub-*` prefix — shared project) | mongodb-uri, jwt-secret, google-client-id, openclaw-api-key, growth-center-mongo-uri, firecrawl-api-key |
 
 ## One-time manual steps
 
