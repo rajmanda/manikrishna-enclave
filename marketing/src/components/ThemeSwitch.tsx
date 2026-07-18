@@ -3,22 +3,24 @@
 import { useEffect, useState } from "react";
 import { Palette } from "lucide-react";
 
-type Theme = "nivaasos" | "classic";
+type Theme = "indigo" | "evergreen";
 const THEME_KEY = "nivaasos_theme";
 
-/** Floating palette switch (bottom-right, all pages). Default is the
- * Nivaasos evergreen; "Classic" reskins the site in the app's indigo via
- * the .theme-classic variable overrides in globals.css. */
+/** Floating palette switch (bottom-right, all pages). Default is indigo —
+ * the same brand color as the application, one look end to end. The
+ * original evergreen palette stays available via .theme-evergreen. */
 export default function ThemeSwitch() {
-  const [theme, setTheme] = useState<Theme>("nivaasos");
+  const [theme, setTheme] = useState<Theme>("indigo");
 
   useEffect(() => {
-    if (localStorage.getItem(THEME_KEY) === "classic") apply("classic");
+    const saved = localStorage.getItem(THEME_KEY);
+    // "nivaasos" is the legacy stored name for the evergreen look.
+    if (saved === "evergreen" || saved === "nivaasos") apply("evergreen");
   }, []);
 
   function apply(t: Theme) {
     setTheme(t);
-    document.body.classList.toggle("theme-classic", t === "classic");
+    document.body.classList.toggle("theme-evergreen", t === "evergreen");
     localStorage.setItem(THEME_KEY, t);
   }
 
@@ -31,8 +33,8 @@ export default function ThemeSwitch() {
       <Palette className="ml-2 h-3.5 w-3.5 text-pine-400" aria-hidden />
       {(
         [
-          { id: "nivaasos", label: "Nivaasos" },
-          { id: "classic", label: "Classic" },
+          { id: "indigo", label: "Indigo" },
+          { id: "evergreen", label: "Evergreen" },
         ] as const
       ).map((t) => (
         <button
