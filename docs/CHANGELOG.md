@@ -5,6 +5,17 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Owner-reported claims can name the actual payer (2026-07-17)** — the
+  owner-side "I've paid this" and Pay-multiple dialogs gained a "Who paid?"
+  select (I paid myself · My tenant — name, resolved from the whitelist ·
+  Someone else + free-text name). The claim stays ONE pending payment on
+  the owner's invoice; Vishnu's notification and the pending claim card
+  show "Paid by X (tenant) on behalf of owner" so he can verify before
+  confirming, and confirming stamps him as `collectedBy` (+ collection
+  date). Books tally identically on the owner side, manager side and
+  community ledger — payer is metadata, never a second receivable (D-025).
+  3 new tests (209 total).
+
 - **Tenant pays on behalf of owner (third-party payments, 2026-07-17)** —
   the monthly HOA invoice stays the OWNER's receivable, but Vishnu can now
   record who actually paid it. Separated concepts: responsible owner

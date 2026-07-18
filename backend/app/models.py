@@ -407,13 +407,17 @@ class Payment(APIModel):
 
 
 class PaymentReport(APIModel):
-    """Owner-submitted claim that they paid an invoice offline."""
+    """Owner-submitted claim that an invoice was paid offline. The reporter
+    may declare someone else as the actual payer (their tenant, a family
+    member) — the manager sees the claimed payer before confirming."""
 
     invoice_id: str
     amount: float
     date: str
     method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
     reference: str = ""
+    payer_type: PayerType | None = None  # None = the reporter themselves
+    payer_name: str = ""  # required when payer_type == "other"
 
 
 class PaymentBatchReport(APIModel):
@@ -428,6 +432,8 @@ class PaymentBatchReport(APIModel):
     date: str
     method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
     reference: str = ""
+    payer_type: PayerType | None = None  # None = the reporter themselves
+    payer_name: str = ""  # required when payer_type == "other"
 
 
 class CreditEntry(APIModel):

@@ -311,6 +311,9 @@ export function InvoiceSheet({
                       pending
                     </span>
                   </p>
+                  {payerLine(p) && (
+                    <p className="text-xs font-medium text-amber-800">{payerLine(p)}</p>
+                  )}
                   <p className="text-xs text-amber-700/80">
                     Reported {formatDate(p.date)}
                     {p.reference && ` · ref ${p.reference}`}

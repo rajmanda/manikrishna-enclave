@@ -33,14 +33,22 @@ const OWNER_METHODS = ["UPI", "Bank Transfer", "Cash", "Cheque"] as const;
 
 function ReportPaymentDialog({
   invoice,
+  users,
   onClose,
   onDone,
 }: {
   invoice: Invoice;
+  users: User[] | undefined;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { role } = useSessionUser();
   const outstanding = invoice.amount - invoice.paidAmount;
+  const tenant = tenantFor(users, invoice.apartmentId);
+  // "self" = the reporter (owner or tenant); owners may declare their
+  // tenant or a named third party as the one who actually paid.
+  const [paidBy, setPaidBy] = useState<"self" | "tenant" | "other">("self");
+  const [payerName, setPayerName] = useState("");
   const [amount, setAmount] = useState(String(outstanding));
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<(typeof OWNER_METHODS)[number]>("UPI");
@@ -61,6 +69,8 @@ function ReportPaymentDialog({
           date,
           method,
           reference,
+          ...(paidBy === "tenant" ? { payerType: "tenant" } : {}),
+          ...(paidBy === "other" ? { payerType: "other", payerName } : {}),
         }),
       });
       onDone();
@@ -75,9 +85,35 @@ function ReportPaymentDialog({
     <Modal title={`I've paid — ${invoice.description}, ${invoice.period}`} onClose={onClose}>
       <form className="space-y-4" onSubmit={submit}>
         <p className="text-sm text-slate-500">
-          Report the payment you made to the property manager. It shows as
+          Report the payment made to the property manager. It shows as
           pending until they confirm receipt.
         </p>
+        <div>
+          <label className={labelCls}>Who paid?</label>
+          <select
+            className={inputCls}
+            value={paidBy}
+            onChange={(e) => setPaidBy(e.target.value as "self" | "tenant" | "other")}
+          >
+            <option value="self">I paid this myself</option>
+            {role === "owner" && tenant && (
+              <option value="tenant">My tenant — {tenant.name}</option>
+            )}
+            <option value="other">Someone else</option>
+          </select>
+        </div>
+        {paidBy === "other" && (
+          <div>
+            <label className={labelCls}>Payer name</label>
+            <input className={inputCls} value={payerName} onChange={(e) => setPayerName(e.target.value)} placeholder="Who handed over the money" required />
+          </div>
+        )}
+        {paidBy !== "self" && (
+          <p className="rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-800">
+            The payment still settles this invoice on the owner&apos;s ledger —
+            the manager sees who paid and the payer is named on the receipt.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Amount paid</label>
@@ -119,22 +155,30 @@ function ReportPaymentDialog({
  * every invoice were paid individually. */
 function PayMultipleDialog({
   invoices,
+  users,
   totalCredit,
   multiApt,
   onClose,
   onDone,
 }: {
   invoices: Invoice[]; // the owner's open invoices without pending reports
+  users: User[] | undefined;
   totalCredit: number; // the account's pooled confirmed advance credit
   multiApt: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { role } = useSessionUser();
   const open = [...invoices].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const [selected, setSelected] = useState<Set<string>>(new Set(open.map((i) => i.id)));
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<(typeof OWNER_METHODS)[number]>("UPI");
   const [reference, setReference] = useState("");
+  // Owners may declare their tenant (resolved per apartment server-side)
+  // or a named third party as the actual payer.
+  const [paidBy, setPaidBy] = useState<"self" | "tenant" | "other">("self");
+  const [payerName, setPayerName] = useState("");
+  const anyTenant = open.some((i) => tenantFor(users, i.apartmentId));
   const [useCredit, setUseCredit] = useState(true);
   const [amountTouched, setAmountTouched] = useState(false);
   const [amount, setAmount] = useState("");
@@ -225,6 +269,8 @@ function PayMultipleDialog({
             date,
             method,
             reference,
+            ...(paidBy === "tenant" ? { payerType: "tenant" } : {}),
+            ...(paidBy === "other" ? { payerType: "other", payerName } : {}),
           }),
         });
       }
@@ -365,6 +411,31 @@ function PayMultipleDialog({
             </p>
           )}
         </div>
+        {cash > 0 && (
+          <div>
+            <label className={labelCls}>Who paid the transfer?</label>
+            <select
+              className={inputCls}
+              value={paidBy}
+              onChange={(e) => setPaidBy(e.target.value as "self" | "tenant" | "other")}
+            >
+              <option value="self">I paid this myself</option>
+              {role === "owner" && anyTenant && (
+                <option value="tenant">My tenant (on behalf of me)</option>
+              )}
+              <option value="other">Someone else</option>
+            </select>
+            {paidBy === "other" && (
+              <input
+                className={`${inputCls} mt-2`}
+                value={payerName}
+                onChange={(e) => setPayerName(e.target.value)}
+                placeholder="Payer name"
+                required
+              />
+            )}
+          </div>
+        )}
         <ClosedMonthNote date={date} />
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button
@@ -2090,6 +2161,7 @@ function InvoicesPageInner() {
       {reportInvoice && (
         <ReportPaymentDialog
           invoice={reportInvoice}
+          users={users.data}
           onClose={() => setReportInvoice(null)}
           onDone={() => {
             invoices.reload();
@@ -2138,6 +2210,7 @@ function InvoicesPageInner() {
       {payMulti && (
         <PayMultipleDialog
           invoices={selectedPayable}
+          users={users.data}
           totalCredit={creditBalance}
           multiApt={myApts.length > 1}
           onClose={() => setPayMulti(false)}

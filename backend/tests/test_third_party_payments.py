@@ -369,3 +369,93 @@ async def test_tenant_reported_claim_carries_payer(client, manager_headers, db):
         f"/api/v1/payments/{pay_id}/receipt.pdf", headers=tenant_headers
     )
     assert receipt.status_code == 200
+
+
+# ---------- owner declares the payer when reporting ----------
+
+
+async def test_owner_reports_tenant_paid(client, manager_headers, owner_headers, db):
+    await make_tenant(db)
+    reported = await client.post(
+        "/api/v1/payments/report",
+        json={"invoiceId": "inv-2606-502", "amount": 3500, "date": "2026-07-10",
+              "method": "UPI", "reference": "UPI-OD", "payerType": "tenant"},
+        headers=owner_headers,
+    )
+    assert reported.status_code == 201, reported.text
+    pay = await db.payments.find_one({"id": reported.json()["id"]})
+    # The whitelisted tenant is resolved as the payer; the owner reported it.
+    assert pay["payer_type"] == "tenant"
+    assert pay["payer_entity_id"] == "u-tenant-apt-502"
+    assert pay["payer_name"] == "Tara Tenant"
+    assert pay["status"] == "pending"
+    # Vishnu confirms — he becomes the collector, books tally.
+    confirmed = await client.post(
+        f"/api/v1/payments/{pay['id']}/confirm", headers=manager_headers
+    )
+    assert confirmed.status_code == 200
+    pay = await db.payments.find_one({"id": pay["id"]})
+    assert pay["collected_by"] is not None
+    assert pay["collection_date"] == "2026-07-10"
+    inv = await db.invoices.find_one({"id": "inv-2606-502"})
+    assert inv["paid_amount"] == 3500 and inv["status"] == "paid"
+
+
+async def test_owner_reports_other_payer_requires_name(client, owner_headers, db):
+    missing = await client.post(
+        "/api/v1/payments/report",
+        json={"invoiceId": "inv-2606-502", "amount": 3500, "date": "2026-07-10",
+              "method": "Cash", "payerType": "other"},
+        headers=owner_headers,
+    )
+    assert missing.status_code == 400
+    named = await client.post(
+        "/api/v1/payments/report",
+        json={"invoiceId": "inv-2606-502", "amount": 3500, "date": "2026-07-10",
+              "method": "Cash", "payerType": "other", "payerName": "Uncle Ravi"},
+        headers=owner_headers,
+    )
+    assert named.status_code == 201, named.text
+    pay = await db.payments.find_one({"id": named.json()["id"]})
+    assert pay["payer_type"] == "other" and pay["payer_name"] == "Uncle Ravi"
+
+
+async def test_batch_report_carries_declared_payer(
+    client, manager_headers, owner_headers, db
+):
+    await make_tenant(db)
+    # A second open invoice for the same apartment.
+    gen = await client.post(
+        "/api/v1/invoices/generate",
+        json={"period": "Jul 2026", "dueDate": "2026-07-10",
+              "description": "Homeowners Association Fee",
+              "apartmentIds": ["apt-502"]},
+        headers=manager_headers,
+    )
+    assert gen.status_code == 200 and gen.json()["created"] == 1
+    jul = await db.invoices.find_one({"apartment_id": "apt-502", "period": "Jul 2026"})
+    batch = await client.post(
+        "/api/v1/payments/report-batch",
+        json={"invoiceIds": ["inv-2606-502", jul["id"]], "amount": 7000,
+              "date": "2026-07-10", "method": "Bank Transfer",
+              "reference": "NEFT-1", "payerType": "tenant"},
+        headers=owner_headers,
+    )
+    assert batch.status_code == 201, batch.text
+    batch_id = batch.json()["batchId"]
+    rows = await db.payments.find({"batch_id": batch_id}).to_list(10)
+    assert len(rows) == 2
+    assert all(
+        r["payer_type"] == "tenant" and r["payer_name"] == "Tara Tenant"
+        for r in rows
+    )
+    # Confirm the batch — both invoices settle, payer survives.
+    confirmed = await client.post(
+        f"/api/v1/payments/batch/{batch_id}/confirm", headers=manager_headers
+    )
+    assert confirmed.status_code == 200 and confirmed.json()["confirmed"] == 2
+    for inv_id in ("inv-2606-502", jul["id"]):
+        inv = await db.invoices.find_one({"id": inv_id})
+        assert inv["status"] == "paid"
+    rows = await db.payments.find({"batch_id": batch_id}).to_list(10)
+    assert all(r["collected_by"] is not None for r in rows)

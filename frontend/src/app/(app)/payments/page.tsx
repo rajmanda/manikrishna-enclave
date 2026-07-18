@@ -504,6 +504,12 @@ function PaymentsPageInner() {
                         </span>
                       )}
                     </p>
+                    {first.payerType && first.payerType !== "owner" && first.payerName && (
+                      <p className="text-xs font-medium text-sky-700">
+                        Paid by {first.payerName}
+                        {first.payerType === "tenant" ? " (tenant)" : ""} on behalf of owner
+                      </p>
+                    )}
                     <p className="text-xs text-slate-500">
                       {ownerNameFor(users.data, apartments.data, first.apartmentId)} ·{" "}
                       {first.method} · {formatDate(first.date)}
@@ -561,6 +567,12 @@ function PaymentsPageInner() {
                       {paymentTitle(p)}
                       <LedgerBadge ledger={p.ledger} />
                     </p>
+                    {p.payerType && p.payerType !== "owner" && p.payerName && (
+                      <p className="text-xs font-medium text-sky-700">
+                        Paid by {p.payerName}
+                        {p.payerType === "tenant" ? " (tenant)" : ""} on behalf of owner
+                      </p>
+                    )}
                     <p className="text-xs text-slate-500">
                       {ownerNameFor(users.data, apartments.data, p.apartmentId)} ·{" "}
                       {formatINR(p.amount)} · {p.method} · {formatDate(p.date)}
