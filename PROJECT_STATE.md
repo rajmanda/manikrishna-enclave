@@ -13,7 +13,7 @@ Last updated: 2026-07-18
 | Next priority | Owner onboarding: collect real owner emails and whitelist them; then notifications provider decision |
 | Deployment status | **Live at https://community.rajmanda.com** (Cloud Run, asia-south1) · **Marketing site live at https://nivaasos.com** (same LB, `nivaasos-marketing` service, manual image 2026-07-19; CI job pending) |
 | Database version | Schema v6 (migrations 001-006); Atlas `hyderabad.n5kr48f` (AWS Mumbai), DB `communityhub` (prod, live since 2026-07-12 IST) / `communityhub_dev` (local); legacy `manikrishna_enclave` in ~1-week bake before drop |
-| Infrastructure version | Terraform applied — 40 resources (incl. GCS media bucket + nivaasos.com marketing: Cloud Run `nivaasos-marketing`, `nivaasos-cert`, LB host rule; applied 2026-07-19, community.rajmanda.com unaffected), state in gs://mm-owners-5b8611-tfstate |
+| Infrastructure version | Terraform applied — 41 resources (nivaasos.com marketing service/cert/host-rule + `nivaasos-community-cert` and community.nivaasos.com on the app host rule for the domain transition; both applied 2026-07-19, community.rajmanda.com unaffected; community cert pending owner DNS), state in gs://mm-owners-5b8611-tfstate |
 | Last deployment | 2026-07-06 via deploy.yml (manual dispatch) |
 
 ## Live URLs

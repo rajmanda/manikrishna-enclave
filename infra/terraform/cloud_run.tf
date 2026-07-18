@@ -43,7 +43,10 @@ resource "google_cloud_run_v2_service" "api" {
       }
       env {
         name  = "CORS_ORIGINS"
-        value = "https://${var.domain}"
+        # Both app domains during the rajmanda→nivaasos transition. With the
+        # frontend's relative /api/v1 base this is belt-and-braces (requests
+        # are same-origin), but it protects cached absolute-URL builds.
+        value = "https://${var.domain},https://${var.community_domain}"
       }
       env {
         name  = "GCS_BUCKET"

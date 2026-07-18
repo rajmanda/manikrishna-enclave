@@ -133,9 +133,22 @@ community.rajmanda.com verified serving before and after):
 7. Rollback: `gcloud run services update-traffic nivaasos-marketing
    --to-revisions=PREV=100` for releases; removing the host rule + cert
    from Terraform reverts routing without touching the app's resources.
-8. Later (separate change): map app.nivaasos.com → existing frontend
-   service + add domain to OAuth authorized origins; keep
-   community.rajmanda.com working until users migrate.
+8. **App domain transition (started 2026-07-19, owner decision:
+   community.nivaasos.com, not app.nivaasos.com):** Terraform applied —
+   `nivaasos-community-cert` + community.nivaasos.com added to the app's
+   host rule (frontend + /api/*), CORS_ORIGINS covers both app domains.
+   deploy.yml now bakes a RELATIVE API base (`/api/v1`) so the same
+   frontend build works on both domains; login-page copy is host-agnostic.
+   Marketing's Resident Login default → https://community.nivaasos.com in
+   source, but the LIVE marketing site intentionally still points at
+   community.rajmanda.com until cutover. **Owner actions required:**
+   (a) DNS: A community.nivaasos.com → 34.120.210.248 (cert stays
+   PROVISIONING until then); (b) Google OAuth client: add
+   https://community.nivaasos.com to Authorized JavaScript origins.
+   **Cutover order once (a)+(b) done:** deploy frontend via deploy.yml
+   (relative API base) → verify login on community.nivaasos.com → deploy
+   marketing (login flips) → keep community.rajmanda.com serving until
+   users migrate.
 
 ## 8. Post-launch checklist
 

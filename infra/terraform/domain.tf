@@ -71,8 +71,10 @@ resource "google_compute_url_map" "communityhub" {
   name            = "communityhub-urlmap"
   default_service = google_compute_backend_service.frontend.id
 
+  # Both app domains share the same routing (frontend + /api/*) during the
+  # transition from community.rajmanda.com to community.nivaasos.com.
   host_rule {
-    hosts        = [var.domain]
+    hosts        = [var.domain, var.community_domain]
     path_matcher = "main"
   }
 
@@ -107,6 +109,7 @@ resource "google_compute_target_https_proxy" "communityhub" {
   ssl_certificates = [
     google_compute_managed_ssl_certificate.cert.id,
     google_compute_managed_ssl_certificate.marketing_cert.id,
+    google_compute_managed_ssl_certificate.community_cert.id,
   ]
 }
 

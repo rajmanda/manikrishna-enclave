@@ -57,6 +57,18 @@ resource "google_compute_managed_ssl_certificate" "marketing_cert" {
   }
 }
 
+# App's new domain. Separate cert for the same reason as above: never edit
+# an existing managed cert's domain list (forces replacement → TLS outage).
+# Stays PROVISIONING until the owner adds DNS:
+#   A community.nivaasos.com → lb_ip
+resource "google_compute_managed_ssl_certificate" "community_cert" {
+  name = "nivaasos-community-cert"
+
+  managed {
+    domains = [var.community_domain]
+  }
+}
+
 resource "google_compute_region_network_endpoint_group" "marketing_neg" {
   name                  = "nivaasos-marketing-neg"
   region                = var.region

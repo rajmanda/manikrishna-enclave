@@ -7,11 +7,12 @@
 export const SITE_NAME = "Nivaasos";
 export const SITE_URL = "https://nivaasos.com";
 
-/** Authenticated application. Today the product runs at its current
- * deployment domain; when app.nivaasos.com goes live, change this ONE
- * constant (or set NEXT_PUBLIC_APP_URL at build time). */
+/** Authenticated application (Resident Login target). Do NOT redeploy the
+ * marketing site with this default until community.nivaasos.com has DNS +
+ * an ACTIVE cert + the OAuth origin registered — the live site keeps its
+ * previously-baked URL until then. Override via NEXT_PUBLIC_APP_URL. */
 export const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL || "https://community.rajmanda.com";
+  process.env.NEXT_PUBLIC_APP_URL || "https://community.nivaasos.com";
 
 /** Public contact mailbox. Interim: the owner's Gmail until a
  * hello@nivaasos.com mailbox exists — then change this one default (or set

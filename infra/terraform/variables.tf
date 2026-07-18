@@ -30,6 +30,12 @@ variable "marketing_domain" {
   default     = "nivaasos.com"
 }
 
+variable "community_domain" {
+  description = "New app domain (transition off community.rajmanda.com); same LB/IP, same frontend+API routing"
+  type        = string
+  default     = "community.nivaasos.com"
+}
+
 variable "db_name" {
   description = "MongoDB database name for production"
   type        = string

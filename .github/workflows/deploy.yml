@@ -19,8 +19,11 @@ env:
   API_SERVICE: communityhub-backend
   FRONTEND_SERVICE: communityhub-frontend
   MARKETING_SERVICE: nivaasos-marketing
-  # Same-origin via the load balancer: /api/* routes to the API service.
-  API_URL: https://community.rajmanda.com/api/v1
+  # Same-origin via the load balancer: /api/* routes to the API service on
+  # EVERY app host (community.rajmanda.com and community.nivaasos.com), so
+  # the base URL is relative — the app is host-agnostic during the
+  # domain transition.
+  API_URL: /api/v1
 
 permissions:
   contents: read
