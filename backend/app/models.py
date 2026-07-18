@@ -268,6 +268,12 @@ class TokenResponse(APIModel):
 
 InvoiceStatus = Literal["paid", "due", "overdue", "partial"]
 
+# Who actually handed over the money — never who owes it. The invoice's
+# owner stays the responsible party regardless of payer.
+PayerType = Literal["owner", "tenant", "other"]
+DepositStatus = Literal["not_required", "pending", "deposited"]
+OccupancyStatus = Literal["rented", "owner_occupied", "vacant"]
+
 
 class Invoice(APIModel):
     id: str = Field(default_factory=lambda: new_id("inv"))
@@ -289,6 +295,19 @@ class Invoice(APIModel):
     # Allocation weight before any adjust-to-actual run (keeps proportional
     # re-adjustment stable/idempotent).
     original_amount: float | None = None
+    # --- Responsibility vs payment request (third-party payments) ---
+    # The owner is ALWAYS the responsible/liable party; the payment request
+    # may be routed to the current tenant, which never moves liability.
+    responsible_party_type: Literal["owner"] = "owner"
+    responsible_owner_id: str | None = None  # owner user snapshot at billing
+    payment_request_recipient_type: Literal["owner", "tenant"] = "owner"
+    payment_request_recipient_id: str | None = None
+    # Snapshot at billing time: "rented" when an active tenant exists;
+    # apartments with no tenant on record are treated as owner_occupied
+    # (either way the payment request defaults to the owner).
+    apartment_occupancy_status: OccupancyStatus | None = None
+    billing_period_month: int | None = None  # parsed from `period`
+    billing_period_year: int | None = None
 
 
 class InvoiceLineItem(APIModel):
@@ -320,6 +339,10 @@ class InvoiceUpdate(APIModel):
     period: str | None = None
     amount: float | None = None
     due_date: str | None = None
+    # Re-route the payment request (owner ↔ current tenant). Liability and
+    # the owner ledger never move with it.
+    payment_request_recipient_type: Literal["owner", "tenant"] | None = None
+    payment_request_recipient_id: str | None = None
 
 
 class GenerateInvoicesRequest(APIModel):
@@ -332,6 +355,9 @@ class GenerateInvoicesRequest(APIModel):
     allocations: list["AssessmentAllocation"] | None = None
     work_order_id: str | None = None  # link cost-recovery invoices to the job
     cost_case_id: str | None = None  # link the assessment batch to its case
+    # Apartments whose payment request goes to the current tenant (on behalf
+    # of the owner). Apartments without an active tenant fall back to owner.
+    tenant_recipients: list[str] | None = None
 
 
 class ApplyLateFeesRequest(APIModel):
@@ -351,7 +377,9 @@ class Payment(APIModel):
     method: Literal["UPI", "Bank Transfer", "Cash", "Cheque", "Credit"]
     reference: str = ""
     # Owner-reported payments start pending; only confirmed ones count.
-    status: Literal["pending", "confirmed"] = "confirmed"
+    # Voided payments stay in the collection for the audit trail but count
+    # nowhere (every aggregate filters on status == "confirmed").
+    status: Literal["pending", "confirmed", "voided"] = "confirmed"
     reported_by: str | None = None
     ledger: Literal["community", "manager_fee", "reimbursement"] = "community"
     # Set on Credit payments that settle a cost case's over-collection.
@@ -359,16 +387,37 @@ class Payment(APIModel):
     # Set when one reported amount covered several invoices — the portions
     # share a batch id so the manager can confirm/reject them as a unit.
     batch_id: str | None = None
+    # --- Payer attribution (third-party payments) ---
+    # Records the money's SOURCE only; the invoice's owner remains the
+    # responsible party and receives the ledger credit.
+    payer_type: PayerType = "owner"
+    payer_entity_id: str | None = None  # user id when the payer is a member
+    payer_name: str = ""
+    collected_by: str | None = None  # user who received/recorded the money
+    collection_date: str | None = None
+    deposit_status: DepositStatus = "not_required"
+    deposit_date: str | None = None
+    notes: str = ""
+    created_at: str = ""
+    created_by: str | None = None
+    # Void-and-replace correction trail (posted payments are never edited).
+    voided_at: str | None = None
+    voided_by: str | None = None
+    void_reason: str = ""
 
 
 class PaymentReport(APIModel):
-    """Owner-submitted claim that they paid an invoice offline."""
+    """Owner-submitted claim that an invoice was paid offline. The reporter
+    may declare someone else as the actual payer (their tenant, a family
+    member) — the manager sees the claimed payer before confirming."""
 
     invoice_id: str
     amount: float
     date: str
     method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
     reference: str = ""
+    payer_type: PayerType | None = None  # None = the reporter themselves
+    payer_name: str = ""  # required when payer_type == "other"
 
 
 class PaymentBatchReport(APIModel):
@@ -383,6 +432,8 @@ class PaymentBatchReport(APIModel):
     date: str
     method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
     reference: str = ""
+    payer_type: PayerType | None = None  # None = the reporter themselves
+    payer_name: str = ""  # required when payer_type == "other"
 
 
 class CreditEntry(APIModel):
@@ -396,14 +447,27 @@ class CreditEntry(APIModel):
     apartment_id: str
     amount: float  # original credit
     remaining: float  # unused portion
-    source: Literal["overpayment", "manual", "correction"] = "overpayment"
+    # "advance" = money received before its invoice existed (unapplied
+    # payment held on the owner's account, e.g. a tenant paying early).
+    source: Literal["overpayment", "manual", "correction", "advance"] = "overpayment"
     # Owner-reported overpayments stay pending (invisible to the balance)
-    # until the manager confirms the batch they arrived in.
-    status: Literal["pending", "confirmed"] = "confirmed"
+    # until the manager confirms the batch they arrived in. "refunded" =
+    # returned to the payer; counts nowhere.
+    status: Literal["pending", "confirmed", "refunded"] = "confirmed"
     reference: str = ""
     date: str
     created_by: str
     batch_id: str | None = None
+    # Who funded this credit — preserved so a refund goes back to the actual
+    # payer (a tenant's advance is never silently owner money).
+    payer_type: PayerType = "owner"
+    payer_entity_id: str | None = None
+    payer_name: str = ""
+    collected_by: str | None = None
+    notes: str = ""
+    refunded_at: str | None = None
+    refunded_by: str | None = None
+    refund_note: str = ""
 
 
 class RejectPaymentRequest(APIModel):
@@ -442,6 +506,39 @@ class PaymentCreate(APIModel):
     date: str
     method: Literal["UPI", "Bank Transfer", "Cash", "Cheque", "Credit"]
     reference: str = ""
+    # Payer attribution — defaults keep the classic owner-paid flow.
+    payer_type: PayerType = "owner"
+    payer_entity_id: str | None = None
+    payer_name: str = ""
+    collected_by: str | None = None  # defaults to the recording manager
+    collection_date: str | None = None  # defaults to the payment date
+    deposit_status: DepositStatus = "not_required"
+    deposit_date: str | None = None
+    notes: str = ""
+
+
+class AdvancePaymentCreate(APIModel):
+    """Money received BEFORE its invoice exists — held as an unapplied
+    credit on the owner's account with the real payer preserved."""
+
+    apartment_id: str
+    amount: float
+    date: str
+    method: Literal["UPI", "Bank Transfer", "Cash", "Cheque"]
+    reference: str = ""
+    payer_type: PayerType = "owner"
+    payer_entity_id: str | None = None
+    payer_name: str = ""
+    collected_by: str | None = None
+    notes: str = ""
+
+
+class VoidPaymentRequest(APIModel):
+    reason: str = ""
+
+
+class CreditRefundRequest(APIModel):
+    note: str = ""
 
 
 class Expense(APIModel):

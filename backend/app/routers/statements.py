@@ -138,6 +138,102 @@ async def consolidated_statement(db: DB, user: CurrentUser) -> Response:
     )
 
 
+@router.get("/payments/{payment_id}/receipt.pdf")
+async def payment_receipt_pdf(payment_id: str, db: DB, user: CurrentUser) -> Response:
+    """Downloadable/shareable receipt for one confirmed payment, addressed
+    to the ACTUAL payer. When a tenant (or other third party) paid, the
+    receipt states the payment was made on behalf of the apartment owner."""
+    payment = await db.payments.find_one(
+        {"id": payment_id, "community_id": user.community_id}
+    )
+    if payment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Payment not found")
+    if payment.get("status", "confirmed") == "pending":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Payment awaits manager confirmation — no receipt yet",
+        )
+    _check_apartment_access(user, payment["apartment_id"])
+    invoice = await db.invoices.find_one({"id": payment["invoice_id"]})
+    apartment = await db.apartments.find_one({"id": payment["apartment_id"]})
+    community = await db.communities.find_one({"id": user.community_id})
+    owner = None
+    if apartment and apartment.get("owner_ids"):
+        owner = await db.users.find_one({"id": apartment["owner_ids"][0]})
+    collector = None
+    if payment.get("collected_by"):
+        collector = await db.users.find_one({"id": payment["collected_by"]})
+
+    payer_type = payment.get("payer_type", "owner")
+    payer_name = payment.get("payer_name") or (owner or {}).get("name", "")
+    apt_no = (apartment or {}).get("number", payment["apartment_id"].replace("apt-", ""))
+    voided = payment.get("status") == "voided"
+
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("helvetica", "B", 16)
+    pdf.cell(0, 10, _latin1((community or {}).get("name", "")),
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "B", 12)
+    pdf.cell(0, 8, "PAYMENT RECEIPT" + (" — VOIDED" if voided else ""),
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+    pdf.set_font("helvetica", "", 10)
+    rows = [
+        ("Receipt No", f"RCPT-{payment['id'].removeprefix('pay-').upper()}"),
+        ("Date", payment["date"]),
+        ("Apartment", str(apt_no)),
+        ("Received From", _latin1(payer_name) or "-"),
+        ("Amount", f"Rs {payment['amount']:,.0f}"),
+        ("Payment Method", payment["method"]),
+        ("Reference", _latin1(payment.get("reference") or "-")),
+        ("Billing Period", (invoice or {}).get("period", "-")),
+        ("Owner Invoice No", (invoice or {}).get("id", "-")),
+        ("Invoice", _latin1((invoice or {}).get("description", "-"))),
+        ("Collected By", _latin1((collector or {}).get("name", "-"))),
+    ]
+    for label, value in rows:
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(50, 7, label, border=1)
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(120, 7, str(value), border=1)
+        pdf.ln()
+    pdf.ln(4)
+    if payer_type != "owner":
+        pdf.set_font("helvetica", "I", 10)
+        pdf.multi_cell(
+            0, 6,
+            _latin1(
+                f"This payment was made by {payer_name or 'a third party'} on "
+                f"behalf of the apartment owner"
+                + (f" ({owner['name']})" if owner else "")
+                + f". It settles the owner's invoice for Apartment {apt_no}; "
+                "the owner remains responsible for any unpaid balance."
+            ),
+        )
+    if voided:
+        pdf.ln(2)
+        pdf.set_font("helvetica", "B", 10)
+        pdf.multi_cell(
+            0, 6,
+            _latin1(
+                "VOIDED"
+                + (f": {payment.get('void_reason')}" if payment.get("void_reason") else "")
+                + " — this receipt is no longer valid."
+            ),
+        )
+    return Response(
+        content=bytes(pdf.output()),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="receipt-{payment["id"]}.pdf"'
+        },
+    )
+
+
 @router.get("/statements/{apartment_id}.pdf")
 async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Response:
     _check_apartment_access(user, apartment_id)
@@ -227,13 +323,20 @@ async def statement_pdf(apartment_id: str, db: DB, user: CurrentUser) -> Respons
     pdf.set_font("helvetica", "B", 10)
     pdf.cell(0, 7, "Payments Received", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("helvetica", "B", 9)
-    pwidths = (35, 35, 40, 50)
-    for w, h in zip(pwidths, ("Date", "Amount", "Method", "Reference")):
+    pwidths = (25, 28, 30, 40, 62)
+    for w, h in zip(pwidths, ("Date", "Amount", "Method", "Reference", "Paid By")):
         pdf.cell(w, 6, h, border=1)
     pdf.ln()
     pdf.set_font("helvetica", "", 9)
     for p in d["payments"]:
-        cells = (p["date"], f"Rs {p['amount']:,.0f}", p["method"], _latin1(p["reference"]))
+        # The owner ledger names the actual payment source — a tenant's
+        # payment shows as received on the owner's behalf, never as a
+        # discount or owner credit.
+        payer = p.get("payer_name") or ""
+        if p.get("payer_type", "owner") != "owner" and payer:
+            payer = f"{payer} (on behalf of owner)"
+        cells = (p["date"], f"Rs {p['amount']:,.0f}", p["method"],
+                 _latin1(p["reference"])[:22], _latin1(payer)[:36])
         for w, c in zip(pwidths, cells):
             pdf.cell(w, 6, str(c), border=1)
         pdf.ln()

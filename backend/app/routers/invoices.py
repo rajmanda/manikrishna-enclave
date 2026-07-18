@@ -12,11 +12,13 @@ from app.core.security import CurrentUser, owned_community_ids, require_roles
 from app.db import get_db
 from app.models import (
     WRITE_ROLES,
+    AdvancePaymentCreate,
     ApplyCreditRequest,
     ApplyLateFeesRequest,
     BillOwnerRequest,
     CommunityDocument,
     CreditEntry,
+    CreditRefundRequest,
     GenerateInvoicesRequest,
     Invoice,
     InvoiceCreate,
@@ -28,6 +30,7 @@ from app.models import (
     PaymentReport,
     RejectPaymentRequest,
     User,
+    VoidPaymentRequest,
     new_id,
 )
 from app.routers.documents import doc_file_type
@@ -49,6 +52,113 @@ def with_apartment(description: str, apartment_id: str) -> str:
     if "apt" in description.lower():
         return description
     return f"{description} - Apt {apartment_id.replace('apt-', '')}"
+
+
+_MONTHS = {m: i + 1 for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun",
+     "jul", "aug", "sep", "oct", "nov", "dec"])}
+
+
+def period_month_year(period: str) -> tuple[int | None, int | None]:
+    """Best-effort parse of a period label ("Jul 2026", "July 2026",
+    "2026-07") into (month, year); (None, None) when unparseable."""
+    p = period.strip().lower()
+    parts = p.replace("-", " ").replace("/", " ").split()
+    month = year = None
+    for token in parts:
+        if token[:3] in _MONTHS:
+            month = _MONTHS[token[:3]]
+        elif token.isdigit():
+            n = int(token)
+            if n >= 1900:
+                year = n
+            elif 1 <= n <= 12 and month is None:
+                month = n
+    return month, year
+
+
+async def active_tenants(db: Any, community_id: str) -> dict[str, dict]:
+    """apartment_id -> tenant user, for every apartment with an active
+    tenant on the whitelist (role or switchable roles include tenant)."""
+    out: dict[str, dict] = {}
+    tenants = await db.users.find(
+        {"community_id": community_id,
+         "$or": [{"role": "tenant"}, {"roles": "tenant"}]}
+    ).to_list(1000)
+    for t in tenants:
+        apts = set(t.get("apartment_ids") or [])
+        if t.get("apartment_id"):
+            apts.add(t["apartment_id"])
+        if t.get("account_id"):
+            acct = await db.accounts.find_one({"id": t["account_id"]})
+            if acct:
+                apts.update(acct.get("apartment_ids", []))
+        for a in apts:
+            out.setdefault(a, t)
+    return out
+
+
+async def stamp_invoice_parties(
+    db: Any,
+    invoice: Invoice,
+    *,
+    tenant_map: dict[str, dict] | None = None,
+    request_from_tenant: bool = False,
+) -> Invoice:
+    """Fill the responsibility/recipient/occupancy/billing-period fields on
+    a new invoice. The owner is ALWAYS the responsible party; only the
+    payment request may be routed to an active tenant."""
+    apt = await db.apartments.find_one(
+        {"id": invoice.apartment_id, "community_id": invoice.community_id}
+    )
+    owner_ids = (apt or {}).get("owner_ids") or []
+    invoice.responsible_owner_id = owner_ids[0] if owner_ids else None
+    if tenant_map is None:
+        tenant_map = await active_tenants(db, invoice.community_id)
+    tenant = tenant_map.get(invoice.apartment_id)
+    invoice.apartment_occupancy_status = "rented" if tenant else "owner_occupied"
+    if request_from_tenant and tenant:
+        invoice.payment_request_recipient_type = "tenant"
+        invoice.payment_request_recipient_id = tenant["id"]
+    else:
+        # No active tenant (or not requested): the request stays with the owner.
+        invoice.payment_request_recipient_type = "owner"
+        invoice.payment_request_recipient_id = invoice.responsible_owner_id
+    invoice.billing_period_month, invoice.billing_period_year = period_month_year(
+        invoice.period
+    )
+    return invoice
+
+
+async def resolve_payer(
+    db: Any, community_id: str, apartment_id: str, body: Any, actor: User
+) -> dict:
+    """Normalize the payer/collection fields of a payment-like request.
+    Fills the payer name from the referenced user, defaults the collector
+    to the recording manager, and validates tenant/owner references."""
+    payer_name = (body.payer_name or "").strip()
+    if body.payer_entity_id and not payer_name:
+        payer = await db.users.find_one(
+            {"id": body.payer_entity_id, "community_id": community_id}
+        )
+        if payer is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Payer not found")
+        payer_name = payer["name"]
+    if not payer_name and body.payer_type == "owner":
+        apt = await db.apartments.find_one(
+            {"id": apartment_id, "community_id": community_id}
+        )
+        owner_ids = (apt or {}).get("owner_ids") or []
+        if owner_ids:
+            owner = await db.users.find_one({"id": owner_ids[0]})
+            payer_name = owner["name"] if owner else ""
+    return {
+        "payer_type": body.payer_type,
+        "payer_entity_id": body.payer_entity_id,
+        "payer_name": payer_name,
+        "collected_by": body.collected_by or actor.id,
+        "notes": body.notes,
+    }
 
 
 def compute_status(amount: float, paid: float, due_date: str) -> str:
@@ -91,6 +201,7 @@ async def create_invoice(body: InvoiceCreate, db: DB, user: CurrentUser) -> Invo
         status=compute_status(body.amount, 0, body.due_date),
         **data,
     )
+    await stamp_invoice_parties(db, invoice)
     await db.invoices.insert_one(invoice.model_dump())
     await record_audit(db, user, "create", "invoices", invoice.id)
     # Enqueue WhatsApp notification for apartment owners.
@@ -142,6 +253,8 @@ async def generate_invoices(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="No matching apartments"
         )
+    tenant_map = await active_tenants(db, user.community_id)
+    tenant_wanted = set(body.tenant_recipients or [])
     created = 0
     for apt in apartments:
         labeled = with_apartment(body.description, apt["id"])
@@ -167,6 +280,10 @@ async def generate_invoices(
             status=compute_status(apt_amount, 0, body.due_date),
             work_order_id=body.work_order_id,
             cost_case_id=cost_case_id,
+        )
+        await stamp_invoice_parties(
+            db, invoice, tenant_map=tenant_map,
+            request_from_tenant=apt["id"] in tenant_wanted,
         )
         await db.invoices.insert_one(invoice.model_dump())
         created += 1
@@ -230,6 +347,7 @@ async def bill_owner(body: BillOwnerRequest, db: DB, user: CurrentUser) -> Invoi
         ledger="reimbursement",
         line_items=items,
     )
+    await stamp_invoice_parties(db, invoice)
     await db.invoices.insert_one(invoice.model_dump())
     await record_audit(
         db, user, "create", "invoices", invoice.id,
@@ -298,6 +416,11 @@ async def apply_late_fees(
             status=compute_status(body.amount, 0, body.due_date),
             parent_invoice_id=inv["id"],
         )
+        # Late fee follows its parent's payment-request routing.
+        await stamp_invoice_parties(
+            db, fee,
+            request_from_tenant=inv.get("payment_request_recipient_type") == "tenant",
+        )
         await db.invoices.insert_one(fee.model_dump())
         created += 1
         if inv["apartment_id"] not in apartment_ids:
@@ -317,6 +440,36 @@ async def update_invoice(
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+    # Re-routing the payment request to the tenant requires an active tenant;
+    # routing back to owner re-resolves the owner snapshot. Liability never moves.
+    if updates.get("payment_request_recipient_type") == "tenant":
+        current = await db.invoices.find_one(
+            {"id": invoice_id, "community_id": user.community_id}
+        )
+        if current is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+        tenant = (await active_tenants(db, user.community_id)).get(
+            current["apartment_id"]
+        )
+        if tenant is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="This apartment has no active tenant on the whitelist",
+            )
+        updates.setdefault("payment_request_recipient_id", tenant["id"])
+        updates["apartment_occupancy_status"] = "rented"
+    elif updates.get("payment_request_recipient_type") == "owner":
+        current = await db.invoices.find_one(
+            {"id": invoice_id, "community_id": user.community_id}
+        )
+        if current:
+            updates.setdefault(
+                "payment_request_recipient_id", current.get("responsible_owner_id")
+            )
+    if "period" in updates:
+        month, year = period_month_year(updates["period"])
+        updates["billing_period_month"] = month
+        updates["billing_period_year"] = year
     invoice = await db.invoices.find_one_and_update(
         {"id": invoice_id, "community_id": user.community_id},
         {"$set": updates},
@@ -426,6 +579,11 @@ async def delete_invoice(
     dependencies=[Writer],
 )
 async def record_payment(body: PaymentCreate, db: DB, user: CurrentUser) -> Payment:
+    """Record money received against an invoice. The payer may be the owner,
+    the current tenant (paid on behalf of the owner), or anyone else — the
+    payment always settles the OWNER's invoice and ledger. Paying more than
+    the outstanding balance banks the excess as an advance credit on the
+    owner's account, with the payer identity preserved."""
     invoice = await db.invoices.find_one(
         {"id": body.invoice_id, "community_id": user.community_id}
     )
@@ -435,24 +593,74 @@ async def record_payment(body: PaymentCreate, db: DB, user: CurrentUser) -> Paym
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="Amount must be positive"
         )
-    outstanding = invoice["amount"] - invoice["paid_amount"]
-    if body.amount > outstanding:
+    outstanding = round(invoice["amount"] - invoice["paid_amount"], 2)
+    if outstanding <= 0:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail=f"Amount exceeds outstanding balance ({outstanding})",
+            detail="Invoice is already paid — record an advance payment instead",
         )
+    payer = await resolve_payer(
+        db, user.community_id, invoice["apartment_id"], body, user
+    )
+    applied = min(body.amount, outstanding)
+    excess = round(body.amount - applied, 2)
+    now = datetime.now(timezone.utc).isoformat()
     payment = Payment(
         community_id=user.community_id,
         apartment_id=invoice["apartment_id"],
         ledger=invoice.get("ledger", "community"),
-        **body.model_dump(),
+        **{**body.model_dump(), "amount": applied},
+        created_at=now,
+        created_by=user.id,
     )
+    payment.payer_type = payer["payer_type"]
+    payment.payer_entity_id = payer["payer_entity_id"]
+    payment.payer_name = payer["payer_name"]
+    payment.collected_by = payer["collected_by"]
+    payment.collection_date = body.collection_date or body.date
     await db.payments.insert_one(payment.model_dump())
+    if excess > 0:
+        credit = CreditEntry(
+            community_id=user.community_id,
+            apartment_id=invoice["apartment_id"],
+            amount=excess,
+            remaining=excess,
+            reference=body.reference or f"Overpayment ({body.method})",
+            date=body.date,
+            created_by=user.id,
+            payer_type=payer["payer_type"],
+            payer_entity_id=payer["payer_entity_id"],
+            payer_name=payer["payer_name"],
+            collected_by=payer["collected_by"],
+            notes=f"Overpayment on {invoice['description']}",
+        )
+        await db.credits.insert_one(credit.model_dump())
+        await record_audit(
+            db, user, "create", "credits", credit.id,
+            {"apartment_id": credit.apartment_id, "amount": excess,
+             "payer_type": credit.payer_type, "payer_name": credit.payer_name,
+             "reason": "overpayment"},
+        )
     await _recompute(db, invoice)
     await record_audit(
         db, user, "create", "payments", payment.id,
-        {"invoice_id": invoice["id"], "amount": body.amount, "method": body.method},
+        {"invoice_id": invoice["id"], "amount": applied, "method": body.method,
+         "payer_type": payment.payer_type, "payer_name": payment.payer_name,
+         "collected_by": payment.collected_by, "excess_credit": excess},
     )
+    # A third-party payer who is a portal member gets their receipt in-app.
+    if (
+        payment.payer_entity_id
+        and payment.payer_type != "owner"
+        and payment.payer_entity_id != user.id
+    ):
+        await notify_user(
+            db, user.community_id, payment.payer_entity_id,
+            f"Receipt: your payment of Rs {applied:,.0f} toward "
+            f"{invoice['description']} ({invoice['period']}) was recorded on "
+            f"behalf of the apartment owner",
+            "invoice", href="/payments",
+        )
     return payment
 
 
@@ -474,7 +682,193 @@ async def reverse_payment(payment_id: str, db: DB, user: CurrentUser) -> None:
     await record_audit(db, user, "delete", "payments", payment_id)
 
 
+@router.post(
+    "/payments/{payment_id}/void", response_model=Payment, dependencies=[Writer]
+)
+async def void_payment(
+    payment_id: str, db: DB, user: CurrentUser,
+    body: VoidPaymentRequest | None = None,
+) -> Payment:
+    """Void a posted payment instead of editing or deleting it — the row
+    stays in the collection (with who/when/why) but counts nowhere. To
+    correct a mistake: void, then record the replacement payment."""
+    payment = await db.payments.find_one(
+        {"id": payment_id, "community_id": user.community_id, "status": "confirmed"}
+    )
+    if payment is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="No confirmed payment to void"
+        )
+    reason = (body.reason if body else "").strip()
+    now = datetime.now(timezone.utc).isoformat()
+    await db.payments.update_one(
+        {"id": payment_id},
+        {"$set": {"status": "voided", "voided_at": now, "voided_by": user.id,
+                  "void_reason": reason}},
+    )
+    invoice = await db.invoices.find_one({"id": payment["invoice_id"]})
+    if invoice:
+        await _recompute(db, invoice)
+    await record_audit(
+        db, user, "update", "payments", payment_id,
+        {"voided": True, "reason": reason, "amount": payment["amount"],
+         "invoice_id": payment["invoice_id"]},
+    )
+    return Payment.model_validate(await db.payments.find_one({"id": payment_id}))
+
+
+@router.post(
+    "/payments/advance",
+    response_model=CreditEntry,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Writer],
+)
+async def record_advance_payment(
+    body: AdvancePaymentCreate, db: DB, user: CurrentUser
+) -> CreditEntry:
+    """Money received BEFORE its invoice exists (e.g. a tenant paying next
+    month's HOA fee early). Held as an unapplied credit on the owner's
+    account — the payer identity travels with it, and once the invoice is
+    generated the manager applies it via POST /payments/apply-credit."""
+    apt = await db.apartments.find_one(
+        {"id": body.apartment_id, "community_id": user.community_id}
+    )
+    if apt is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Apartment not found")
+    if body.amount <= 0:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Amount must be positive"
+        )
+    payer = await resolve_payer(db, user.community_id, body.apartment_id, body, user)
+    credit = CreditEntry(
+        community_id=user.community_id,
+        apartment_id=body.apartment_id,
+        amount=body.amount,
+        remaining=body.amount,
+        source="advance",
+        reference=body.reference or f"Advance payment ({body.method})",
+        date=body.date,
+        created_by=user.id,
+        payer_type=payer["payer_type"],
+        payer_entity_id=payer["payer_entity_id"],
+        payer_name=payer["payer_name"],
+        collected_by=payer["collected_by"],
+        notes=body.notes,
+    )
+    await db.credits.insert_one(credit.model_dump())
+    await record_audit(
+        db, user, "create", "credits", credit.id,
+        {"apartment_id": body.apartment_id, "amount": body.amount,
+         "source": "advance", "method": body.method,
+         "payer_type": credit.payer_type, "payer_name": credit.payer_name,
+         "collected_by": credit.collected_by},
+    )
+    if credit.payer_entity_id and credit.payer_entity_id != user.id:
+        await notify_user(
+            db, user.community_id, credit.payer_entity_id,
+            f"Receipt: your advance payment of Rs {body.amount:,.0f} for "
+            f"Apt {body.apartment_id.replace('apt-', '')} is held on the "
+            f"owner's account and will settle the next invoice",
+            "invoice", href="/payments",
+        )
+    return credit
+
+
+@router.post(
+    "/credits/{credit_id}/refund", response_model=CreditEntry, dependencies=[Writer]
+)
+async def refund_credit(
+    credit_id: str, db: DB, user: CurrentUser,
+    body: CreditRefundRequest | None = None,
+) -> CreditEntry:
+    """Return an unapplied credit to the person who funded it (the preserved
+    payer — a tenant's advance goes back to the tenant, never silently to
+    the owner). Records the refund; the money movement itself is offline."""
+    entry = await db.credits.find_one(
+        {"id": credit_id, "community_id": user.community_id,
+         "status": "confirmed", "remaining": {"$gt": 0}}
+    )
+    if entry is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="No refundable credit"
+        )
+    note = (body.note if body else "").strip()
+    now = datetime.now(timezone.utc).isoformat()
+    await db.credits.update_one(
+        {"id": credit_id},
+        {"$set": {"status": "refunded", "remaining": 0, "refunded_at": now,
+                  "refunded_by": user.id, "refund_note": note}},
+    )
+    await record_audit(
+        db, user, "update", "credits", credit_id,
+        {"refunded": True, "amount": entry["remaining"], "note": note,
+         "refund_to_payer_type": entry.get("payer_type", "owner"),
+         "refund_to_payer_name": entry.get("payer_name", ""),
+         "refund_to_payer_entity_id": entry.get("payer_entity_id")},
+    )
+    if entry.get("payer_entity_id") and entry["payer_entity_id"] != user.id:
+        await notify_user(
+            db, user.community_id, entry["payer_entity_id"],
+            f"Your unapplied payment of Rs {entry['remaining']:,.0f} is being "
+            f"refunded to you" + (f" — {note}" if note else ""),
+            "invoice", href="/payments",
+        )
+    return CreditEntry.model_validate(await db.credits.find_one({"id": credit_id}))
+
+
 REPORTER_ROLES = ("owner", "tenant")
+
+
+async def resolve_reported_payer(
+    db: Any, user: User, apartment_id: str,
+    payer_type: str | None, payer_name: str,
+    tenant_map: dict[str, dict] | None = None,
+) -> dict:
+    """Payer of an owner/tenant-reported claim. Defaults to the reporter;
+    an owner may declare their tenant (resolved from the whitelist) or a
+    named third party as the one who actually paid."""
+    self_type = "tenant" if user.role == "tenant" else "owner"
+    if payer_type is None or payer_type == self_type:
+        return {"payer_type": self_type, "payer_entity_id": user.id,
+                "payer_name": user.name}
+    if payer_type == "tenant":
+        if tenant_map is None:
+            tenant_map = await active_tenants(db, user.community_id)
+        tenant = tenant_map.get(apartment_id)
+        if tenant:
+            return {"payer_type": "tenant", "payer_entity_id": tenant["id"],
+                    "payer_name": tenant["name"]}
+        name = payer_name.strip()
+        if not name:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="No tenant on the whitelist for this apartment — give the payer's name",
+            )
+        return {"payer_type": "tenant", "payer_entity_id": None, "payer_name": name}
+    if payer_type == "owner":
+        # A tenant reporting that the owner actually paid.
+        apt = await db.apartments.find_one(
+            {"id": apartment_id, "community_id": user.community_id}
+        )
+        owner_ids = (apt or {}).get("owner_ids") or []
+        owner = await db.users.find_one({"id": owner_ids[0]}) if owner_ids else None
+        return {"payer_type": "owner",
+                "payer_entity_id": (owner or {}).get("id"),
+                "payer_name": (owner or {}).get("name", payer_name.strip() or "Owner")}
+    name = payer_name.strip()
+    if not name:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Give the payer's name"
+        )
+    return {"payer_type": "other", "payer_entity_id": None, "payer_name": name}
+
+
+def payer_note(payer: dict) -> str:
+    """' (paid by X on behalf of the owner)' suffix for manager notifications."""
+    if payer["payer_type"] == "owner":
+        return ""
+    kind = " — tenant" if payer["payer_type"] == "tenant" else ""
+    return f" (paid by {payer['payer_name']}{kind}, on behalf of the owner)"
 
 
 async def _notify_managers(db: Any, community_id: str, text: str, exclude: str) -> None:
@@ -520,6 +914,11 @@ async def report_payment(body: PaymentReport, db: DB, user: CurrentUser) -> Paym
             status.HTTP_409_CONFLICT,
             detail="You already reported a payment for this invoice — awaiting confirmation",
         )
+    # The reporter may name the actual payer (their tenant, someone else) —
+    # the invoice stays the owner's receivable either way.
+    payer = await resolve_reported_payer(
+        db, user, invoice["apartment_id"], body.payer_type, body.payer_name
+    )
     # Paying more than owed is fine — the excess is held as advance credit
     # (pending until the manager confirms the money arrived).
     excess = round(body.amount - outstanding, 2)
@@ -531,7 +930,11 @@ async def report_payment(body: PaymentReport, db: DB, user: CurrentUser) -> Paym
         reported_by=user.id,
         ledger=invoice.get("ledger", "community"),
         batch_id=batch_id,
-        **{**body.model_dump(), "amount": min(body.amount, outstanding)},
+        created_at=datetime.now(timezone.utc).isoformat(),
+        created_by=user.id,
+        **payer,
+        **{**body.model_dump(exclude={"payer_type", "payer_name"}),
+           "amount": min(body.amount, outstanding)},
     )
     await db.payments.insert_one(payment.model_dump())
     if excess > 0:
@@ -545,18 +948,22 @@ async def report_payment(body: PaymentReport, db: DB, user: CurrentUser) -> Paym
             date=body.date,
             created_by=user.id,
             batch_id=batch_id,
+            **payer,
         )
         await db.credits.insert_one(credit.model_dump())
     await record_audit(
         db, user, "create", "payments", payment.id,
         {"invoice_id": invoice["id"], "amount": body.amount,
-         "excess_credit": excess, "status": "pending"},
+         "excess_credit": excess, "status": "pending",
+         "payer_type": payer["payer_type"], "payer_name": payer["payer_name"]},
     )
     await _notify_managers(
         db, user.community_id,
         f"{user.name} reported a payment of Rs {body.amount:,.0f} "
         + (f"(incl. Rs {excess:,.0f} advance) " if excess > 0 else "")
-        + f"({body.method}, ref {body.reference or 'n/a'}) — please confirm",
+        + f"({body.method}, ref {body.reference or 'n/a'})"
+        + payer_note(payer)
+        + " — please confirm",
         user.id,
     )
     return payment
@@ -608,11 +1015,25 @@ async def report_payment_batch(
         )
 
     batch_id = new_id("payb")
+    # The claimed payer resolves per apartment (an account's flats can have
+    # different tenants); the whole batch shares one declared payer type.
+    # Resolved up front so a validation error never leaves a partial batch.
+    tenant_map = await active_tenants(db, user.community_id)
+    payer_by_apt = {
+        apt_id: await resolve_reported_payer(
+            db, user, apt_id, body.payer_type, body.payer_name,
+            tenant_map=tenant_map,
+        )
+        for apt_id in {i["apartment_id"] for i in open_invs}
+    }
     remaining = body.amount
     portions: list[dict] = []
+    last_payer: dict | None = None
     for inv in open_invs:
         if remaining <= 0:
             break
+        payer = payer_by_apt[inv["apartment_id"]]
+        last_payer = payer
         portion = min(remaining, inv["amount"] - inv["paid_amount"])
         payment = Payment(
             community_id=user.community_id,
@@ -626,6 +1047,9 @@ async def report_payment_batch(
             reported_by=user.id,
             ledger=inv.get("ledger", "community"),
             batch_id=batch_id,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            created_by=user.id,
+            **payer,
         )
         await db.payments.insert_one(payment.model_dump())
         portions.append({"invoiceId": inv["id"], "paymentId": payment.id, "amount": portion})
@@ -646,19 +1070,25 @@ async def report_payment_batch(
             date=body.date,
             created_by=user.id,
             batch_id=batch_id,
+            **(last_payer or {"payer_type": "owner", "payer_entity_id": user.id,
+                              "payer_name": user.name}),
         )
         await db.credits.insert_one(credit.model_dump())
     await record_audit(
         db, user, "create", "payments", batch_id,
         {"batch": True, "total": body.amount, "portions": len(portions),
-         "excess_credit": excess, "method": body.method, "status": "pending"},
+         "excess_credit": excess, "method": body.method, "status": "pending",
+         **({"payer_type": last_payer["payer_type"],
+             "payer_name": last_payer["payer_name"]} if last_payer else {})},
     )
     await _notify_managers(
         db, user.community_id,
         f"{user.name} reported one payment of Rs {body.amount:,.0f} covering "
         f"{len(portions)} invoice{'s' if len(portions) > 1 else ''}"
         + (f" (+ Rs {excess:,.0f} advance)" if excess > 0 else "")
-        + f" ({body.method}, ref {body.reference or 'n/a'}) — please confirm",
+        + f" ({body.method}, ref {body.reference or 'n/a'})"
+        + (payer_note(last_payer) if last_payer else "")
+        + " — please confirm",
         user.id,
     )
     return {"batchId": batch_id, "applied": portions, "total": body.amount,
@@ -677,12 +1107,17 @@ async def _confirm_capped(db: Any, user: User, payment: dict) -> dict:
         round(invoice["amount"] - invoice["paid_amount"], 2) if invoice
         else payment["amount"]
     )
+    # The confirming manager is the one who received the money.
+    collector = {
+        "collected_by": payment.get("collected_by") or user.id,
+        "collection_date": payment.get("collection_date") or payment["date"],
+    }
     excess = round(payment["amount"] - max(outstanding, 0), 2)
     if excess > 0:
         if outstanding > 0:
             await db.payments.update_one(
                 {"id": payment["id"]},
-                {"$set": {"status": "confirmed", "amount": outstanding}},
+                {"$set": {"status": "confirmed", "amount": outstanding, **collector}},
             )
             payment = {**payment, "status": "confirmed", "amount": outstanding}
         else:
@@ -698,6 +1133,10 @@ async def _confirm_capped(db: Any, user: User, payment: dict) -> dict:
             reference="Overpayment on confirm" + (f" ({ref})" if ref else ""),
             date=date.today().isoformat(),
             created_by=user.id,
+            # The banked excess keeps the original payer's identity.
+            payer_type=payment.get("payer_type", "owner"),
+            payer_entity_id=payment.get("payer_entity_id"),
+            payer_name=payment.get("payer_name", ""),
         )
         await db.credits.insert_one(credit.model_dump())
         await record_audit(
@@ -707,7 +1146,7 @@ async def _confirm_capped(db: Any, user: User, payment: dict) -> dict:
         )
     else:
         await db.payments.update_one(
-            {"id": payment["id"]}, {"$set": {"status": "confirmed"}}
+            {"id": payment["id"]}, {"$set": {"status": "confirmed", **collector}}
         )
         payment = {**payment, "status": "confirmed"}
     if invoice:
@@ -933,6 +1372,20 @@ async def reject_payment_batch(
         )
 
 
+@router.get("/payments/migration-report")
+async def payment_migration_report(db: DB, user: CurrentUser) -> dict:
+    """Report of migration 008's payer reclassification for this community:
+    payments re-attributed to tenants, and rows needing manual review."""
+    if user.role not in (*WRITE_ROLES, "auditor"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Managers/auditors only")
+    doc = await db.migration_reports.find_one({"id": "m008"}) or {"entries": []}
+    entries = [
+        e for e in doc.get("entries", [])
+        if e.get("community_id") == user.community_id
+    ]
+    return {"id": "m008", "title": doc.get("title", ""), "entries": entries}
+
+
 @router.get("/payments/rejections", response_model=list[PaymentRejection])
 async def list_payment_rejections(db: DB, user: CurrentUser) -> list[PaymentRejection]:
     """Rejected payment claims, newest first. Owners see their own
@@ -1043,6 +1496,25 @@ async def apply_advance_credit(
         )
 
     today = date.today().isoformat()
+    # The applied payments inherit the credit's funder — a tenant's advance
+    # stays attributed to the tenant when it lands on an invoice. Mixed-
+    # funder pools fall back to "other"/"Multiple payers".
+    to_consume: list[dict] = []
+    _left = amount
+    for e in entries:
+        if _left <= 0:
+            break
+        to_consume.append(e)
+        _left -= min(_left, e["remaining"])
+    funders = {
+        (e.get("payer_type", "owner"), e.get("payer_name", ""),
+         e.get("payer_entity_id"))
+        for e in to_consume
+    }
+    if len(funders) == 1:
+        f_type, f_name, f_id = next(iter(funders))
+    else:
+        f_type, f_name, f_id = "other", "Multiple payers", None
     remaining = amount
     portions: list[dict] = []
     for inv in open_invs:
@@ -1058,6 +1530,11 @@ async def apply_advance_credit(
             method="Credit",
             reference="Advance credit",
             ledger=inv.get("ledger", "community"),
+            payer_type=f_type,
+            payer_entity_id=f_id,
+            payer_name=f_name,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            created_by=user.id,
         )
         await db.payments.insert_one(payment.model_dump())
         await _recompute(db, inv)

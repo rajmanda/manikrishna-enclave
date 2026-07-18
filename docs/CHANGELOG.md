@@ -5,6 +5,57 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Owner-reported claims can name the actual payer (2026-07-17)** — the
+  owner-side "I've paid this" and Pay-multiple dialogs gained a "Who paid?"
+  select (I paid myself · My tenant — name, resolved from the whitelist ·
+  Someone else + free-text name). The claim stays ONE pending payment on
+  the owner's invoice; Vishnu's notification and the pending claim card
+  show "Paid by X (tenant) on behalf of owner" so he can verify before
+  confirming, and confirming stamps him as `collectedBy` (+ collection
+  date). Books tally identically on the owner side, manager side and
+  community ledger — payer is metadata, never a second receivable (D-025).
+  3 new tests (209 total).
+
+- **Tenant pays on behalf of owner (third-party payments, 2026-07-17)** —
+  the monthly HOA invoice stays the OWNER's receivable, but Vishnu can now
+  record who actually paid it. Separated concepts: responsible owner
+  (liability, never moves) · payment-request recipient (owner or the
+  apartment's active tenant) · payer (owner/tenant/other) · collector ·
+  receipt recipient.
+  *Invoices* gain `responsiblePartyType/responsibleOwnerId`,
+  `paymentRequestRecipientType/Id` (Generate dialog offers a per-apartment
+  "Payment requested from" select on rented flats; PATCH re-routes later;
+  vacant/no-tenant flats always default to owner), occupancy snapshot and
+  `billingPeriodMonth/Year`. *Payments* gain payer attribution
+  (payerType/payerEntityId/payerName), collected-by (defaults to the
+  recording manager), collection date, deposit status/date and notes; the
+  Record Payment dialog grew matching fields incl. a "Tenant paid on
+  behalf of owner" option listing the flat's whitelisted tenant. A tenant
+  payment settles the owner's invoice (partial → Partially Paid, remainder
+  stays on the owner), credits the owner's ledger with "Paid by X (tenant)
+  on behalf of owner" shown on the invoice sheet, payments page and the
+  statement PDF's new Paid-By column — never as a discount/waiver/owner
+  credit — and the tenant sees the same informational rows (no tenant
+  receivable is ever created). **Receipts:** `GET
+  /payments/{id}/receipt.pdf` — receipt no, apartment, amount, method,
+  reference, billing period, owner invoice no, "collected by", and an
+  on-behalf-of-owner statement; download buttons on payment rows.
+  **Overpayment:** manager-recorded overpayment now banks the excess as
+  advance credit funded by the payer (was a hard 400).
+  **Advance payments:** new `POST /payments/advance` + Payments-page
+  dialog holds money received before its invoice exists as owner-account
+  credit with the payer preserved; apply-credit now carries the funder
+  onto the resulting payments. **Refunds:** `POST /credits/{id}/refund`
+  (+ per-entry Refund buttons on the manager's credits card) returns an
+  unapplied credit to whoever funded it. **Void-and-replace:** posted
+  payments are no longer deleted from the UI — `POST /payments/{id}/void`
+  keeps the row (who/when/why, struck-through in history, excluded from
+  every total) and restores the invoice balance. **Migration 008**
+  stamps all existing invoices/payments/credits (tenant-reported rows
+  reclassified as tenant-paid; same invoices, same amounts/dates/refs)
+  and stores a reclassification/needs-review report
+  (`GET /payments/migration-report`). 13 new tests (206 total).
+
 - **Fix: POST /users dropped accountId (2026-07-17)** — `create_user`
   never persisted `account_id`, so any member whitelisted via the API
   (including extra emails added through the comma-delimited member

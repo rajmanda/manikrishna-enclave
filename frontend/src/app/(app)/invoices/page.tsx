@@ -6,11 +6,11 @@ import { AlarmClock, ArrowUpDown, Banknote, ChevronDown, Download, FileDown, Han
 import { useSessionUser } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { api, ApiError, downloadFile } from "@/lib/api";
-import type { Account, Apartment, CreditEntry, FeeEnrollment, Invoice, Payment, PaymentRejection, User, WorkOrder } from "@/lib/types";
+import type { Account, Apartment, CreditEntry, DepositStatus, FeeEnrollment, Invoice, Payment, PaymentRejection, PayerType, User, WorkOrder } from "@/lib/types";
 import { useUrlFilters } from "@/hooks/useUrlFilters";
 import { FilterBar } from "@/components/FilterBar";
 import { formatDate, formatINR } from "@/lib/format";
-import { aptNumber, ownerNameFor } from "@/lib/lookup";
+import { aptNumber, ownerNameFor, tenantFor } from "@/lib/lookup";
 import { invoiceTone, ledgerAccent } from "@/lib/tones";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { InvoiceSheet } from "@/components/InvoiceSheet";
@@ -33,14 +33,22 @@ const OWNER_METHODS = ["UPI", "Bank Transfer", "Cash", "Cheque"] as const;
 
 function ReportPaymentDialog({
   invoice,
+  users,
   onClose,
   onDone,
 }: {
   invoice: Invoice;
+  users: User[] | undefined;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { role } = useSessionUser();
   const outstanding = invoice.amount - invoice.paidAmount;
+  const tenant = tenantFor(users, invoice.apartmentId);
+  // "self" = the reporter (owner or tenant); owners may declare their
+  // tenant or a named third party as the one who actually paid.
+  const [paidBy, setPaidBy] = useState<"self" | "tenant" | "other">("self");
+  const [payerName, setPayerName] = useState("");
   const [amount, setAmount] = useState(String(outstanding));
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<(typeof OWNER_METHODS)[number]>("UPI");
@@ -61,6 +69,8 @@ function ReportPaymentDialog({
           date,
           method,
           reference,
+          ...(paidBy === "tenant" ? { payerType: "tenant" } : {}),
+          ...(paidBy === "other" ? { payerType: "other", payerName } : {}),
         }),
       });
       onDone();
@@ -75,9 +85,35 @@ function ReportPaymentDialog({
     <Modal title={`I've paid — ${invoice.description}, ${invoice.period}`} onClose={onClose}>
       <form className="space-y-4" onSubmit={submit}>
         <p className="text-sm text-slate-500">
-          Report the payment you made to the property manager. It shows as
+          Report the payment made to the property manager. It shows as
           pending until they confirm receipt.
         </p>
+        <div>
+          <label className={labelCls}>Who paid?</label>
+          <select
+            className={inputCls}
+            value={paidBy}
+            onChange={(e) => setPaidBy(e.target.value as "self" | "tenant" | "other")}
+          >
+            <option value="self">I paid this myself</option>
+            {role === "owner" && tenant && (
+              <option value="tenant">My tenant — {tenant.name}</option>
+            )}
+            <option value="other">Someone else</option>
+          </select>
+        </div>
+        {paidBy === "other" && (
+          <div>
+            <label className={labelCls}>Payer name</label>
+            <input className={inputCls} value={payerName} onChange={(e) => setPayerName(e.target.value)} placeholder="Who handed over the money" required />
+          </div>
+        )}
+        {paidBy !== "self" && (
+          <p className="rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-800">
+            The payment still settles this invoice on the owner&apos;s ledger —
+            the manager sees who paid and the payer is named on the receipt.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Amount paid</label>
@@ -119,22 +155,30 @@ function ReportPaymentDialog({
  * every invoice were paid individually. */
 function PayMultipleDialog({
   invoices,
+  users,
   totalCredit,
   multiApt,
   onClose,
   onDone,
 }: {
   invoices: Invoice[]; // the owner's open invoices without pending reports
+  users: User[] | undefined;
   totalCredit: number; // the account's pooled confirmed advance credit
   multiApt: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { role } = useSessionUser();
   const open = [...invoices].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const [selected, setSelected] = useState<Set<string>>(new Set(open.map((i) => i.id)));
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<(typeof OWNER_METHODS)[number]>("UPI");
   const [reference, setReference] = useState("");
+  // Owners may declare their tenant (resolved per apartment server-side)
+  // or a named third party as the actual payer.
+  const [paidBy, setPaidBy] = useState<"self" | "tenant" | "other">("self");
+  const [payerName, setPayerName] = useState("");
+  const anyTenant = open.some((i) => tenantFor(users, i.apartmentId));
   const [useCredit, setUseCredit] = useState(true);
   const [amountTouched, setAmountTouched] = useState(false);
   const [amount, setAmount] = useState("");
@@ -225,6 +269,8 @@ function PayMultipleDialog({
             date,
             method,
             reference,
+            ...(paidBy === "tenant" ? { payerType: "tenant" } : {}),
+            ...(paidBy === "other" ? { payerType: "other", payerName } : {}),
           }),
         });
       }
@@ -365,6 +411,31 @@ function PayMultipleDialog({
             </p>
           )}
         </div>
+        {cash > 0 && (
+          <div>
+            <label className={labelCls}>Who paid the transfer?</label>
+            <select
+              className={inputCls}
+              value={paidBy}
+              onChange={(e) => setPaidBy(e.target.value as "self" | "tenant" | "other")}
+            >
+              <option value="self">I paid this myself</option>
+              {role === "owner" && anyTenant && (
+                <option value="tenant">My tenant (on behalf of me)</option>
+              )}
+              <option value="other">Someone else</option>
+            </select>
+            {paidBy === "other" && (
+              <input
+                className={`${inputCls} mt-2`}
+                value={payerName}
+                onChange={(e) => setPayerName(e.target.value)}
+                placeholder="Payer name"
+                required
+              />
+            )}
+          </div>
+        )}
         <ClosedMonthNote date={date} />
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button
@@ -421,14 +492,28 @@ function GenerateDialog({
   );
   // Allocation rows like the cost-case Bill owners dialog: tick apartments
   // in/out, blank amount = the default amount field below.
+  // Rented apartments can have the payment request routed to the tenant
+  // (on behalf of the owner) — liability stays with the owner either way.
   const [rows, setRows] = useState(
-    sortedApartments.map((a) => ({ apartmentId: a.id, number: a.number, included: true, amount: "" }))
+    sortedApartments.map((a) => ({
+      apartmentId: a.id,
+      number: a.number,
+      included: true,
+      amount: "",
+      requestFrom: "owner" as "owner" | "tenant",
+    }))
   );
   const included = rows.filter((r) => r.included);
   const allIncluded = included.length === rows.length;
   const customUsed = included.some((r) => r.amount !== "");
+  const tenantRecipients = included
+    .filter((r) => r.requestFrom === "tenant")
+    .map((r) => r.apartmentId);
 
-  function updateRow(i: number, patch: Partial<{ included: boolean; amount: string }>) {
+  function updateRow(
+    i: number,
+    patch: Partial<{ included: boolean; amount: string; requestFrom: "owner" | "tenant" }>
+  ) {
     setRows(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
 
@@ -463,6 +548,7 @@ function GenerateDialog({
                   ...(allIncluded ? {} : { apartmentIds: included.map((r) => r.apartmentId) }),
                 }),
             ...(linkedWo ? { workOrderId: linkedWo } : {}),
+            ...(tenantRecipients.length > 0 ? { tenantRecipients } : {}),
           }),
         }
       );
@@ -528,31 +614,51 @@ function GenerateDialog({
             </span>
           </div>
           <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
-            {rows.map((r, i) => (
-              <div key={r.apartmentId} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={r.included}
-                  onChange={(e) => updateRow(i, { included: e.target.checked })}
-                  className="h-4 w-4 rounded border-slate-300 text-brand-600"
-                />
-                <span className={`w-14 font-medium ${r.included ? "" : "text-slate-400 line-through"}`}>
-                  Apt {r.number}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-xs text-slate-400">
-                  {ownerNameFor(users, sortedApartments, r.apartmentId)}
-                </span>
-                <input
-                  type="number"
-                  min="1"
-                  value={r.amount}
-                  disabled={!r.included}
-                  placeholder={amount || "default"}
-                  onChange={(e) => updateRow(i, { amount: e.target.value })}
-                  className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm disabled:bg-slate-50 disabled:text-slate-300"
-                />
+            {rows.map((r, i) => {
+              const tenant = tenantFor(users, r.apartmentId);
+              return (
+              <div key={r.apartmentId} className="space-y-1">
+                <div className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={r.included}
+                    onChange={(e) => updateRow(i, { included: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                  />
+                  <span className={`w-14 font-medium ${r.included ? "" : "text-slate-400 line-through"}`}>
+                    Apt {r.number}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-slate-400">
+                    {ownerNameFor(users, sortedApartments, r.apartmentId)}
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={r.amount}
+                    disabled={!r.included}
+                    placeholder={amount || "default"}
+                    onChange={(e) => updateRow(i, { amount: e.target.value })}
+                    className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm disabled:bg-slate-50 disabled:text-slate-300"
+                  />
+                </div>
+                {tenant && r.included && (
+                  <div className="ml-6 flex items-center gap-2 text-xs text-slate-500">
+                    <span>Payment requested from</span>
+                    <select
+                      value={r.requestFrom}
+                      onChange={(e) =>
+                        updateRow(i, { requestFrom: e.target.value as "owner" | "tenant" })
+                      }
+                      className="rounded-lg border border-slate-200 px-1.5 py-0.5 text-xs"
+                    >
+                      <option value="owner">Owner</option>
+                      <option value="tenant">Tenant — {tenant.name} (on behalf of owner)</option>
+                    </select>
+                  </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
           <p className="mt-1 px-1 text-xs text-slate-400">
             {included.length} selected · blank amount = the default above
@@ -574,20 +680,33 @@ function GenerateDialog({
 
 function PaymentDialog({
   invoice,
+  users,
+  apartments,
   onClose,
   onDone,
 }: {
   invoice: Invoice;
+  users: User[] | undefined;
+  apartments: Apartment[] | undefined;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { user: me } = useSessionUser();
   const outstanding = invoice.amount - invoice.paidAmount;
+  const tenant = tenantFor(users, invoice.apartmentId);
+  const ownerName = ownerNameFor(users, apartments, invoice.apartmentId);
   const [amount, setAmount] = useState(String(outstanding));
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<(typeof METHODS)[number]>("UPI");
   const [reference, setReference] = useState("");
+  const [payerType, setPayerType] = useState<PayerType>("owner");
+  const [payerName, setPayerName] = useState("");
+  const [depositStatus, setDepositStatus] = useState<DepositStatus>("not_required");
+  const [depositDate, setDepositDate] = useState("");
+  const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const excess = Math.max(0, Number(amount) - outstanding);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -602,6 +721,13 @@ function PaymentDialog({
           date,
           method,
           reference,
+          payerType,
+          payerEntityId: payerType === "tenant" ? tenant?.id ?? null : null,
+          payerName:
+            payerType === "tenant" ? tenant?.name ?? payerName : payerType === "other" ? payerName : "",
+          depositStatus,
+          depositDate: depositStatus === "deposited" && depositDate ? depositDate : null,
+          notes,
         }),
       });
       onDone();
@@ -616,16 +742,56 @@ function PaymentDialog({
     <Modal title={`Record Payment — ${invoice.description}, ${invoice.period}`} onClose={onClose}>
       <form className="space-y-4" onSubmit={submit}>
         <p className="text-sm text-slate-500">
-          Apt {aptNumber(invoice.apartmentId)} · Outstanding {formatINR(outstanding)}
+          Apt {aptNumber(invoice.apartmentId)} · Responsible owner {ownerName} ·
+          Outstanding {formatINR(outstanding)}
         </p>
         <div>
-          <label className={labelCls}>Amount</label>
-          <input type="number" min="1" max={outstanding} className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          <label className={labelCls}>Paid by</label>
+          <select
+            className={inputCls}
+            value={payerType}
+            onChange={(e) => setPayerType(e.target.value as PayerType)}
+          >
+            <option value="owner">Owner — {ownerName}</option>
+            {tenant && (
+              <option value="tenant">
+                Tenant paid on behalf of owner — {tenant.name}
+              </option>
+            )}
+            <option value="other">Other person</option>
+          </select>
         </div>
-        <div>
-          <label className={labelCls}>Date</label>
-          <input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} required />
+        {payerType === "other" && (
+          <div>
+            <label className={labelCls}>Payer name</label>
+            <input className={inputCls} value={payerName} onChange={(e) => setPayerName(e.target.value)} placeholder="Who handed over the money" required />
+          </div>
+        )}
+        {payerType === "tenant" && (
+          <p className="rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-800">
+            This settles the <b>owner&apos;s</b> invoice and credits the owner&apos;s
+            ledger; {tenant?.name} is recorded as the payment source and gets a
+            receipt. The owner remains responsible for any unpaid balance.
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Amount received</label>
+            <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          </div>
+          <div>
+            <label className={labelCls}>Date</label>
+            <input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} required />
+          </div>
         </div>
+        {excess > 0 && (
+          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+            {formatINR(excess)} beyond this invoice will be held as advance
+            credit on the owner&apos;s account
+            {payerType !== "owner" && ", funded by the payer,"} and can be
+            applied to a future invoice or refunded.
+          </p>
+        )}
         <div>
           <label className={labelCls}>Method</label>
           <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value as (typeof METHODS)[number])}>
@@ -635,9 +801,30 @@ function PaymentDialog({
           </select>
         </div>
         <div>
-          <label className={labelCls}>Reference</label>
+          <label className={labelCls}>Reference / transaction ID</label>
           <input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UPI-1234 / NEFT ref / waiver note" />
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Deposit status</label>
+            <select className={inputCls} value={depositStatus} onChange={(e) => setDepositStatus(e.target.value as DepositStatus)}>
+              <option value="not_required">Not required</option>
+              <option value="pending">Pending deposit</option>
+              <option value="deposited">Deposited</option>
+            </select>
+          </div>
+          {depositStatus === "deposited" && (
+            <div>
+              <label className={labelCls}>Deposit date</label>
+              <input type="date" className={inputCls} value={depositDate} onChange={(e) => setDepositDate(e.target.value)} />
+            </div>
+          )}
+        </div>
+        <div>
+          <label className={labelCls}>Notes (optional)</label>
+          <input className={inputCls} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything worth remembering about this payment" />
+        </div>
+        <p className="text-xs text-slate-400">Collected by {me.name}</p>
         <ClosedMonthNote date={date} />
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <button type="submit" disabled={busy} className={primaryBtnCls}>
@@ -1962,6 +2149,8 @@ function InvoicesPageInner() {
       {payInvoice && (
         <PaymentDialog
           invoice={payInvoice}
+          users={users.data}
+          apartments={apartments.data}
           onClose={() => setPayInvoice(null)}
           onDone={() => {
             invoices.reload();
@@ -1972,6 +2161,7 @@ function InvoicesPageInner() {
       {reportInvoice && (
         <ReportPaymentDialog
           invoice={reportInvoice}
+          users={users.data}
           onClose={() => setReportInvoice(null)}
           onDone={() => {
             invoices.reload();
@@ -2020,6 +2210,7 @@ function InvoicesPageInner() {
       {payMulti && (
         <PayMultipleDialog
           invoices={selectedPayable}
+          users={users.data}
           totalCredit={creditBalance}
           multiApt={myApts.length > 1}
           onClose={() => setPayMulti(false)}

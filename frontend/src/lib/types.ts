@@ -96,6 +96,10 @@ export interface User {
 
 export type InvoiceStatus = "paid" | "due" | "overdue" | "partial";
 
+// Who actually handed over the money — never who owes it.
+export type PayerType = "owner" | "tenant" | "other";
+export type DepositStatus = "not_required" | "pending" | "deposited";
+
 export interface Invoice {
   id: string;
   communityId: string;
@@ -111,6 +115,15 @@ export interface Invoice {
   parentInvoiceId?: string | null;
   workOrderId?: string | null;
   costCaseId?: string | null;
+  // The owner is ALWAYS the responsible party; only the payment request
+  // may be routed to the current tenant (on behalf of the owner).
+  responsiblePartyType?: "owner";
+  responsibleOwnerId?: string | null;
+  paymentRequestRecipientType?: "owner" | "tenant";
+  paymentRequestRecipientId?: string | null;
+  apartmentOccupancyStatus?: "rented" | "owner_occupied" | "vacant" | null;
+  billingPeriodMonth?: number | null;
+  billingPeriodYear?: number | null;
 }
 
 export interface Payment {
@@ -121,12 +134,28 @@ export interface Payment {
   date: string;
   method: "UPI" | "Bank Transfer" | "Cash" | "Cheque" | "Credit";
   reference: string;
-  status?: "pending" | "confirmed";
+  // Voided payments stay for the audit trail but count nowhere.
+  status?: "pending" | "confirmed" | "voided";
   reportedBy?: string | null;
   ledger?: "community" | "manager_fee" | "reimbursement";
   // Set when one reported amount covered several invoices — the portions
   // share a batch id so the manager can confirm/reject them together.
   batchId?: string | null;
+  // Payer attribution: the money's source. The invoice's owner remains
+  // the responsible party and receives the ledger credit.
+  payerType?: PayerType;
+  payerEntityId?: string | null;
+  payerName?: string;
+  collectedBy?: string | null;
+  collectionDate?: string | null;
+  depositStatus?: DepositStatus;
+  depositDate?: string | null;
+  notes?: string;
+  createdAt?: string;
+  createdBy?: string | null;
+  voidedAt?: string | null;
+  voidedBy?: string | null;
+  voidReason?: string;
 }
 
 // Durable record of a rejected payment claim — shown on the invoice so the
@@ -151,12 +180,22 @@ export interface CreditEntry {
   apartmentId: string;
   amount: number;
   remaining: number;
-  source: "overpayment" | "manual";
-  status: "pending" | "confirmed";
+  // "advance" = money received before its invoice existed.
+  source: "overpayment" | "manual" | "correction" | "advance";
+  status: "pending" | "confirmed" | "refunded";
   reference: string;
   date: string;
   createdBy: string;
   batchId?: string | null;
+  // Who funded this credit — a refund goes back to the actual payer.
+  payerType?: PayerType;
+  payerEntityId?: string | null;
+  payerName?: string;
+  collectedBy?: string | null;
+  notes?: string;
+  refundedAt?: string | null;
+  refundedBy?: string | null;
+  refundNote?: string;
 }
 
 export type ExpenseCategory =

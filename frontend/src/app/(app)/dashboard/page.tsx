@@ -117,7 +117,7 @@ function OwnerDashboard() {
       out.push({
         month: d.toLocaleDateString("en-US", { month: "short" }),
         paid: (payments.data ?? [])
-          .filter((p) => p.status !== "pending" && p.date.startsWith(prefix))
+          .filter((p) => p.status !== "pending" && p.status !== "voided" && p.date.startsWith(prefix))
           .reduce((sum, p) => sum + p.amount, 0),
       });
     }
@@ -245,7 +245,10 @@ function OwnerDashboard() {
         <section>
           <SectionHeader title="Payment History" action="View all" href="/invoices" />
           <Card className="divide-y divide-slate-100">
-            {(payments.data ?? []).slice(0, 3).map((p) => (
+            {(payments.data ?? [])
+              .filter((p) => p.status !== "voided")
+              .slice(0, 3)
+              .map((p) => (
               <div key={p.id} className="flex items-center justify-between gap-3 p-4">
                 <div>
                   <p className="text-sm font-medium">{formatINR(p.amount)}</p>
@@ -1049,6 +1052,7 @@ function ManagerDashboard() {
             const confirmed = (payments.data ?? []).filter(
               (p) =>
                 p.status !== "pending" &&
+                p.status !== "voided" &&
                 (p.ledger ?? "community") === "community"
             );
             const byMonth = new Map<string, { total: number; count: number }>();
@@ -1162,6 +1166,7 @@ function ManagerDashboard() {
             const confirmed = (payments.data ?? []).filter(
               (p) =>
                 p.status !== "pending" &&
+                p.status !== "voided" &&
                 (p.ledger ?? "community") !== "community"
             );
             const byMonth = new Map<string, { total: number; count: number }>();

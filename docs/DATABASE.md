@@ -21,9 +21,10 @@ scoped by it (see `scoped_community_id` in `backend/app/core/security.py`).
 | `communities` | Tenants | id, name, address, apartment_count, monthly_maintenance |
 | `users` | Members **and the login whitelist** | id, community_id, name, email (unique), role (active), roles[] (switchable set), apartment_id?, phone? |
 | `apartments` | Units | id, community_id, number (unique per community), floor, owner_ids[] |
-| `invoices` | Charges per apartment | id, community_id, apartment_id, period, description, amount, paid_amount, due_date, status, parent_invoice_id (late fees), ledger (community \| manager_fee \| reimbursement), line_items[] |
-| `payments` | Receipts | id, community_id, invoice_id, apartment_id, amount, date, method (incl. "Credit"), reference, status (pending/confirmed — owner-reported start pending), reported_by?, batch_id? (portions of one reported multi-invoice transfer) |
-| `credits` | Advance credit per apartment (money received beyond dues) | id, community_id, apartment_id, amount, remaining, source (overpayment/manual), status (pending until the batch is confirmed), reference, date, created_by, batch_id? — spent FIFO via `POST /payments/apply-credit` |
+| `invoices` | Charges per apartment | id, community_id, apartment_id, period, description, amount, paid_amount, due_date, status, parent_invoice_id (late fees), ledger (community \| manager_fee \| reimbursement), line_items[], responsibility/routing: responsible_party_type ("owner", always), responsible_owner_id (owner user snapshot), payment_request_recipient_type (owner \| tenant — request routing only, liability never moves), payment_request_recipient_id, apartment_occupancy_status (rented \| owner_occupied, snapshot at billing), billing_period_month/year (parsed from period) |
+| `payments` | Receipts | id, community_id, invoice_id, apartment_id, amount, date, method (incl. "Credit"), reference, status (pending/confirmed/voided — owner-reported start pending; voided rows count nowhere but stay for audit), reported_by?, batch_id? (portions of one reported multi-invoice transfer), payer attribution (payer_type owner/tenant/other, payer_entity_id?, payer_name — the money's SOURCE; the invoice's owner stays the responsible party), collected_by?, collection_date?, deposit_status (not_required/pending/deposited), deposit_date?, notes, created_at/by, voided_at/by?, void_reason |
+| `credits` | Advance credit per apartment (money received beyond dues, or before its invoice existed) | id, community_id, apartment_id, amount, remaining, source (overpayment/manual/correction/advance), status (pending until the batch is confirmed; refunded = returned to payer), reference, date, created_by, batch_id?, funder identity (payer_type/payer_entity_id/payer_name — refunds go back to the actual payer), collected_by?, notes, refunded_at/by?, refund_note — spent FIFO via `POST /payments/apply-credit` |
+| `migration_reports` | Migration output for human review | id (e.g. "m008"), title, entries (per-payment reclassification + needs-review rows) |
 | `payment_rejections` | Durable record of rejected payment claims (shown on the owner's invoice) | id, community_id, invoice_id, apartment_id, amount, reason, rejected_by, reporter_id?, date |
 | `expenses` | Community spend | id, community_id, category, description, vendor_id?, amount, paid_date, has_receipt, receipt_path (GCS) |
 | `work_orders` | Common-area jobs | id, community_id, title, description, priority, stage, vendor_id?, assigned_to?, estimate?, final_cost?, reported_date, photo_count, timeline[], comments[] |
@@ -127,8 +128,10 @@ startup; current version in `meta` ({"id": "schema", "version": N}).
 | 004 | `users.roles` backfilled to `[role]` |
 | 005 | `invoices/payments.ledger` backfilled to `community` |
 | 006 | Apartment number baked into invoice descriptions |
+| 007 | Legacy expenses → `posted`; bore-well cost case reconstructed |
+| 008 | Third-party payments: invoices gain responsibility/recipient/occupancy/billing-period fields (owner stamped responsible, request → owner); payments/credits gain payer attribution (tenant-reported rows reclassified `payer_type: tenant`, others owner); reclassification + needs-review report stored in `migration_reports` (id `m008`, served by `GET /payments/migration-report`) |
 
-Schema version: **6**. `notification_queue` is a new collection (no migration
+Schema version: **8**. `notification_queue` is a new collection (no migration
 needed — it starts empty and indexes are created at startup).
 
 **Policy:** update this file in the same change as any schema modification.

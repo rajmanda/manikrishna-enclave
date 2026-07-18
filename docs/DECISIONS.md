@@ -172,3 +172,21 @@ from the API.
 **Why:** third real money stream from field usage (Vishnu's itemized
 WhatsApp bills). Community aggregates filter on `ledger=="community"`, so
 new ledger values are excluded by construction — validating D-021's design.
+
+## D-025 · 2026-07-17 · Third-party payments: payer is metadata, never a receivable
+**Decision:** when a tenant (or anyone) pays an owner's HOA invoice, we record
+ONE payment against the owner's invoice carrying payer attribution
+(`payer_type/payer_entity_id/payer_name` + collector/deposit fields) — never a
+second tenant invoice, credit note, or owner adjustment. Invoices separate
+liability from routing: `responsible_owner_id` is fixed at billing;
+`payment_request_recipient_*` may point at the active tenant. Money received
+early or beyond a balance lands in `credits` with the funder preserved, so
+refunds go back to the actual payer. Posted payments are corrected by
+void-and-replace (`status: "voided"` + who/when/why) — every aggregate already
+filters `status == "confirmed"`, so voided rows count nowhere by construction.
+**Why:** duplicate receivables would double the community's book; a tenant
+payment is legally the owner's settlement, so only the source needs recording
+(receipt to the payer, "on behalf of owner" on the ledger).
+**Trade-off:** occupancy is inferred from the whitelist (tenant user present =
+rented); true vacancy isn't tracked — both no-tenant states route requests to
+the owner, which is the correct default anyway.
