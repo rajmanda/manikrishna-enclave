@@ -12,7 +12,6 @@ from app.core.security import CurrentUser, owned_community_ids, require_roles
 from app.db import get_db
 from app.models import (
     WRITE_ROLES,
-    AllocatePaymentRequest,
     ApplyCreditRequest,
     ApplyLateFeesRequest,
     BillOwnerRequest,
@@ -457,78 +456,6 @@ async def record_payment(body: PaymentCreate, db: DB, user: CurrentUser) -> Paym
     return payment
 
 
-@router.post(
-    "/payments/allocate",
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Writer],
-)
-async def allocate_payment(
-    body: AllocatePaymentRequest, db: DB, user: CurrentUser
-) -> dict:
-    """Split one received amount across the given invoices, oldest due date
-    first — one Payment per invoice portion, same method/date/reference."""
-    if body.amount <= 0:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Amount must be positive")
-    invoices = await db.invoices.find(
-        {"id": {"$in": body.invoice_ids}, "community_id": user.community_id}
-    ).to_list(200)
-    if len(invoices) != len(set(body.invoice_ids)):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invoice not found")
-    open_invs = sorted(
-        (i for i in invoices if i["amount"] - i["paid_amount"] > 0),
-        key=lambda i: i["due_date"],
-    )
-    if not open_invs:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail="These invoices are already paid"
-        )
-    remaining = body.amount
-    applied = []
-    for inv in open_invs:
-        if remaining <= 0:
-            break
-        portion = min(remaining, inv["amount"] - inv["paid_amount"])
-        payment = Payment(
-            community_id=user.community_id,
-            invoice_id=inv["id"],
-            apartment_id=inv["apartment_id"],
-            amount=portion,
-            date=body.date,
-            method=body.method,
-            reference=body.reference,
-            ledger=inv.get("ledger", "community"),
-        )
-        await db.payments.insert_one(payment.model_dump())
-        await _recompute(db, inv)
-        applied.append({"invoiceId": inv["id"], "apartmentId": inv["apartment_id"], "amount": portion})
-        remaining -= portion
-    # Money received beyond the combined outstanding is held as advance
-    # credit for the newest-due invoice's apartment (confirmed immediately —
-    # the manager IS the confirmation).
-    excess = round(remaining, 2)
-    if excess > 0:
-        credit = CreditEntry(
-            community_id=user.community_id,
-            apartment_id=open_invs[-1]["apartment_id"],
-            amount=excess,
-            remaining=excess,
-            reference=body.reference or f"Overpayment ({body.method})",
-            date=body.date,
-            created_by=user.id,
-        )
-        await db.credits.insert_one(credit.model_dump())
-        await record_audit(
-            db, user, "create", "credits", credit.id,
-            {"apartment_id": credit.apartment_id, "amount": excess},
-        )
-    await record_audit(
-        db, user, "create", "payments", f"allocate:{body.reference or body.date}",
-        {"total": body.amount, "portions": len(applied),
-         "excess_credit": excess, "method": body.method},
-    )
-    return {"applied": applied, "total": body.amount, "excessCredit": excess}
-
-
 @router.delete(
     "/payments/{payment_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -649,7 +576,7 @@ async def report_payment_batch(
     if user.role not in REPORTER_ROLES:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            detail="Managers record payments directly via POST /payments/allocate",
+            detail="Managers record payments directly via POST /payments",
         )
     if body.amount <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Amount must be positive")

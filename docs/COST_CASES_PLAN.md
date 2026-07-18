@@ -73,7 +73,7 @@ Reconciliation.
       reserve/no-recovery cases warn before billing owners
 - [x] Per-apartment allocation editor — Bill owners dialog on the case page: equal-split default of the approved budget, editable rows, tick apartments in/out, over/under-budget warning, idempotent POST /cost-cases/{id}/assessments (skips already-assessed apartments per period)
 - [x] Installment plans — per-apartment installment count (once/2x/3x/6x/12x) in the Bill owners dialog; N monthly invoices per apartment ("Jul 2026 - 2/3" periods, whole-rupee split, month-end clamping), idempotent; partial payments already supported
-- [x] Payment allocation across multiple invoices in one entry — Combined payment button on Invoices page: tick open invoices, live oldest-first preview, POST /payments/allocate
+- [x] ~~Payment allocation across multiple invoices in one entry (manager-side Combined payment / POST /payments/allocate)~~ — removed 2026-07-17: owner decided against it (cross-owner allocation and excess-credit routing were too error-prone); owner-side `/payments/report-batch` remains
 - [x] Credit settlement — Apply to next invoice button on the case: records a linked Credit payment (settles_cost_case_id) on the apartment's oldest open invoice outside the case; badge flips to 'credit applied' when settled; partial/repeat application supported
 - [x] Waivers/adjustments — the existing Credit payment method covers waivers (counts toward paid, audited, reference note required by convention); available in Record Payment and Combined Payment dialogs. Formal approval workflow deferred to Phase 4 hardening if needed
 

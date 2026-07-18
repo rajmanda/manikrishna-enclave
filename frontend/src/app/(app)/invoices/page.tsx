@@ -977,156 +977,6 @@ function FeeDialog({
     );
 }
 
-/** One received amount (a family paying for several flats at once) split
- * across selected open invoices, oldest due first. */
-function CombinedPaymentDialog({
-  invoices,
-  onClose,
-  onDone,
-}: {
-  invoices: Invoice[];
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const open = [...invoices]
-    .filter((i) => i.amount - i.paidAmount > 0)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [method, setMethod] = useState<(typeof METHODS)[number]>("UPI");
-  const [reference, setReference] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const chosen = open.filter((i) => selected.has(i.id));
-  const outstanding = chosen.reduce((s, i) => s + (i.amount - i.paidAmount), 0);
-
-  // Preview: oldest-first allocation, mirrors the server exactly.
-  const preview = (() => {
-    let left = Number(amount) || 0;
-    const map = new Map<string, number>();
-    for (const inv of chosen) {
-      if (left <= 0) break;
-      const portion = Math.min(left, inv.amount - inv.paidAmount);
-      map.set(inv.id, portion);
-      left -= portion;
-    }
-    return map;
-  })();
-
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api("/payments/allocate", {
-        method: "POST",
-        body: JSON.stringify({
-          invoiceIds: [...selected],
-          amount: Number(amount),
-          date,
-          method,
-          reference,
-        }),
-      });
-      onDone();
-      onClose();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to allocate payment");
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal title="Combined Payment" onClose={onClose}>
-      <form className="space-y-4" onSubmit={submit}>
-        <p className="text-xs text-slate-500">
-          One received amount covering several invoices (e.g. a family paying
-          for two flats together). Tick the invoices it covers — the amount is
-          applied oldest due date first.
-        </p>
-        <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
-          {open.map((inv) => {
-            const bal = inv.amount - inv.paidAmount;
-            const portion = preview.get(inv.id);
-            return (
-              <label key={inv.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-slate-50">
-                <input
-                  type="checkbox"
-                  checked={selected.has(inv.id)}
-                  onChange={() => toggle(inv.id)}
-                  className="h-4 w-4 rounded border-slate-300 text-brand-600"
-                />
-                <span className="min-w-0 flex-1 truncate">
-                  <b>Apt {aptNumber(inv.apartmentId)}</b> · {inv.description}
-                </span>
-                <span className="shrink-0 text-slate-500">{formatINR(bal)} due</span>
-                {portion != null && (
-                  <span className="shrink-0 font-semibold text-emerald-600">→ {formatINR(portion)}</span>
-                )}
-              </label>
-            );
-          })}
-          {open.length === 0 && (
-            <p className="py-3 text-center text-xs text-slate-400">No open invoices.</p>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls}>Amount received</label>
-            <input type="number" min="1" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} required />
-          </div>
-          <div>
-            <label className={labelCls}>Date</label>
-            <input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} required />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls}>Method</label>
-            <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value as (typeof METHODS)[number])}>
-              {METHODS.map((m) => <option key={m}>{m}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>Reference</label>
-            <input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UPI-1234" />
-          </div>
-        </div>
-        <p className="flex justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold">
-          <span>{chosen.length} invoice{chosen.length === 1 ? "" : "s"} · combined outstanding</span>
-          <span>{formatINR(outstanding)}</span>
-        </p>
-        {Number(amount) > outstanding && (
-          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
-            {formatINR(Number(amount) - outstanding)} beyond the selected
-            invoices will be held as advance credit for the apartment.
-          </p>
-        )}
-        <ClosedMonthNote date={date} />
-        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-        <button
-          type="submit"
-          disabled={busy || chosen.length === 0 || !amount}
-          className={primaryBtnCls}
-        >
-          {busy ? "Allocating…" : `Allocate ${formatINR(Number(amount) || 0)}`}
-        </button>
-      </form>
-    </Modal>
-  );
-}
-
 function LateFeeDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [period, setPeriod] = useState("");
   const [amount, setAmount] = useState("200");
@@ -1226,7 +1076,7 @@ function InvoicesPageInner() {
     client: "all", apt: "all", status: "all", ledger: "all", view: "boxes",
   });
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: "dueDate", dir: -1 });
-  const [dialog, setDialog] = useState<"generate" | "latefee" | "fees" | "billowner" | "combined" | null>(null);
+  const [dialog, setDialog] = useState<"generate" | "latefee" | "fees" | "billowner" | null>(null);
 
   // Quick actions deep-link: /invoices?dialog=generate|billowner|fees|latefee
   // opens that dialog once, then cleans the params so refresh/back is normal.
@@ -1488,13 +1338,7 @@ function InvoicesPageInner() {
                   onClick={() => setDialog("generate")}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
                 >
-                  <PlusCircle className="h-4 w-4" /> Create invoices
-                </button>
-                <button
-                  onClick={() => setDialog("billowner")}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-sm font-medium text-amber-700 shadow-sm hover:bg-amber-100"
-                >
-                  <ReceiptText className="h-4 w-4" /> Bill owner
+                  <PlusCircle className="h-4 w-4" /> Create Community Invoices
                 </button>
                 <button
                   onClick={() => setDialog("fees")}
@@ -1503,10 +1347,10 @@ function InvoicesPageInner() {
                   <HandCoins className="h-4 w-4" /> Service fees
                 </button>
                 <button
-                  onClick={() => setDialog("combined")}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-medium text-emerald-700 shadow-sm hover:bg-emerald-100"
+                  onClick={() => setDialog("billowner")}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-sm font-medium text-amber-700 shadow-sm hover:bg-amber-100"
                 >
-                  <Banknote className="h-4 w-4" /> Combined payment
+                  <ReceiptText className="h-4 w-4" /> Bill owner
                 </button>
                 <button
                   onClick={() => setDialog("latefee")}
@@ -2098,16 +1942,6 @@ function InvoicesPageInner() {
       )}
       {dialog === "latefee" && (
         <LateFeeDialog onClose={() => setDialog(null)} onDone={invoices.reload} />
-      )}
-      {dialog === "combined" && (
-        <CombinedPaymentDialog
-          invoices={allInvoices}
-          onClose={() => setDialog(null)}
-          onDone={() => {
-            invoices.reload();
-            payments.reload();
-          }}
-        />
       )}
       {dialog === "billowner" && (
         <BillOwnerDialog

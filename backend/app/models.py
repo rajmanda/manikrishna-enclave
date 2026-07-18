@@ -436,17 +436,6 @@ class ApplyCreditRequest(APIModel):
     invoice_ids: list[str] | None = None  # default: all open invoices
 
 
-class AllocatePaymentRequest(APIModel):
-    """One combined payment (e.g. a family paying for two flats at once)
-    allocated across specific invoices, oldest due first."""
-
-    invoice_ids: list[str]
-    amount: float
-    date: str
-    method: Literal["UPI", "Bank Transfer", "Cash", "Cheque", "Credit"]
-    reference: str = ""
-
-
 class PaymentCreate(APIModel):
     invoice_id: str
     amount: float

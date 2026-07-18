@@ -215,7 +215,7 @@ async def test_apply_credit_fifo_and_partial_amount(
     assert inv["paidAmount"] == 1000 and inv["status"] == "partial"
 
 
-async def test_owner_cannot_touch_other_apartments(client, owner_headers, manager_headers):
+async def test_owner_cannot_touch_other_apartments(client, db, owner_headers):
     # Batch report on someone else's invoice → 404 (existence not leaked).
     other = await client.post(
         "/api/v1/payments/report-batch",
@@ -233,13 +233,13 @@ async def test_owner_cannot_touch_other_apartments(client, owner_headers, manage
     )
     assert denied.status_code == 403
 
-    # Credits list is scoped: manager-created credit for apt-101 is
-    # invisible to the 502 owner.
-    await client.post(
-        "/api/v1/payments/allocate",
-        json={"invoiceIds": ["inv-2606-101"], "amount": 9999,
-              "date": "2026-07-01", "method": "Cash", "reference": ""},
-        headers=manager_headers,
+    # Credits list is scoped: a credit held for apt-101 is invisible to
+    # the 502 owner.
+    await db.credits.insert_one(
+        {"id": "cr-101", "community_id": "mke", "apartment_id": "apt-101",
+         "amount": 6499, "remaining": 6499, "source": "overpayment",
+         "status": "confirmed", "reference": "", "date": "2026-07-01",
+         "created_by": "u-vishnu", "batch_id": None}
     )
     mine = (await client.get("/api/v1/credits", headers=owner_headers)).json()
     assert all(c["apartmentId"] == "apt-502" for c in mine)

@@ -255,56 +255,6 @@ async def test_assessment_installments(client, manager_headers):
     assert again.json() == {"created": 0, "skipped": 4}
 
 
-async def test_combined_payment_allocation(client, manager_headers):
-    """One family payment covers multiple invoices, oldest due first."""
-    case_id, _ = await _create_case_with_wo(client, manager_headers)
-    await client.post(
-        f"/api/v1/cost-cases/{case_id}/assessments",
-        json={"period": "Jun 2027", "dueDate": "2027-06-10",
-              "allocations": [
-                  {"apartmentId": "apt-501", "amount": 3000},
-                  {"apartmentId": "apt-502", "amount": 3000},
-              ]},
-        headers=manager_headers,
-    )
-    detail = (
-        await client.get(f"/api/v1/cost-cases/{case_id}", headers=manager_headers)
-    ).json()
-    ids = [i["id"] for i in detail["invoices"]]
-
-    resp = await client.post(
-        "/api/v1/payments/allocate",
-        json={"invoiceIds": ids, "amount": 4500, "date": "2027-06-05",
-              "method": "UPI", "reference": "family-upi-1"},
-        headers=manager_headers,
-    )
-    assert resp.status_code == 201, resp.text
-    applied = resp.json()["applied"]
-    assert sum(a["amount"] for a in applied) == 4500
-    assert len(applied) == 2  # 3000 to the first, 1500 to the second
-
-    detail2 = (
-        await client.get(f"/api/v1/cost-cases/{case_id}", headers=manager_headers)
-    ).json()
-    assert detail2["summary"]["collectedFromOwners"] == 4500
-    statuses = sorted(i["status"] for i in detail2["invoices"])
-    assert statuses == ["paid", "partial"]
-
-    # Overpayment across the batch becomes advance credit, not an error.
-    over = await client.post(
-        "/api/v1/payments/allocate",
-        json={"invoiceIds": ids, "amount": 3000, "date": "2027-06-05",
-              "method": "UPI", "reference": ""},
-        headers=manager_headers,
-    )
-    assert over.status_code == 201
-    body = over.json()
-    assert sum(a["amount"] for a in body["applied"]) == 1500  # what was left due
-    assert body["excessCredit"] == 1500
-    credits = (await client.get("/api/v1/credits", headers=manager_headers)).json()
-    assert any(c["remaining"] == 1500 and c["status"] == "confirmed" for c in credits)
-
-
 async def test_money_health_report(client, manager_headers):
     case_id, wo_id = await _create_case_with_wo(client, manager_headers)
     await client.post(

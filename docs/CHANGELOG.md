@@ -5,6 +5,17 @@ begin at 0.1.0 with the first deployment (M1).
 
 ## [Unreleased] — feature/community-switching
 
+- **Removed: manager-side Combined Payment (2026-07-17)** — the Invoices-page
+  "Combined payment" button, `CombinedPaymentDialog`, and
+  `POST /payments/allocate` are gone. Owner decision: the tool allowed
+  allocating one amount across invoices of unrelated apartments, and any
+  excess landed as advance credit on whichever apartment held the
+  newest-due invoice — too easy to misbook. The owner-side equivalent
+  (`POST /payments/report-batch`, scoped to the reporter's own apartments
+  and manager-confirmed) remains the supported way to settle several
+  invoices with one transfer; managers record payments per invoice via
+  `POST /payments`.
+
 - **Paid invoices hidden from the manager's delete button (2026-07-16)** —
   the backend already blocks property managers from deleting paid-off
   invoices (403, super admins may still); the Invoices UI now mirrors the
