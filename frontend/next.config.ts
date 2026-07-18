@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
         source: "/api/v1/:path*",
         destination: "http://localhost:8000/api/v1/:path*",
       },
+      {
+        // Growth Center lives in its own namespace outside /api/v1.
+        source: "/api/super-admin/growth-center/:path*",
+        destination: "http://localhost:8000/api/super-admin/growth-center/:path*",
+      },
     ];
   },
   async redirects() {

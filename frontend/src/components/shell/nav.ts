@@ -19,11 +19,18 @@ import {
   KeyRound,
   Wallet,
   FolderKanban,
+  Rocket,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
 
-export type NavGroup = "Overview" | "Money" | "Operations" | "Governance" | "Admin";
+export type NavGroup =
+  | "Overview"
+  | "Money"
+  | "Operations"
+  | "Governance"
+  | "Admin"
+  | "Super Admin";
 
 export interface NavItem {
   label: string;
@@ -55,6 +62,9 @@ export const navItems: NavItem[] = [
   { label: "Ownership", href: "/ownership", icon: KeyRound, group: "Admin", roles: ["super_admin"] },
   { label: "Reports", href: "/reports", icon: BarChart3, group: "Admin", roles: ["property_manager", "community_admin", "auditor", "super_admin"] },
   { label: "Audit Log", href: "/audit", icon: ScrollText, group: "Admin", roles: ["property_manager", "community_admin", "auditor", "super_admin"] },
+  // Growth Center is an isolated business-development workspace — visible
+  // ONLY to platform super admins (backend enforces the role independently).
+  { label: "Growth Center", href: "/super-admin/growth-center", icon: Rocket, group: "Super Admin", roles: ["super_admin"] },
 ];
 
 export const NAV_GROUP_ORDER: NavGroup[] = [
@@ -63,6 +73,7 @@ export const NAV_GROUP_ORDER: NavGroup[] = [
   "Operations",
   "Governance",
   "Admin",
+  "Super Admin",
 ];
 
 // The 4 primary destinations on the mobile bottom bar (plus "More").

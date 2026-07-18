@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import db as database
 from app.core.config import get_settings
+from app.growth_center.router import router as growth_center_router
 from app.migrations import run_migrations
 from app.routers import (
     accounts,
@@ -106,6 +107,12 @@ app.include_router(work_orders.router, prefix=API_PREFIX)
 app.include_router(vendors.router, prefix=API_PREFIX)
 app.include_router(notification_queue.router, prefix=API_PREFIX)
 app.include_router(openclaw.router, prefix=API_PREFIX)
+
+# Growth Center — isolated super-admin module with its OWN prefix and OWN
+# database (GROWTH_CENTER_MONGO_URI). See app/growth_center/__init__.py for
+# the security boundary. This include is the module's only registration
+# point in operational code.
+app.include_router(growth_center_router)
 
 
 # Note: GFE intercepts /healthz on *.run.app domains and returns its own 404,
