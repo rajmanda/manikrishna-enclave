@@ -31,6 +31,9 @@ affected docs/ file with every meaningful change.
   WhatsApp/email/in-app messages in `notification_queue` collection;
   OpenClaw agent (Mac mini) polls pending entries via API-key-secured
   endpoints (`app/routers/openclaw.py`).
+- `marketing/` — public marketing site for **nivaasos.com** (isolated
+  Next.js 15 app, fully static, NO auth/API access, fictional demo data
+  only — never real community data). See docs/NIVAASOS_PUBLIC_SITE.md.
 - `infra/terraform/`, `.github/workflows/` — **not built yet**.
 
 ## Hard rules

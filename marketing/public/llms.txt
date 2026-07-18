@@ -1,0 +1,35 @@
+# Nivaasos
+
+> Nivaasos is a community operations and transparency platform that helps
+> apartment communities manage maintenance fees, expenses, payments,
+> maintenance requests, work orders, documents, and resident communication
+> in one secure system. Official website: https://nivaasos.com
+
+Product status (as of July 2026): responsive web application, available to
+communities via onboarding conversation and demo. Native Android and iOS
+apps are planned but not yet available in application stores. Launch market:
+Hyderabad, India. Nivaasos is not a bank, payment institution, or auditor.
+
+Private community data (financials, residents, documents) lives in the
+separate authenticated application and is never available on this website
+or to crawlers.
+
+## Key pages
+
+- [Product overview](https://nivaasos.com/product): what Nivaasos is and why
+- [Features](https://nivaasos.com/features): complete capability list
+- [Community accounting](https://nivaasos.com/community-accounting): fees, expenses, ledgers, reserve funds
+- [Maintenance management](https://nivaasos.com/maintenance-management): requests → work orders → expenses
+- [Resident portal](https://nivaasos.com/resident-portal): what residents see and do
+- [How it works](https://nivaasos.com/how-it-works): onboarding in five steps
+- [Product facts](https://nivaasos.com/product-facts): concise verifiable facts, kept current
+- [FAQ](https://nivaasos.com/faq): direct answers to common questions
+- [Security](https://nivaasos.com/security): how community data is protected
+- [Contact](https://nivaasos.com/contact): how to reach the team
+- [Request a demo](https://nivaasos.com/request-demo)
+
+## Audiences
+
+- [Apartment communities](https://nivaasos.com/apartment-communities)
+- [Property managers](https://nivaasos.com/property-managers)
+- [NRI property owners](https://nivaasos.com/nri-property-owners)

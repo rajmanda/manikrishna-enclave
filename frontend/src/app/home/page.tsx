@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Receipt,
   ShieldCheck,
+  Palette,
   Sparkles,
   Star,
   Vote,
@@ -71,8 +72,8 @@ const TESTIMONIALS = [
   {
     quote:
       "I can see exactly what I owe, what the community spent, and where the reserve stands — without asking anyone.",
-    name: "M.V. Shanmukha Datta",
-    role: "Owner, Apt 101",
+    name: "Bhupendra Sangam",
+    role: "Owner, Apt 301",
   },
   {
     quote:
@@ -197,7 +198,7 @@ function Hero() {
           style={{ animationDelay: "60ms" }}
         >
           Run your community like
-          <span className="bg-gradient-to-r from-brand-600 to-violet-500 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-brand-600 to-brand-accent bg-clip-text text-transparent">
             {" "}a well-kept building.
           </span>
         </h1>
@@ -598,9 +599,70 @@ function CtaFooter() {
 
 /* ------------------------------------------------------------- page */
 
-export default function LandingPage() {
+type LandingTheme = "classic" | "nivaasos";
+const THEME_KEY = "home_theme";
+
+/** Floating theme switch — visitor's choice persists in localStorage.
+ * Default stays the classic indigo look; Nivaasos is the evergreen
+ * palette shared with nivaasos.com (.theme-nivaasos in globals.css). */
+function ThemeSwitch({
+  theme,
+  onChange,
+}: {
+  theme: LandingTheme;
+  onChange: (t: LandingTheme) => void;
+}) {
   return (
-    <main className="min-h-dvh bg-white text-slate-900">
+    <div
+      role="group"
+      aria-label="Page theme"
+      className="fixed bottom-4 right-4 z-50 flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur"
+    >
+      <Palette className="ml-2 h-3.5 w-3.5 text-slate-400" aria-hidden />
+      {(
+        [
+          { id: "classic", label: "Classic" },
+          { id: "nivaasos", label: "Nivaasos" },
+        ] as const
+      ).map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          aria-pressed={theme === t.id}
+          onClick={() => onChange(t.id)}
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+            theme === t.id
+              ? "bg-brand-600 text-white"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default function LandingPage() {
+  const [theme, setTheme] = useState<LandingTheme>("classic");
+
+  // Restore the visitor's choice after hydration (default: classic).
+  useEffect(() => {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "nivaasos") setTheme(saved);
+  }, []);
+
+  function changeTheme(t: LandingTheme) {
+    setTheme(t);
+    localStorage.setItem(THEME_KEY, t);
+  }
+
+  return (
+    <main
+      className={`min-h-dvh bg-white text-slate-900 ${
+        theme === "nivaasos" ? "theme-nivaasos" : ""
+      }`}
+    >
       <Nav />
       <Hero />
       <StatBar />
@@ -609,6 +671,7 @@ export default function LandingPage() {
       <Pricing />
       <Faq />
       <CtaFooter />
+      <ThemeSwitch theme={theme} onChange={changeTheme} />
     </main>
   );
 }

@@ -71,8 +71,10 @@ resource "google_compute_url_map" "communityhub" {
   name            = "communityhub-urlmap"
   default_service = google_compute_backend_service.frontend.id
 
+  # Both app domains share the same routing (frontend + /api/*) during the
+  # transition from community.rajmanda.com to community.nivaasos.com.
   host_rule {
-    hosts        = [var.domain]
+    hosts        = [var.domain, var.community_domain]
     path_matcher = "main"
   }
 
@@ -85,12 +87,30 @@ resource "google_compute_url_map" "communityhub" {
       service = google_compute_backend_service.api.id
     }
   }
+
+  # nivaasos.com → static marketing site only; no /api/* on this host.
+  host_rule {
+    hosts        = [var.marketing_domain]
+    path_matcher = "marketing"
+  }
+
+  path_matcher {
+    name            = "marketing"
+    default_service = google_compute_backend_service.marketing.id
+  }
 }
 
 resource "google_compute_target_https_proxy" "communityhub" {
-  name             = "communityhub-https-proxy"
-  url_map          = google_compute_url_map.communityhub.id
-  ssl_certificates = [google_compute_managed_ssl_certificate.cert.id]
+  name    = "communityhub-https-proxy"
+  url_map = google_compute_url_map.communityhub.id
+  # Two independent managed certs (app + marketing): adding a domain to an
+  # existing managed cert would force replacement; separate certs keep
+  # community.rajmanda.com untouched. SNI picks the right one.
+  ssl_certificates = [
+    google_compute_managed_ssl_certificate.cert.id,
+    google_compute_managed_ssl_certificate.marketing_cert.id,
+    google_compute_managed_ssl_certificate.community_cert.id,
+  ]
 }
 
 resource "google_compute_global_forwarding_rule" "https" {

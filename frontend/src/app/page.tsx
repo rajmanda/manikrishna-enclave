@@ -100,7 +100,8 @@ function WebviewWarning() {
         )}
       </button>
       <p className="mt-2 text-center font-mono text-xs text-amber-700">
-        community.rajmanda.com
+        {/* Rendered only post-hydration (inWebview gate), so window exists. */}
+        {typeof window !== "undefined" ? window.location.host : ""}
       </p>
     </div>
   );
@@ -276,9 +277,7 @@ export default function LoginPage() {
           ))}
         </div>
       </div>
-      <p className="mt-10 text-xs text-slate-400">
-        community.rajmanda.com · Mani Krishna Enclave
-      </p>
+      <p className="mt-10 text-xs text-slate-400">{APP_NAME}</p>
     </div>
   );
 }
