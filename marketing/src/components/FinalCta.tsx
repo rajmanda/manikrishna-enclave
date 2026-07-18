@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { APP_URL } from "@/lib/site";
 import { Container } from "./Section";
+import { ResidentLoginButton } from "@/components/ResidentLogin";
 
 export default function FinalCta({
   title = "Give your community the clarity it deserves.",
@@ -31,12 +31,9 @@ export default function FinalCta({
           >
             Request a Demo
           </Link>
-          <a
-            href={APP_URL}
-            className="w-full rounded-xl px-6 py-3 text-sm font-semibold text-pine-100 hover:text-white sm:w-auto"
-          >
+          <ResidentLoginButton className="w-full rounded-xl px-6 py-3 text-sm font-semibold text-pine-100 hover:text-white sm:w-auto">
             Resident Login →
-          </a>
+          </ResidentLoginButton>
         </div>
       </Container>
     </section>

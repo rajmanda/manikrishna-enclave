@@ -14,6 +14,14 @@ export const SITE_URL = "https://nivaasos.com";
 export const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://community.nivaasos.com";
 
+/** Google OAuth client ID — the SAME client the resident app uses. When set
+ * (and nivaasos.com is added to that client's authorized JavaScript
+ * origins), the Resident Login popup renders Google sign-in directly and
+ * hands the credential to the app, skipping the app's login page. When
+ * unset, the popup falls back to linking to the app's sign-in page. */
+export const GOOGLE_CLIENT_ID =
+  process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+
 /** Public contact mailbox. Interim: the owner's Gmail until a
  * hello@nivaasos.com mailbox exists — then change this one default (or set
  * NEXT_PUBLIC_CONTACT_EMAIL). See docs/NIVAASOS_PUBLIC_SITE.md. */

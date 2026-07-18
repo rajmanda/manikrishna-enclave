@@ -114,11 +114,39 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [customEmail, setCustomEmail] = useState("");
   const [inWebview, setInWebview] = useState(false);
+  const [handoff, setHandoff] = useState(false);
   const googleButtonRef = useRef<HTMLDivElement>(null);
+  const handoffTried = useRef(false);
 
   useEffect(() => {
     if (!loading && user) router.replace("/dashboard");
   }, [loading, user, router]);
+
+  // Credential handoff from the marketing site: nivaasos.com hosts the
+  // Google sign-in popup and forwards the Google ID token here as
+  // `#gcred=…` (a fragment — never sent to any server). Consume it once,
+  // scrub it from the URL/history immediately, then exchange it for a
+  // session exactly like the on-page Google button does.
+  useEffect(() => {
+    if (handoffTried.current) return;
+    const match = /[#&]gcred=([^&]+)/.exec(window.location.hash);
+    if (!match) return;
+    handoffTried.current = true;
+    history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.search
+    );
+    setHandoff(true);
+    googleLogin(decodeURIComponent(match[1]))
+      .then(() => router.replace("/dashboard"))
+      .catch((err) => {
+        setHandoff(false);
+        setError(
+          err instanceof ApiError ? err.message : "Google sign-in failed"
+        );
+      });
+  }, [googleLogin, router]);
 
   // After hydration only — UA sniffing on the server would mismatch.
   useEffect(() => {
@@ -189,8 +217,15 @@ export default function LoginPage() {
         {/* In-app browsers can't complete Google OAuth — say so up front. */}
         {inWebview && <WebviewWarning />}
 
+        {/* Signing in via marketing-site handoff — hide the button, show progress. */}
+        {handoff && (
+          <p className="mt-8 animate-pulse text-sm font-medium text-brand-700">
+            Signing you in…
+          </p>
+        )}
+
         {/* Google sign-in (rendered by GIS when configured) */}
-        <div className={inWebview ? "hidden" : "mt-8 flex justify-center"}>
+        <div className={inWebview || handoff ? "hidden" : "mt-8 flex justify-center"}>
           {GOOGLE_CLIENT_ID ? (
             <div ref={googleButtonRef} />
           ) : (

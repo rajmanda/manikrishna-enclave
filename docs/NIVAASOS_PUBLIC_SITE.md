@@ -91,6 +91,25 @@ the private app relies on auth, not robots.
 |---|---|---|
 | `NEXT_PUBLIC_APP_URL` | `https://community.rajmanda.com` | Resident Login target; flip to app.nivaasos.com later |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | `hello@nivaasos.com` | All contact/lead mailtos |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | *(unset)* | Same OAuth client as the app. When set, the Resident Login popup renders Google sign-in on nivaasos.com; unset = popup links to the app sign-in page |
+
+### Resident Login popup (2026-07-18)
+
+Header/hero/final-CTA "Resident Login" buttons open a popup
+(`src/components/ResidentLogin.tsx`) instead of navigating to the app's
+login page (removes the extra hop). With `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+set, the popup renders the Google Identity Services button; on success it
+forwards the Google ID token to the app as a URL **fragment**
+(`{APP_URL}/#gcred=…` — fragments never reach a server or its logs). The
+app's login page consumes the fragment once, scrubs it via
+`history.replaceState`, and exchanges it through the existing
+`/auth/google` endpoint. The marketing site still makes **zero backend/API
+calls** — the only external script is Google's `gsi/client`, loaded only
+while the popup is open. Webview detection (WhatsApp/Instagram in-app
+browsers) shows an "open in browser" note, mirroring the app's login page.
+**Owner action before this works in prod:** add `https://nivaasos.com` to
+the Google OAuth client's Authorized JavaScript origins and set
+`NEXT_PUBLIC_GOOGLE_CLIENT_ID` in the marketing build.
 
 ## 6. Before launch (owner checklist)
 
@@ -142,9 +161,15 @@ community.rajmanda.com verified serving before and after):
    Marketing's Resident Login default → https://community.nivaasos.com in
    source, but the LIVE marketing site intentionally still points at
    community.rajmanda.com until cutover. **Owner actions required:**
-   (a) DNS: A community.nivaasos.com → 34.120.210.248 (cert stays
-   PROVISIONING until then); (b) Google OAuth client: add
-   https://community.nivaasos.com to Authorized JavaScript origins.
+   (a) ✅ DNS: A community.nivaasos.com → 34.120.210.248 (verified
+   resolving + serving 2026-07-18); (b) Google OAuth client: add
+   https://community.nivaasos.com AND https://nivaasos.com (for the
+   Resident Login popup) to Authorized JavaScript origins — STILL PENDING
+   (verified 2026-07-18: GSI "origin is not allowed" on
+   community.nivaasos.com). deploy.yml's marketing job now bakes
+   `NEXT_PUBLIC_APP_URL` = community.rajmanda.com (override via repo
+   variable `MARKETING_APP_URL` at cutover) and
+   `NEXT_PUBLIC_GOOGLE_CLIENT_ID` = the shared `GOOGLE_CLIENT_ID` variable.
    **Cutover order once (a)+(b) done:** deploy frontend via deploy.yml
    (relative API base) → verify login on community.nivaasos.com → deploy
    marketing (login flips) → keep community.rajmanda.com serving until

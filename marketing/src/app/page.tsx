@@ -25,8 +25,8 @@ import FinalCta from "@/components/FinalCta";
 import JsonLd from "@/components/JsonLd";
 import PhoneMock from "@/components/PhoneMock";
 import { Container, SectionHeading } from "@/components/Section";
+import { ResidentLoginButton } from "@/components/ResidentLogin";
 import {
-  APP_URL,
   AVAILABILITY_STATEMENT,
   canonical,
   DESCRIPTION,
@@ -154,12 +154,7 @@ export default function HomePage() {
                 Start Your Community
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <a
-                href={APP_URL}
-                className="inline-flex items-center justify-center rounded-xl border border-pine-200 bg-white px-6 py-3.5 text-sm font-semibold text-pine-900 hover:border-pine-300 hover:bg-pine-50"
-              >
-                Resident Login
-              </a>
+              <ResidentLoginButton className="inline-flex items-center justify-center rounded-xl border border-pine-200 bg-white px-6 py-3.5 text-sm font-semibold text-pine-900 hover:border-pine-300 hover:bg-pine-50" />
             </div>
             <p className="mt-5 text-sm text-pine-600">
               Built for apartment communities in India — starting in

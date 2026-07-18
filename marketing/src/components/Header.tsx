@@ -5,13 +5,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Home, Menu, X } from "lucide-react";
 import {
-  APP_URL,
   NAV_COMPANY,
   NAV_PRODUCT,
   NAV_SOLUTIONS,
   SITE_NAME,
   type NavLink,
 } from "@/lib/site";
+import { ResidentLoginButton } from "@/components/ResidentLogin";
 
 function DesktopDropdown({ label, links }: { label: string; links: NavLink[] }) {
   const [open, setOpen] = useState(false);
@@ -104,12 +104,7 @@ export default function Header() {
           </nav>
 
           <div className="hidden items-center gap-2 lg:flex">
-            <a
-              href={APP_URL}
-              className="rounded-xl px-4 py-2 text-sm font-semibold text-pine-800 hover:bg-pine-50"
-            >
-              Resident Login
-            </a>
+            <ResidentLoginButton className="rounded-xl px-4 py-2 text-sm font-semibold text-pine-800 hover:bg-pine-50" />
             <Link
               href="/request-demo"
               className="rounded-xl bg-pine-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-pine-800"
@@ -162,12 +157,7 @@ export default function Header() {
             >
               Start Your Community
             </Link>
-            <a
-              href={APP_URL}
-              className="rounded-xl border border-pine-200 px-4 py-3 text-center text-sm font-semibold text-pine-800"
-            >
-              Resident Login
-            </a>
+            <ResidentLoginButton className="rounded-xl border border-pine-200 px-4 py-3 text-center text-sm font-semibold text-pine-800" />
           </div>
         </nav>
       )}
