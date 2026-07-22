@@ -1,27 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Mail } from "lucide-react";
+import { CheckCircle2, Send } from "lucide-react";
 import { CONTACT_EMAIL, LEADS_API_URL } from "@/lib/site";
 
 export type LeadKind = "demo" | "start" | "waitlist" | "contact";
 
-const SUBJECTS: Record<LeadKind, string> = {
-  demo: "Nivaasos — demo request",
-  start: "Nivaasos — start our community",
-  waitlist: "Nivaasos — mobile app waitlist",
-  contact: "Nivaasos — contact",
-};
-
 /**
  * Lead capture: the form posts to the app API's public lead endpoint
  * (LEADS_API_URL → Growth Center CRM, see docs/NIVAASOS_PUBLIC_SITE.md §3)
- * so every CTA lands in the operator's pipeline. If the endpoint is
- * unreachable (or disabled via an empty LEADS_API_URL), it falls back to
- * the original mailto flow — the visitor never hits a dead end.
+ * so every CTA lands in the operator's pipeline. Deliberately NO mailto
+ * flow (owner decision 2026-07-22): the visitor's mail app is never
+ * opened — on failure we show a retry message with our address as text.
  */
 export default function LeadForm({ kind }: { kind: LeadKind }) {
-  const [sent, setSent] = useState<null | "api" | "mailto">(null);
+  const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const compact = kind === "waitlist" || kind === "contact";
@@ -37,59 +30,45 @@ export default function LeadForm({ kind }: { kind: LeadKind }) {
       return;
     }
 
-    if (LEADS_API_URL) {
-      setSubmitting(true);
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 8000);
-        const resp = await fetch(LEADS_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            kind,
-            name,
-            email,
-            phone: String(data.get("phone") || "").trim(),
-            community: String(data.get("community") || "").trim(),
-            city: String(data.get("city") || "").trim(),
-            units: String(data.get("units") || "").trim(),
-            role: String(data.get("role") || "").trim(),
-            message: String(data.get("message") || "").trim(),
-            // Honeypot — hidden from humans, bots fill it.
-            website: String(data.get("website") || "").trim(),
-          }),
-        });
-        clearTimeout(timer);
-        if (resp.ok) {
-          setSubmitting(false);
-          setSent("api");
-          return;
-        }
-      } catch {
-        // Fall through to the mailto flow below.
+    setSubmitting(true);
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      const resp = await fetch(LEADS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          kind,
+          name,
+          email,
+          phone: String(data.get("phone") || "").trim(),
+          community: String(data.get("community") || "").trim(),
+          city: String(data.get("city") || "").trim(),
+          units: String(data.get("units") || "").trim(),
+          role: String(data.get("role") || "").trim(),
+          message: String(data.get("message") || "").trim(),
+          // Honeypot — hidden from humans, bots fill it.
+          website: String(data.get("website") || "").trim(),
+        }),
+      });
+      clearTimeout(timer);
+      if (resp.ok) {
+        setSubmitting(false);
+        setSent(true);
+        return;
       }
-      setSubmitting(false);
+    } catch {
+      // Handled below — same retry message for network and server errors.
     }
-
-    const lines = [
-      `Name: ${name}`,
-      `Email: ${email}`,
-      data.get("phone") && `Phone: ${data.get("phone")}`,
-      data.get("community") && `Community: ${data.get("community")}`,
-      data.get("city") && `City: ${data.get("city")}`,
-      data.get("units") && `Apartments/units: ${data.get("units")}`,
-      data.get("role") && `Role: ${data.get("role")}`,
-      data.get("message") && `Message: ${data.get("message")}`,
-    ].filter(Boolean);
-    const href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
-      SUBJECTS[kind]
-    )}&body=${encodeURIComponent(lines.join("\n"))}`;
-    window.location.href = href;
-    setSent("mailto");
+    setSubmitting(false);
+    setError(
+      `We couldn't send your request right now. Please try again in a ` +
+        `minute — or write to us at ${CONTACT_EMAIL}.`
+    );
   }
 
-  if (sent === "api") {
+  if (sent) {
     return (
       <div className="rounded-2xl border border-pine-200 bg-pine-50 p-6 text-center">
         <CheckCircle2 className="mx-auto h-8 w-8 text-pine-600" />
@@ -111,37 +90,7 @@ export default function LeadForm({ kind }: { kind: LeadKind }) {
         </p>
         <button
           type="button"
-          onClick={() => setSent(null)}
-          className="mt-4 text-sm font-medium text-pine-700 underline-offset-2 hover:underline"
-        >
-          Back to the form
-        </button>
-      </div>
-    );
-  }
-
-  if (sent === "mailto") {
-    return (
-      <div className="rounded-2xl border border-pine-200 bg-pine-50 p-6 text-center">
-        <CheckCircle2 className="mx-auto h-8 w-8 text-pine-600" />
-        <p className="mt-3 font-semibold text-pine-950">
-          Almost done — send the email we prepared
-        </p>
-        <p className="mx-auto mt-2 max-w-sm text-sm text-pine-800/80">
-          Your email app should have opened with your details filled in. Press
-          send there and we&apos;ll get back to you. If nothing opened, email
-          us directly at{" "}
-          <a
-            className="font-medium text-pine-700 underline"
-            href={`mailto:${CONTACT_EMAIL}`}
-          >
-            {CONTACT_EMAIL}
-          </a>
-          .
-        </p>
-        <button
-          type="button"
-          onClick={() => setSent(null)}
+          onClick={() => setSent(false)}
           className="mt-4 text-sm font-medium text-pine-700 underline-offset-2 hover:underline"
         >
           Back to the form
@@ -295,7 +244,7 @@ export default function LeadForm({ kind }: { kind: LeadKind }) {
         disabled={submitting}
         className="inline-flex items-center justify-center gap-2 rounded-xl bg-pine-700 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-pine-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <Mail className="h-4 w-4" />
+        <Send className="h-4 w-4" />
         {submitting
           ? "Sending…"
           : kind === "waitlist"
@@ -304,9 +253,7 @@ export default function LeadForm({ kind }: { kind: LeadKind }) {
       </button>
       <p className="text-xs leading-relaxed text-pine-600">
         Submitting sends these details securely to Nivaasos so we can respond
-        to your request — we use them for nothing else. If sending fails,
-        we&apos;ll open your email app with the message addressed to{" "}
-        {CONTACT_EMAIL} instead.
+        to your request — we use them for nothing else.
       </p>
     </form>
   );

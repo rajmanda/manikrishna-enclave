@@ -34,9 +34,10 @@ affected docs/ file with every meaningful change.
 - `marketing/` — public marketing site for **nivaasos.com** (isolated
   Next.js 15 app, fully static, fictional demo data only — never real
   community data). Its ONLY backend call: CTA forms POST to the public
-  lead-capture endpoint (`/api/v1/public/leads` → Growth Center CRM),
-  mailto fallback on failure; no authenticated/community-data endpoints,
-  ever. Sole auth surface: the Resident Login popup renders Google sign-in
+  lead-capture endpoint (`/api/v1/public/leads` → Growth Center CRM); NO
+  mailto flow (never open the visitor's mail app) and no
+  authenticated/community-data endpoints, ever. Sole auth surface: the
+  Resident Login popup renders Google sign-in
   client-side and hands the credential to the app via `#gcred=` fragment
   (exchange happens on the app origin). See docs/NIVAASOS_PUBLIC_SITE.md.
 - `infra/terraform/`, `.github/workflows/` — **not built yet**.

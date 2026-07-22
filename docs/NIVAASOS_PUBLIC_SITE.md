@@ -81,14 +81,18 @@ without storing, per-IP (5/h) + global (200/h) in-memory rate limits,
 strict field length caps, and a response body that leaks nothing
 (`{"received": true}`).
 
-If the endpoint is unreachable, errors, or `NEXT_PUBLIC_LEADS_API_URL` is
-set to an empty string, `LeadForm` falls back to the original mailto flow
-(opens the visitor's mail client addressed to `CONTACT_EMAIL`) — the
-visitor never hits a dead end. This replaces the earlier mailto-only
-design and is the ONE backend call the marketing site makes; everything
-else remains fully static. **Deploy prerequisite:** the backend's
-`CORS_ORIGINS` (env/Secret Manager, overrides the code default) must
-include `https://nivaasos.com` and `https://www.nivaasos.com`.
+There is deliberately NO mailto flow (owner decision 2026-07-22: never
+open the visitor's mail app — we just want their information recorded).
+If the endpoint is unreachable or errors, the form shows a retry message
+with `CONTACT_EMAIL` as plain text; nothing else happens. This replaces
+the earlier mailto design and is the ONE backend call the site makes;
+everything
+else remains fully static. **Deploy prerequisite ✅ done 2026-07-22:** the
+backend's `CORS_ORIGINS` is set by Terraform (`infra/terraform/
+cloud_run.tf`, overrides the code default) and now includes
+`https://nivaasos.com` + `https://www.nivaasos.com` (applied + preflight
+verified). The marketing site must be redeployed via deploy.yml with
+`deploy_marketing=true` for form changes to reach nivaasos.com.
 
 ## 4. Crawler policy
 
@@ -107,7 +111,7 @@ the private app relies on auth, not robots.
 | `NEXT_PUBLIC_APP_URL` | `https://community.rajmanda.com` | Resident Login target; flip to app.nivaasos.com later |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | `hello@nivaasos.com` | All contact/lead mailtos |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | *(unset)* | Same OAuth client as the app. When set, the Resident Login popup renders Google sign-in on nivaasos.com; unset = popup links to the app sign-in page |
-| `NEXT_PUBLIC_LEADS_API_URL` | `https://community.rajmanda.com/api/v1/public/leads` | Public lead-capture endpoint (§3). Empty string = disable and go mailto-only |
+| `NEXT_PUBLIC_LEADS_API_URL` | `https://community.rajmanda.com/api/v1/public/leads` | Public lead-capture endpoint (§3) — the only place CTA submissions go |
 
 ### Resident Login popup (2026-07-18)
 
@@ -190,7 +194,12 @@ community.rajmanda.com verified serving before and after):
    **Cutover order once (a)+(b) done:** deploy frontend via deploy.yml
    (relative API base) → verify login on community.nivaasos.com → deploy
    marketing (login flips) → keep community.rajmanda.com serving until
-   users migrate.
+   users migrate. **2026-07-22:** `MARKETING_APP_URL` repo variable set to
+   `https://community.nivaasos.com` (cert ACTIVE, host serving) — Resident
+   Login on nivaasos.com now targets community.nivaasos.com. Google
+   sign-in there still depends on owner action (b): the OAuth client must
+   list https://community.nivaasos.com and https://nivaasos.com as
+   Authorized JavaScript origins.
 
 ## 8. Post-launch checklist
 
