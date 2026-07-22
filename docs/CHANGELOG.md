@@ -21,11 +21,28 @@ begin at 0.1.0 with the first deployment (M1).
   mailto flow whenever the endpoint fails (or `NEXT_PUBLIC_LEADS_API_URL`
   is set empty), and its privacy copy now states details are sent to
   Nivaasos. Backend default `cors_origins` adds nivaasos.com origins +
-  localhost:3100 (marketing dev). **Deploy note:** the deployed backend's
-  `CORS_ORIGINS` env overrides the default and must add
-  `https://nivaasos.com,https://www.nivaasos.com`. Tests:
-  `tests/test_public_leads.py` (6 new, suite 240 passed); marketing build
-  clean; flow exercised end-to-end against Atlas dev.
+  localhost:3100 (marketing dev). Tests: `tests/test_public_leads.py`
+  (6 new, suite 240 passed); marketing build clean; flow exercised
+  end-to-end against Atlas dev.
+- **Mailto removed from CTA forms (2026-07-22, owner decision)** — the
+  marketing `LeadForm` no longer opens the visitor's email app under any
+  circumstance; submissions go ONLY to the public lead endpoint / CRM. On
+  failure the form shows a retry message with the contact address as plain
+  text. Button icon Mail→Send; privacy copy trimmed accordingly.
+- **Resident Login → community.nivaasos.com (2026-07-22)** — repo variable
+  `MARKETING_APP_URL` set to `https://community.nivaasos.com`
+  (`nivaasos-community-cert` ACTIVE, host serving 200), so the marketing
+  site's Resident Login popup/link now targets the nivaasos app domain
+  instead of community.rajmanda.com. Reminder: Google sign-in on that
+  domain needs https://community.nivaasos.com (+ https://nivaasos.com for
+  the popup) in the OAuth client's Authorized JavaScript origins (owner).
+- **Rollout (2026-07-22)** — backend/frontend shipped via deploy.yml
+  (owner dispatch); Terraform `CORS_ORIGINS` on the API service gained
+  `https://nivaasos.com` + `https://www.nivaasos.com` (applied, preflight
+  verified — the env overrides the code default and had blocked browser
+  POSTs); marketing site redeployed via deploy.yml `deploy_marketing=true`
+  so nivaasos.com serves the new CRM-backed form (the first manual image
+  from 2026-07-19 was still mailto-only).
 
 ## [Unreleased] — resident-login popup + mobile modal fix
 

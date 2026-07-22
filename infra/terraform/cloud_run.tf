@@ -43,10 +43,11 @@ resource "google_cloud_run_v2_service" "api" {
       }
       env {
         name  = "CORS_ORIGINS"
-        # Both app domains during the rajmanda→nivaasos transition. With the
-        # frontend's relative /api/v1 base this is belt-and-braces (requests
-        # are same-origin), but it protects cached absolute-URL builds.
-        value = "https://${var.domain},https://${var.community_domain}"
+        # Both app domains during the rajmanda→nivaasos transition (with the
+        # frontend's relative /api/v1 base these are belt-and-braces), plus
+        # the marketing origins so nivaasos.com CTA forms can POST to the
+        # public lead endpoint (/api/v1/public/leads → Growth Center CRM).
+        value = "https://${var.domain},https://${var.community_domain},https://${var.marketing_domain},https://www.${var.marketing_domain}"
       }
       env {
         name  = "GCS_BUCKET"
