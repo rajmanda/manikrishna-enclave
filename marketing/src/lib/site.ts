@@ -28,6 +28,14 @@ export const GOOGLE_CLIENT_ID =
 export const CONTACT_EMAIL =
   process.env.NEXT_PUBLIC_CONTACT_EMAIL || "rajmanda@gmail.com";
 
+/** Public lead-capture endpoint (POST, no auth) on the app's API — the ONE
+ * backend call the marketing site makes. CTA forms submit here so leads
+ * land in the Growth Center CRM; on any failure the form falls back to the
+ * mailto flow. Set to an empty string to disable and go mailto-only. */
+export const LEADS_API_URL =
+  process.env.NEXT_PUBLIC_LEADS_API_URL ??
+  "https://community.rajmanda.com/api/v1/public/leads";
+
 export const TAGLINE = "One transparent home for your entire community.";
 
 export const DESCRIPTION =

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, Mail } from "lucide-react";
-import { CONTACT_EMAIL } from "@/lib/site";
+import { CONTACT_EMAIL, LEADS_API_URL } from "@/lib/site";
 
 export type LeadKind = "demo" | "start" | "waitlist" | "contact";
 
@@ -14,19 +14,19 @@ const SUBJECTS: Record<LeadKind, string> = {
 };
 
 /**
- * Lead capture without an unapproved backend: the form validates locally,
- * then opens the visitor's email client with a structured message to the
- * Nivaasos mailbox. This is deliberate — see docs/NIVAASOS_PUBLIC_SITE.md
- * for the plan to replace it with a secure server endpoint. No data is
- * sent anywhere until the visitor sends the email themselves, and the UI
- * says so plainly.
+ * Lead capture: the form posts to the app API's public lead endpoint
+ * (LEADS_API_URL → Growth Center CRM, see docs/NIVAASOS_PUBLIC_SITE.md §3)
+ * so every CTA lands in the operator's pipeline. If the endpoint is
+ * unreachable (or disabled via an empty LEADS_API_URL), it falls back to
+ * the original mailto flow — the visitor never hits a dead end.
  */
 export default function LeadForm({ kind }: { kind: LeadKind }) {
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState<null | "api" | "mailto">(null);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const compact = kind === "waitlist" || kind === "contact";
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     const data = new FormData(e.currentTarget);
@@ -36,6 +36,42 @@ export default function LeadForm({ kind }: { kind: LeadKind }) {
       setError("Please fill in your name and email address.");
       return;
     }
+
+    if (LEADS_API_URL) {
+      setSubmitting(true);
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        const resp = await fetch(LEADS_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            kind,
+            name,
+            email,
+            phone: String(data.get("phone") || "").trim(),
+            community: String(data.get("community") || "").trim(),
+            city: String(data.get("city") || "").trim(),
+            units: String(data.get("units") || "").trim(),
+            role: String(data.get("role") || "").trim(),
+            message: String(data.get("message") || "").trim(),
+            // Honeypot — hidden from humans, bots fill it.
+            website: String(data.get("website") || "").trim(),
+          }),
+        });
+        clearTimeout(timer);
+        if (resp.ok) {
+          setSubmitting(false);
+          setSent("api");
+          return;
+        }
+      } catch {
+        // Fall through to the mailto flow below.
+      }
+      setSubmitting(false);
+    }
+
     const lines = [
       `Name: ${name}`,
       `Email: ${email}`,
@@ -50,10 +86,41 @@ export default function LeadForm({ kind }: { kind: LeadKind }) {
       SUBJECTS[kind]
     )}&body=${encodeURIComponent(lines.join("\n"))}`;
     window.location.href = href;
-    setSent(true);
+    setSent("mailto");
   }
 
-  if (sent) {
+  if (sent === "api") {
+    return (
+      <div className="rounded-2xl border border-pine-200 bg-pine-50 p-6 text-center">
+        <CheckCircle2 className="mx-auto h-8 w-8 text-pine-600" />
+        <p className="mt-3 font-semibold text-pine-950">
+          {kind === "waitlist"
+            ? "You're on the waitlist!"
+            : "Thanks — we've got your request"}
+        </p>
+        <p className="mx-auto mt-2 max-w-sm text-sm text-pine-800/80">
+          We&apos;ll get back to you shortly. If you&apos;d like to add
+          anything in the meantime, email us at{" "}
+          <a
+            className="font-medium text-pine-700 underline"
+            href={`mailto:${CONTACT_EMAIL}`}
+          >
+            {CONTACT_EMAIL}
+          </a>
+          .
+        </p>
+        <button
+          type="button"
+          onClick={() => setSent(null)}
+          className="mt-4 text-sm font-medium text-pine-700 underline-offset-2 hover:underline"
+        >
+          Back to the form
+        </button>
+      </div>
+    );
+  }
+
+  if (sent === "mailto") {
     return (
       <div className="rounded-2xl border border-pine-200 bg-pine-50 p-6 text-center">
         <CheckCircle2 className="mx-auto h-8 w-8 text-pine-600" />
@@ -74,7 +141,7 @@ export default function LeadForm({ kind }: { kind: LeadKind }) {
         </p>
         <button
           type="button"
-          onClick={() => setSent(false)}
+          onClick={() => setSent(null)}
           className="mt-4 text-sm font-medium text-pine-700 underline-offset-2 hover:underline"
         >
           Back to the form
@@ -204,6 +271,19 @@ export default function LeadForm({ kind }: { kind: LeadKind }) {
         />
       </div>
 
+      {/* Honeypot — visually hidden and skipped by keyboard/screen readers;
+          any value here marks the submission as bot traffic. */}
+      <div aria-hidden="true" className="absolute -left-[9999px] top-auto h-px w-px overflow-hidden">
+        <label htmlFor={`${kind}-website`}>Website</label>
+        <input
+          id={`${kind}-website`}
+          name="website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+        />
+      </div>
+
       {error && (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700">
           {error}
@@ -212,15 +292,21 @@ export default function LeadForm({ kind }: { kind: LeadKind }) {
 
       <button
         type="submit"
-        className="inline-flex items-center justify-center gap-2 rounded-xl bg-pine-700 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-pine-800"
+        disabled={submitting}
+        className="inline-flex items-center justify-center gap-2 rounded-xl bg-pine-700 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-pine-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <Mail className="h-4 w-4" />
-        {kind === "waitlist" ? "Join the waitlist" : "Send my request"}
+        {submitting
+          ? "Sending…"
+          : kind === "waitlist"
+            ? "Join the waitlist"
+            : "Send my request"}
       </button>
       <p className="text-xs leading-relaxed text-pine-600">
-        Submitting opens your email app with this message addressed to{" "}
-        {CONTACT_EMAIL} — nothing is sent until you press send there. We use
-        your details only to respond to your request.
+        Submitting sends these details securely to Nivaasos so we can respond
+        to your request — we use them for nothing else. If sending fails,
+        we&apos;ll open your email app with the message addressed to{" "}
+        {CONTACT_EMAIL} instead.
       </p>
     </form>
   );

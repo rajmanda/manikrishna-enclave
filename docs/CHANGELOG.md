@@ -3,6 +3,30 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [Unreleased] — marketing CTAs → Growth Center CRM
+
+- **Public lead capture into the Growth Center CRM (2026-07-21)** — every
+  nivaasos.com CTA form (demo / start / waitlist / contact) now POSTs to a
+  new unauthenticated endpoint `POST /api/v1/public/leads`
+  (`backend/app/routers/public_leads.py`) instead of only opening the
+  visitor's email app. Each submission creates a `growth_leads` entry in
+  the super admin's Growth Center CRM (`source: "website"`, tags
+  `["website", <kind>]`, stage `new`, next-action set so it appears in the
+  follow-up tracker), logs a lead activity + growth audit entry, and
+  enqueues a WhatsApp heads-up to the operator via the OpenClaw queue.
+  Abuse controls: hidden honeypot field (fake success, nothing stored),
+  per-IP (5/h) and global (200/h) in-memory rate limits, field length
+  caps, minimal response body. `LeadSource` gains `"website"`.
+  `marketing/src/components/LeadForm.tsx` falls back to the previous
+  mailto flow whenever the endpoint fails (or `NEXT_PUBLIC_LEADS_API_URL`
+  is set empty), and its privacy copy now states details are sent to
+  Nivaasos. Backend default `cors_origins` adds nivaasos.com origins +
+  localhost:3100 (marketing dev). **Deploy note:** the deployed backend's
+  `CORS_ORIGINS` env overrides the default and must add
+  `https://nivaasos.com,https://www.nivaasos.com`. Tests:
+  `tests/test_public_leads.py` (6 new, suite 240 passed); marketing build
+  clean; flow exercised end-to-end against Atlas dev.
+
 ## [Unreleased] — resident-login popup + mobile modal fix
 
 - **Resident Login popup on nivaasos.com (2026-07-18)** — header, hero and

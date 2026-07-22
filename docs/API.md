@@ -190,6 +190,12 @@ is stored in Google Secret Manager (`OPENCLAW_API_KEY`). The Mac mini is never
 exposed to the public internet — it initiates all connections outbound to
 Cloud Run.
 
+## Public (no auth)
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| POST | `/public/leads` | none (rate-limited) | nivaasos.com CTA forms. Body: `{kind: demo\|start\|waitlist\|contact, name*, email*, phone?, community?, city?, units?, role?, message?, website?}` (`website` = honeypot). Creates a Growth Center CRM lead (source `website`) + activity + audit + WhatsApp queue entry. Returns `{"received": true}`; 429 over 5/h per IP or 200/h global |
+
 ## Health
 
 | Method | Path | Access |

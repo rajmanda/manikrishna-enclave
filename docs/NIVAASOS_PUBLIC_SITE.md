@@ -11,7 +11,9 @@ with per-community branding ("Manikrishna Enclave"). None of that can serve
 an indexable, SSR/SSG public site without weakening the app's posture. So:
 
 - **nivaasos.com** → new `marketing/` app: fully static (all 24 routes
-  prerendered), zero auth code, zero API access, its own Cloud Run service.
+  prerendered), zero auth code, its own Cloud Run service. Its ONLY API
+  call is the public lead-capture POST (§3) — no authenticated or
+  community-data endpoints, ever.
 - **Authenticated app** → unchanged at community.rajmanda.com. When the
   owner decides to serve it as **app.nivaasos.com**, that is a pure
   LB/DNS/cert addition — documented in §7; nothing in this phase touches it.
@@ -65,15 +67,28 @@ Internal-linking: header/footer reach every page; each page ends with a
 "Related" strip; body copy cross-links with descriptive anchors
 (e.g. "community accounting software", "resident maintenance portal").
 
-## 3. Lead capture — deliberate mailto design
+## 3. Lead capture — CRM endpoint with mailto fallback (2026-07-21)
 
-No approved backend endpoint exists for public form submissions, and the
-brief forbids fake/unsafe flows. `LeadForm` therefore validates locally and
-opens the visitor's mail client with a structured message to
-`CONTACT_EMAIL`; the UI states this plainly. **Follow-up plan** (owner
-approval needed): add `POST /api/v1/public/leads` (rate-limited, captcha,
-no auth, stores into a `leads` collection or the Growth Center CRM DB),
-then swap `LeadForm` to fetch + success/duplicate/failure states.
+Every CTA form (`LeadForm`, kinds demo/start/waitlist/contact) POSTs to the
+app API's **public lead endpoint** — `POST /api/v1/public/leads`
+(`backend/app/routers/public_leads.py`, no auth). Submissions become sales
+prospects in the super admin's **Growth Center CRM**: a `growth_leads`
+entry (`source: "website"`, tags `["website", <kind>]`, stage `new`, a
+next-action so it surfaces in the follow-up tracker), a lead activity, a
+growth audit entry, and a WhatsApp heads-up via the OpenClaw notification
+queue. Abuse controls: hidden honeypot field (`website`) that fake-succeeds
+without storing, per-IP (5/h) + global (200/h) in-memory rate limits,
+strict field length caps, and a response body that leaks nothing
+(`{"received": true}`).
+
+If the endpoint is unreachable, errors, or `NEXT_PUBLIC_LEADS_API_URL` is
+set to an empty string, `LeadForm` falls back to the original mailto flow
+(opens the visitor's mail client addressed to `CONTACT_EMAIL`) — the
+visitor never hits a dead end. This replaces the earlier mailto-only
+design and is the ONE backend call the marketing site makes; everything
+else remains fully static. **Deploy prerequisite:** the backend's
+`CORS_ORIGINS` (env/Secret Manager, overrides the code default) must
+include `https://nivaasos.com` and `https://www.nivaasos.com`.
 
 ## 4. Crawler policy
 
@@ -92,6 +107,7 @@ the private app relies on auth, not robots.
 | `NEXT_PUBLIC_APP_URL` | `https://community.rajmanda.com` | Resident Login target; flip to app.nivaasos.com later |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | `hello@nivaasos.com` | All contact/lead mailtos |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | *(unset)* | Same OAuth client as the app. When set, the Resident Login popup renders Google sign-in on nivaasos.com; unset = popup links to the app sign-in page |
+| `NEXT_PUBLIC_LEADS_API_URL` | `https://community.rajmanda.com/api/v1/public/leads` | Public lead-capture endpoint (§3). Empty string = disable and go mailto-only |
 
 ### Resident Login popup (2026-07-18)
 
@@ -103,9 +119,10 @@ forwards the Google ID token to the app as a URL **fragment**
 (`{APP_URL}/#gcred=…` — fragments never reach a server or its logs). The
 app's login page consumes the fragment once, scrubs it via
 `history.replaceState`, and exchanges it through the existing
-`/auth/google` endpoint. The marketing site still makes **zero backend/API
-calls** — the only external script is Google's `gsi/client`, loaded only
-while the popup is open. Webview detection (WhatsApp/Instagram in-app
+`/auth/google` endpoint. The sign-in flow itself makes **zero backend/API
+calls from the marketing site** (the site's only API call is the public
+lead-capture POST, §3) — the only external script is Google's
+`gsi/client`, loaded only while the popup is open. Webview detection (WhatsApp/Instagram in-app
 browsers) shows an "open in browser" note, mirroring the app's login page.
 **Owner action before this works in prod:** add `https://nivaasos.com` to
 the Google OAuth client's Authorized JavaScript origins and set
@@ -207,7 +224,10 @@ community.rajmanda.com verified serving before and after):
   content phase; the FAQ carries question-intent for now.
 - No og-image; no llms.txt automation (keep in sync manually when pages
   change — it lives at `marketing/public/llms.txt`).
-- Lead forms are mailto-based pending an approved endpoint (§3).
+- Lead forms POST to the Growth Center CRM via the public endpoint, with
+  mailto fallback (§3). No captcha yet — honeypot + rate limits only;
+  revisit if spam appears. Rate limits are in-memory (single Cloud Run
+  instance assumption).
 - `/pricing` intentionally absent — no approved pricing exists.
 - Mobile-app readiness items on the app side (refresh tokens, push
   registration, deep links) belong to M6, unchanged by this work.
