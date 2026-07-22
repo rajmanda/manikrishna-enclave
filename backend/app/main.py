@@ -30,6 +30,7 @@ from app.routers import (
     notifications,
     openclaw,
     polls,
+    public_leads,
     reports,
     search,
     setup,
@@ -107,6 +108,7 @@ app.include_router(work_orders.router, prefix=API_PREFIX)
 app.include_router(vendors.router, prefix=API_PREFIX)
 app.include_router(notification_queue.router, prefix=API_PREFIX)
 app.include_router(openclaw.router, prefix=API_PREFIX)
+app.include_router(public_leads.router, prefix=API_PREFIX)
 
 # Growth Center — isolated super-admin module with its OWN prefix and OWN
 # database (GROWTH_CENTER_MONGO_URI). See app/growth_center/__init__.py for

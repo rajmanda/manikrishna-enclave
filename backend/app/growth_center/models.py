@@ -217,6 +217,7 @@ LeadSource = Literal[
     "linkedin",
     "whatsapp",
     "referral",
+    "website",  # captured from a nivaasos.com CTA form (public endpoint)
     "other",
 ]
 
