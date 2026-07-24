@@ -73,10 +73,12 @@ WhatsApp/email/in-app delivery via OpenClaw agent.
 | recipient_name | string | Display name |
 | recipient_phone | string? | WhatsApp number |
 | channel | string | `whatsapp` \| `email` \| `in_app` |
-| event_type | string | `invoice_created` \| `payment_reminder` \| `payment_received` \| `common_expense_created` \| `work_order_created` \| `work_order_status_updated` \| `owner_approval_required` \| `announcement_posted` |
+| event_type | string | `invoice_created` \| `payment_reminder` \| `payment_received` \| `common_expense_created` \| `maintenance_request_created` \| `work_order_created` \| `work_order_status_updated` \| `owner_approval_required` \| `announcement_posted` |
 | title | string | Short title |
 | message | string | Full message body |
 | payload | dict | Event-specific structured data |
+| related_type | string? | Source entity kind: `work_order` \| `maintenance_request` \| `expense` \| `feed_post` \| `invoice` \| `cost_case` \| `payment_batch` \| `apartment` \| `lead` |
+| related_id | string? | Id of the entity that triggered the notification — drives the "not delivered" badges |
 | status | string | `pending` \| `processing` \| `sent` \| `failed` \| `cancelled` |
 | provider | string? | e.g. `openclaw`, `sendgrid` |
 | retry_count | int | Current retry attempt |
@@ -87,6 +89,13 @@ WhatsApp/email/in-app delivery via OpenClaw agent.
 | error_message | string? | Last error |
 | created_at | ISO | Record creation |
 | updated_at | ISO | Last modification |
+
+`agent_status` — single-doc heartbeat collection: `{id: "openclaw-whatsapp",
+last_poll_at, channel}`, upserted on every OpenClaw poll. Read by
+`GET /notification-queue/health` to power the manager "delivery paused"
+banner. Stale queue entries (pending > 2h, processing > 1h since
+`updated_at`) are lazily swept to `failed` by the health/delivery-summary
+endpoints so they surface as resendable failures instead of waiting forever.
 
 ## Indexes (`app/db.py::ensure_indexes`, created at startup)
 
@@ -100,6 +109,7 @@ WhatsApp/email/in-app delivery via OpenClaw agent.
 - `notification_queue (status, channel, scheduled_at)` — polling
 - `notification_queue (community_id, created_at desc)` — listing
 - `notification_queue.notification_id` unique
+- `notification_queue (community_id, related_type, related_id, status)` — delivery-status badges per entity
 
 ## Work order stages
 
@@ -130,8 +140,8 @@ startup; current version in `meta` ({"id": "schema", "version": N}).
 | 006 | Apartment number baked into invoice descriptions |
 | 007 | Legacy expenses → `posted`; bore-well cost case reconstructed |
 | 008 | Third-party payments: invoices gain responsibility/recipient/occupancy/billing-period fields (owner stamped responsible, request → owner); payments/credits gain payer attribution (tenant-reported rows reclassified `payer_type: tenant`, others owner); reclassification + needs-review report stored in `migration_reports` (id `m008`, served by `GET /payments/migration-report`) |
+| 009 | `notification_queue.related_type/related_id` backfilled from payload entity ids (`work_order_id`, `maintenance_request_id`, `expense_id`, `post_id`, `cost_case_id` before `invoice_id`); rows without a payload ref stay unlinked and never surface a delivery badge |
 
-Schema version: **8**. `notification_queue` is a new collection (no migration
-needed — it starts empty and indexes are created at startup).
+Schema version: **9**.
 
 **Policy:** update this file in the same change as any schema modification.

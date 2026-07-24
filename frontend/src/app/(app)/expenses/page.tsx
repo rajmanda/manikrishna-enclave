@@ -16,6 +16,7 @@ import {
 } from "@/components/expenses";
 import { Modal } from "@/components/Modal";
 import { Badge, ErrorNote, PageLoading, PageTitle, Stat } from "@/components/ui";
+import { useDeliveryFailures } from "@/components/DeliveryStatus";
 import { formatDate } from "@/lib/format";
 
 const WRITER_ROLES = ["property_manager", "community_admin", "super_admin"];
@@ -26,6 +27,7 @@ function ExpensesPageInner() {
   const expenses = useApi<Expense[]>("/expenses");
   const vendors = useApi<Vendor[]>("/vendors");
   const apartments = useApi<Apartment[]>("/apartments");
+  const deliveryFailures = useDeliveryFailures(canWrite, "expense");
   const [addOpen, setAddOpen] = useState(false);
   const [view, setView] = useState<"month" | "category">("month");
   const [statModal, setStatModal] = useState<"month" | "all" | "receipts" | null>(null);
@@ -177,6 +179,8 @@ function ExpensesPageInner() {
         canWrite={canWrite}
         view={view}
         onChanged={expenses.reload}
+        deliveryFailures={deliveryFailures.map}
+        onDeliveryResent={deliveryFailures.reload}
       />
 
       {addOpen && (

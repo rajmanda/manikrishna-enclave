@@ -14,6 +14,7 @@ import { priorityTone, stageTone } from "@/lib/tones";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { AddExpenseDialog } from "@/components/expenses";
 import { AssessDialog } from "@/components/AssessDialog";
+import { DeliveryFailurePanel } from "@/components/DeliveryStatus";
 import {
   Avatar,
   Badge,
@@ -299,6 +300,11 @@ export default function WorkOrderDetailPage({
         </div>
         <h1 className="mt-2 text-xl font-bold sm:text-2xl">{wo.title}</h1>
         <p className="mt-1.5 text-sm text-slate-600">{wo.description}</p>
+        {canWrite && (
+          <div className="mt-3">
+            <DeliveryFailurePanel relatedType="work_order" relatedId={id} />
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 mt-3">
           {canWrite && wo.stage !== "Closed" && (
             <button

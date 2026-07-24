@@ -12,6 +12,7 @@ import type { Priority, Vendor, WorkOrder } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { vendorFor } from "@/lib/lookup";
 import { priorityTone, stageTone } from "@/lib/tones";
+import { DeliveryFailureBadge, useDeliveryFailures } from "@/components/DeliveryStatus";
 import {
   Badge,
   Button,
@@ -174,6 +175,7 @@ function WorkOrdersPageInner() {
   const workOrders = useApi<WorkOrder[]>("/work-orders");
   const vendors = useApi<Vendor[]>("/vendors");
   const canCreateRole = ["property_manager", "community_admin", "super_admin"].includes(role);
+  const deliveryFailures = useDeliveryFailures(canCreateRole, "work_order");
 
   // Deep-link: /work-orders?create=1&mr={id}&title=…&desc=… (from a
   // maintenance request) opens the dialog prefilled, then cleans the URL.
@@ -262,6 +264,10 @@ function WorkOrdersPageInner() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge tone={priorityTone(wo.priority)}>{wo.priority}</Badge>
                         <Badge tone={stageTone(wo.stage)}>{wo.stage}</Badge>
+                        <DeliveryFailureBadge
+                          failure={deliveryFailures.map.get(`work_order:${wo.id}`)}
+                          onResent={deliveryFailures.reload}
+                        />
                       </div>
                       <p className="mt-2 text-sm font-semibold text-slate-900">{wo.title}</p>
                       <p className="mt-1 line-clamp-2 text-xs text-slate-500">

@@ -40,6 +40,14 @@ async def fetch_pending(
     double-pickup when OpenClaw polls twice quickly.
     """
     now = _now()
+    # Heartbeat: every poll proves the agent is alive. The manager-facing
+    # /notification-queue/health endpoint reads this to warn when delivery
+    # is down (a dead agent can't announce its own death).
+    await db.agent_status.update_one(
+        {"id": "openclaw-whatsapp"},
+        {"$set": {"last_poll_at": now, "channel": channel}},
+        upsert=True,
+    )
     query: dict[str, Any] = {
         "status": "pending",
         "channel": channel,

@@ -12,6 +12,7 @@ import { FilterBar } from "@/components/FilterBar";
 import { formatDate, formatINR } from "@/lib/format";
 import { aptNumber, ownerNameFor, tenantFor } from "@/lib/lookup";
 import { invoiceTone, ledgerAccent } from "@/lib/tones";
+import { DeliveryFailureBadge, useDeliveryFailures } from "@/components/DeliveryStatus";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { InvoiceSheet } from "@/components/InvoiceSheet";
 import { ReceiptPicker } from "@/components/ReceiptPicker";
@@ -1242,6 +1243,10 @@ function InvoicesPageInner() {
   const { role, user } = useSessionUser();
   const mine = role === "owner" || role === "tenant";
   const canWrite = WRITER_ROLES.includes(role);
+  // Delivery failures for anything billed from this page: invoice rows get a
+  // per-row badge; payment_batch/apartment failures (no row anchor) surface in
+  // one strip above the list. No related_type filter — the page spans types.
+  const deliveryFailures = useDeliveryFailures(canWrite && !mine);
   const canDelete = role === "super_admin" || role === "property_manager";
   // Mirrors the backend rule: property managers may not delete paid-off
   // invoices (super admins still can).
@@ -1579,6 +1584,32 @@ function InvoicesPageInner() {
         }
       />
 
+      {/* Batch/credit notification failures have no invoice row to anchor a
+          badge to — surface them once, up top. */}
+      {(() => {
+        const unanchored = deliveryFailures.all.filter((f) =>
+          ["payment_batch", "apartment"].includes(f.relatedType)
+        );
+        if (unanchored.length === 0) return null;
+        const count = unanchored.reduce((s, f) => s + f.failedCount, 0);
+        return (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-red-200 bg-red-50/60 px-4 py-2.5 text-sm font-medium text-red-800">
+            Batch payment &amp; credit notifications:
+            <DeliveryFailureBadge
+              failure={{
+                relatedType: "payment_batch",
+                relatedId: "all",
+                failedCount: count,
+                lastFailedAt: unanchored[0].lastFailedAt,
+                lastErrorMessage: unanchored[0].lastErrorMessage,
+                notificationIds: unanchored.flatMap((f) => f.notificationIds),
+              }}
+              onResent={deliveryFailures.reload}
+            />
+          </div>
+        );
+      })()}
+
       {!mine && (
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
@@ -1818,7 +1849,15 @@ function InvoicesPageInner() {
                     <td className="px-3 py-2.5 text-slate-500">{formatDate(inv.dueDate)}</td>
                     <td className="px-3 py-2.5 font-semibold">{formatINR(inv.amount)}</td>
                     <td className="px-3 py-2.5 text-slate-500">{formatINR(inv.paidAmount)}</td>
-                    <td className="px-3 py-2.5"><Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge></td>
+                    <td className="px-3 py-2.5">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
+                        <DeliveryFailureBadge
+                          failure={deliveryFailures.map.get(`invoice:${inv.id}`)}
+                          onResent={deliveryFailures.reload}
+                        />
+                      </span>
+                    </td>
                     <td className="px-3 py-2.5 text-right">
                       <span className="inline-flex items-center gap-1.5">
                         {canWrite && inv.amount - inv.paidAmount > 0 && (
@@ -1996,6 +2035,10 @@ function InvoicesPageInner() {
                                   <div className="flex items-center gap-2.5">
                                     <span className="tabular text-sm font-bold text-slate-900">{formatINR(inv.amount)}</span>
                                     <Badge tone={invoiceTone(inv.status)}>{inv.status}</Badge>
+                                    <DeliveryFailureBadge
+                                      failure={deliveryFailures.map.get(`invoice:${inv.id}`)}
+                                      onResent={deliveryFailures.reload}
+                                    />
                                     {canDeleteInv(inv) && (
                                       <button
                                         onClick={(e) => {

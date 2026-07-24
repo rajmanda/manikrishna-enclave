@@ -21,6 +21,7 @@ import { Avatar, Badge } from "@/components/ui";
 import { APP_NAME } from "@/lib/brand";
 import { groupedNavItems, mobilePrimary, visibleNavItems } from "./nav";
 import { GlobalSearch } from "./GlobalSearch";
+import { DeliveryAgentBanner } from "@/components/DeliveryStatus";
 
 const roleLabels: Partial<Record<Role, string>> = {
   owner: "Apartment Owner",
@@ -525,6 +526,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             page beyond the phone viewport, or mobile browsers zoom out and
             fixed-position dialogs render off-center. */}
         <main className="mx-auto w-full max-w-6xl flex-1 overflow-x-clip px-4 py-5 pb-safe-nav sm:px-6 lg:pb-8">
+          <DeliveryAgentBanner />
           {children}
         </main>
       </div>

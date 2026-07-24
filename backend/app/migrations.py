@@ -252,6 +252,38 @@ async def _m008_third_party_payments(db: Any) -> None:
     )
 
 
+async def _m009_notification_related_refs(db: Any) -> None:
+    """Backfill first-class related_type/related_id on notification_queue rows
+    from the entity ids historically stored inside payload. Rows whose payload
+    carries no entity ref (bulk-period, batch confirms, reason-only rejections)
+    stay unlinked and never surface a delivery badge."""
+    # cost_case_id is checked before invoice_id: credit rows carry both and
+    # must group under the cost case, matching new write-time behavior.
+    ref_keys = [
+        ("work_order_id", "work_order"),
+        ("maintenance_request_id", "maintenance_request"),
+        ("expense_id", "expense"),
+        ("post_id", "feed_post"),
+        ("cost_case_id", "cost_case"),
+        ("invoice_id", "invoice"),
+    ]
+    updated = 0
+    async for doc in db.notification_queue.find({"related_id": {"$exists": False}}):
+        payload = doc.get("payload") or {}
+        related_type = related_id = None
+        for key, rtype in ref_keys:
+            if payload.get(key):
+                related_type, related_id = rtype, payload[key]
+                break
+        await db.notification_queue.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {"related_type": related_type, "related_id": related_id}},
+        )
+        if related_id:
+            updated += 1
+    logger.info("m009: notification related refs backfilled (%d linked)", updated)
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], Awaitable[None]]]] = [
     (1, _m001_community_monthly_maintenance),
     (2, _m002_backfill_m3_collections),
@@ -261,6 +293,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], Awaitable[None]]]] = [
     (6, _m006_apartment_in_invoice_description),
     (7, _m007_cost_cases_borewell),
     (8, _m008_third_party_payments),
+    (9, _m009_notification_related_refs),
 ]
 
 

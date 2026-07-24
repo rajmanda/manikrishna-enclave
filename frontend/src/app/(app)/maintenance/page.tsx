@@ -10,6 +10,7 @@ import type { MaintenanceRequest, User, WorkOrder } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { userName } from "@/lib/lookup";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
+import { DeliveryFailureBadge, useDeliveryFailures } from "@/components/DeliveryStatus";
 import {
   Badge,
   Card,
@@ -116,6 +117,7 @@ export default function MaintenancePage() {
   const requests = useApi<MaintenanceRequest[]>("/maintenance-requests");
   const users = useApi<User[]>("/users");
   const workOrders = useApi<WorkOrder[]>("/work-orders");
+  const deliveryFailures = useDeliveryFailures(canManage, "maintenance_request");
 
   if (requests.error)
     return <ErrorNote message={requests.error} onRetry={requests.reload} />;
@@ -176,6 +178,10 @@ export default function MaintenancePage() {
               >
                 {r.status}
               </Badge>
+              <DeliveryFailureBadge
+                failure={deliveryFailures.map.get(`maintenance_request:${r.id}`)}
+                onResent={deliveryFailures.reload}
+              />
             </div>
             <p className="mt-2 text-sm font-semibold">{r.title}</p>
             <p className="mt-1 text-xs text-slate-500">{r.description}</p>

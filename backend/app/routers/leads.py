@@ -57,6 +57,8 @@ async def create_lead(body: LeadCreate, db: DB) -> LeadResponse:
             title="New NivaasOS Lead",
             message=message_body,
             recipient_phone="+13158775699",
+            related_type="lead",
+            related_id=lead.id,
         )
     except Exception as e:
         import logging

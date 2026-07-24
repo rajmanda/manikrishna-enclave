@@ -31,11 +31,15 @@ class Settings(BaseSettings):
 
     seed_on_start: bool = False
 
+    # Public base URL of the resident app — used for links inside outbound
+    # notifications (WhatsApp/email). No trailing slash.
+    app_base_url: str = "https://community.nivaasos.com"
+
     # localhost:3100 = marketing site dev server; nivaasos.com origins are
     # needed for the public lead-capture endpoint (POST /api/v1/public/leads).
     cors_origins: str = (
         "http://localhost:3000,http://localhost:3100,"
-        "https://community.rajmanda.com,"
+        "https://community.nivaasos.com,"
         "https://nivaasos.com,https://www.nivaasos.com"
     )
 

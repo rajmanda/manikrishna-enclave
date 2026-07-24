@@ -36,6 +36,7 @@ from app.models import (
 from app.routers.documents import doc_file_type
 from app.notify import notify_user
 from app.notification_service import (
+    app_url,
     enqueue_for_apartment_owners,
     enqueue_notification,
 )
@@ -211,8 +212,10 @@ async def create_invoice(body: InvoiceCreate, db: DB, user: CurrentUser) -> Invo
         apartment_id=body.apartment_id,
         event_type="invoice_created",
         title="New Invoice",
-        message=f"Sent by {user.display_name}. Invoice {invoice.description}: Rs {body.amount:,.0f} due {body.due_date}. View details: https://community.rajmanda.com/invoices",
+        message=f"🧾 Invoice from {user.display_name}. {invoice.description}: Rs {body.amount:,.0f} due {body.due_date}. View details: {app_url()}/invoices",
         payload={"invoice_id": invoice.id, "amount": body.amount},
+        related_type="invoice",
+        related_id=invoice.id,
         exclude_user_id=user.id,
         actor_user=user,
     )
@@ -256,6 +259,7 @@ async def generate_invoices(
     tenant_map = await active_tenants(db, user.community_id)
     tenant_wanted = set(body.tenant_recipients or [])
     created = 0
+    created_invoice_ids: dict[str, str] = {}
     for apt in apartments:
         labeled = with_apartment(body.description, apt["id"])
         exists = await db.invoices.find_one(
@@ -286,6 +290,7 @@ async def generate_invoices(
             request_from_tenant=apt["id"] in tenant_wanted,
         )
         await db.invoices.insert_one(invoice.model_dump())
+        created_invoice_ids[apt["id"]] = invoice.id
         created += 1
     await record_audit(
         db, user, "create", "invoices", f"bulk:{body.period}", {"created": created}
@@ -305,8 +310,10 @@ async def generate_invoices(
                 apartment_id=apt["id"],
                 event_type="invoice_created",
                 title="New Invoice",
-                message=f"Sent by {user.display_name}. {body.description} — {body.period}: Rs {alloc_amounts.get(apt['id'], amount):,.0f} due {body.due_date}. View details: https://community.rajmanda.com/invoices",
+                message=f"🧾 Invoice from {user.display_name}. {body.description} — {body.period}: Rs {alloc_amounts.get(apt['id'], amount):,.0f} due {body.due_date}. View details: {app_url()}/invoices",
                 payload={"period": body.period, "amount": alloc_amounts.get(apt["id"], amount)},
+                related_type="invoice",
+                related_id=created_invoice_ids.get(apt["id"]),
                 exclude_user_id=user.id,
                 actor_user=user,
             )
@@ -378,8 +385,10 @@ async def bill_owner(body: BillOwnerRequest, db: DB, user: CurrentUser) -> Invoi
         apartment_id=body.apartment_id,
         event_type="invoice_created",
         title="Itemized Bill",
-        message=f"Billed by {user.display_name}. Itemized charge Rs {total:,.0f} for {invoice.description}. View details: https://community.rajmanda.com/invoices",
+        message=f"🧾 Billed by {user.display_name}. Itemized charge Rs {total:,.0f} for {invoice.description}. View details: {app_url()}/invoices",
         payload={"invoice_id": invoice.id, "amount": total, "ledger": "reimbursement"},
+        related_type="invoice",
+        related_id=invoice.id,
         exclude_user_id=user.id,
         actor_user=user,
     )
@@ -1190,8 +1199,10 @@ async def confirm_payment(payment_id: str, db: DB, user: CurrentUser) -> Payment
                 channel="whatsapp",
                 event_type="payment_received",
                 title="Payment Confirmed",
-                message=f"Confirmed by {user.display_name}. Your payment of Rs {payment['amount']:,.0f} has been confirmed. View details: https://community.rajmanda.com/invoices",
+                message=f"✅ Payment confirmed by {user.display_name}. Your payment of Rs {payment['amount']:,.0f} has been confirmed. View details: {app_url()}/invoices",
                 payload={"payment_id": payment_id, "amount": payment["amount"]},
+                related_type="invoice",
+                related_id=payment.get("invoice_id"),
                 actor_user=user,
             )
     return Payment.model_validate(result)
@@ -1216,7 +1227,8 @@ async def _record_rejection(
 
 
 async def _notify_rejection(
-    db: Any, user: User, reporter_id: str, text: str, reason: str
+    db: Any, user: User, reporter_id: str, text: str, reason: str,
+    related_type: str | None = None, related_id: str | None = None,
 ) -> None:
     """Tell the owner their claim was rejected — in-app and on WhatsApp."""
     await notify_user(db, user.community_id, reporter_id, text, "invoice",
@@ -1235,9 +1247,11 @@ async def _notify_rejection(
             channel="whatsapp",
             event_type="payment_rejected",
             title="Payment Could Not Be Verified",
-            message=(f"From {user.display_name}: {text} "
-                     f"View: https://community.rajmanda.com/invoices"),
+            message=(f"⚠️ From {user.display_name}: {text} "
+                     f"View: {app_url()}/invoices"),
             payload={"reason": reason},
+            related_type=related_type,
+            related_id=related_id,
             actor_user=user,
         )
 
@@ -1270,6 +1284,8 @@ async def reject_payment(
             f"Your reported payment of Rs {payment['amount']:,.0f} could not be "
             f"verified — {reason or 'please contact the property manager'}",
             reason,
+            related_type="invoice",
+            related_id=payment.get("invoice_id"),
         )
 
 
@@ -1325,9 +1341,11 @@ async def confirm_payment_batch(batch_id: str, db: DB, user: CurrentUser) -> dic
                 channel="whatsapp",
                 event_type="payment_received",
                 title="Payment Confirmed",
-                message=(f"Confirmed by {user.display_name}. {note}. "
-                         f"View details: https://community.rajmanda.com/invoices"),
+                message=(f"✅ Payment confirmed by {user.display_name}. {note}. "
+                         f"View details: {app_url()}/invoices"),
                 payload={"batch_id": batch_id, "amount": grand},
+                related_type="payment_batch",
+                related_id=batch_id,
                 actor_user=user,
             )
     return {"confirmed": len(pending), "total": total, "creditConfirmed": credit_total}
@@ -1369,6 +1387,8 @@ async def reject_payment_batch(
             f"invoice{'s' if len(pending) > 1 else ''} could not be verified — "
             f"{reason or 'please contact the property manager'}",
             reason,
+            related_type="payment_batch",
+            related_id=batch_id,
         )
 
 
@@ -1563,10 +1583,12 @@ async def apply_advance_credit(
             db, community_id=user.community_id, apartment_id=body.apartment_id,
             event_type="credit_applied",
             title="Advance Credit Applied",
-            message=(f"Applied by {user.display_name}. Rs {amount:,.0f} of your "
+            message=(f"💳 Applied by {user.display_name}. Rs {amount:,.0f} of your "
                      f"advance credit was applied to your dues. "
-                     f"View: https://community.rajmanda.com/invoices"),
+                     f"View: {app_url()}/invoices"),
             payload={"apartment_id": body.apartment_id, "amount": amount},
+            related_type="apartment",
+            related_id=body.apartment_id,
             exclude_user_id=user.id, actor_user=user,
         )
     else:

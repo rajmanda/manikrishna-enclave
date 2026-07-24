@@ -544,3 +544,38 @@ export interface Notification {
   type: "invoice" | "work_order" | "poll" | "announcement" | "meeting";
   href?: string | null;
 }
+
+/** Outbound notification_queue entry (WhatsApp/email) — manager-only surface. */
+export interface NotificationQueueEntry {
+  notificationId: string;
+  channel: "whatsapp" | "email" | "in_app";
+  eventType: string;
+  status: "pending" | "processing" | "sent" | "failed" | "cancelled";
+  recipientName: string;
+  title: string;
+  message: string;
+  retryCount: number;
+  maxRetries: number;
+  errorMessage: string | null;
+  failedAt: string | null;
+  createdAt: string;
+  relatedType?: string | null;
+  relatedId?: string | null;
+}
+
+/** Delivery-agent liveness + queue depth (manager-only banner). */
+export interface NotificationAgentHealth {
+  agentLastPollAt: string | null;
+  pendingCount: number;
+  processingCount: number;
+}
+
+/** Failed deliveries grouped by the entity that triggered them. */
+export interface DeliveryFailureSummary {
+  relatedType: string;
+  relatedId: string;
+  failedCount: number;
+  lastFailedAt: string | null;
+  lastErrorMessage: string | null;
+  notificationIds: string[];
+}

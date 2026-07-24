@@ -16,6 +16,8 @@ import { api, ApiError } from "@/lib/api";
 import type { FeedPost, User } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { userName } from "@/lib/lookup";
+import { DeliveryFailureBadge, useDeliveryFailures } from "@/components/DeliveryStatus";
+import type { DeliveryFailureSummary } from "@/lib/types";
 import {
   Avatar,
   Badge,
@@ -99,10 +101,14 @@ function PostCard({
   post,
   users,
   onChanged,
+  deliveryFailure,
+  onDeliveryResent,
 }: {
   post: FeedPost;
   users: User[] | undefined;
   onChanged: () => void;
+  deliveryFailure?: DeliveryFailureSummary;
+  onDeliveryResent?: () => void;
 }) {
   const { user, role } = useSessionUser();
   const [showComments, setShowComments] = useState(false);
@@ -178,6 +184,10 @@ function PostCard({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <p className="text-sm font-semibold">{userName(users, post.authorId)}</p>
             <Badge tone={badge.tone}>{badge.label}</Badge>
+            <DeliveryFailureBadge
+              failure={deliveryFailure}
+              onResent={onDeliveryResent ?? (() => {})}
+            />
           </div>
           <p className="text-xs text-slate-400">{formatDate(post.date)}</p>
         </div>
@@ -252,6 +262,7 @@ export default function FeedPage() {
   const { role } = useSessionUser();
   const posts = useApi<FeedPost[]>("/feed");
   const users = useApi<User[]>("/users");
+  const deliveryFailures = useDeliveryFailures(WRITER_ROLES.includes(role), "feed_post");
 
   if (posts.error) return <ErrorNote message={posts.error} onRetry={posts.reload} />;
   if (posts.loading || !posts.data) return <PageLoading />;
@@ -266,7 +277,14 @@ export default function FeedPage() {
       {role !== "auditor" && <Composer onPosted={posts.reload} />}
 
       {posts.data.map((post) => (
-        <PostCard key={post.id} post={post} users={users.data} onChanged={posts.reload} />
+        <PostCard
+          key={post.id}
+          post={post}
+          users={users.data}
+          onChanged={posts.reload}
+          deliveryFailure={deliveryFailures.map.get(`feed_post:${post.id}`)}
+          onDeliveryResent={deliveryFailures.reload}
+        />
       ))}
       {posts.data.length === 0 && (
         <p className="py-8 text-center text-sm text-slate-400">

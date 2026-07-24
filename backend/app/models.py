@@ -1041,6 +1041,7 @@ NotificationEventType = Literal[
     "payment_received",
     "payment_rejected",
     "common_expense_created",
+    "maintenance_request_created",
     "work_order_created",
     "work_order_status_updated",
     "owner_approval_required",
@@ -1064,6 +1065,8 @@ class NotificationRecord(APIModel):
     title: str
     message: str
     payload: dict = {}
+    related_type: str | None = None  # e.g. "work_order", "invoice", "expense"
+    related_id: str | None = None  # id of the entity that triggered the notification
     status: NotificationStatus = "pending"
     environment: str = "production"  # dev | staging | production
     provider: str | None = None  # e.g. "openclaw", "sendgrid"
@@ -1090,7 +1093,28 @@ class NotificationRecordCreate(APIModel):
     title: str
     message: str
     payload: dict = {}
+    related_type: str | None = None
+    related_id: str | None = None
     scheduled_at: str | None = None
+
+
+class DeliveryFailureSummary(APIModel):
+    """Failed deliveries grouped by the entity that triggered them."""
+
+    related_type: str
+    related_id: str
+    failed_count: int
+    last_failed_at: str | None = None
+    last_error_message: str | None = None
+    notification_ids: list[str] = []
+
+
+class NotificationAgentHealth(APIModel):
+    """Delivery-agent liveness + queue depth for the caller's community."""
+
+    agent_last_poll_at: str | None = None
+    pending_count: int = 0
+    processing_count: int = 0
 
 
 class MarkSentRequest(APIModel):

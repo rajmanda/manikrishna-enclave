@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.audit import record_audit
 from app.core.security import CurrentUser, require_roles
 from app.db import get_db
+from app.notification_service import app_url
 from app.models import (
     WRITE_ROLES,
     AssessmentRequest,
@@ -322,8 +323,10 @@ async def generate_assessments(
             apartment_id=apt_id,
             event_type="invoice_created",
             title="New Assessment",
-            message=f"Sent by {user.display_name}. {description} — {body.period}: Rs {amount:,.0f} due {body.due_date}. View details: https://community.rajmanda.com/invoices",
+            message=f"🧾 Assessment from {user.display_name}. {description} — {body.period}: Rs {amount:,.0f} due {body.due_date}. View details: {app_url()}/invoices",
             payload={"period": body.period, "amount": amount, "cost_case_id": case_id},
+            related_type="cost_case",
+            related_id=case_id,
             exclude_user_id=user.id,
             actor_user=user,
         )
@@ -426,11 +429,13 @@ async def apply_credit(
         db, community_id=user.community_id, apartment_id=apartment_id,
         event_type="credit_applied",
         title="Credit Applied",
-        message=(f"Applied by {user.display_name}. Rs {amount:,.0f} from "
+        message=(f"💳 Applied by {user.display_name}. Rs {amount:,.0f} from "
                  f"'{case['title']}' has been credited to your "
-                 f"{target_inv.get('period', '')} invoice. View: https://community.rajmanda.com/invoices"),
+                 f"{target_inv.get('period', '')} invoice. View: {app_url()}/invoices"),
         payload={"cost_case_id": case_id, "amount": amount,
                  "invoice_id": target_inv["id"]},
+        related_type="cost_case",
+        related_id=case_id,
         exclude_user_id=user.id, actor_user=user,
     )
     return {"applied": amount, "toInvoice": target_inv["id"],
@@ -534,19 +539,21 @@ async def perform_adjustment(db: Any, user: Any, case: dict) -> dict:
 
     async def _notify(apt: str, delta: float) -> None:
         if delta > 0:
-            msg = (f"Update from {user.display_name}. The final cost for "
+            msg = (f"🧾 Update from {user.display_name}. The final cost for "
                    f"'{case['title']}' came in higher — your share increased by "
-                   f"Rs {delta:,.0f} and is now due. View: https://community.rajmanda.com/invoices")
+                   f"Rs {delta:,.0f} and is now due. View: {app_url()}/invoices")
         else:
-            msg = (f"Good news from {user.display_name}. The final cost for "
+            msg = (f"🧾 Good news from {user.display_name}. The final cost for "
                    f"'{case['title']}' came in lower — your share reduced by "
-                   f"Rs {-delta:,.0f}. View: https://community.rajmanda.com/invoices")
+                   f"Rs {-delta:,.0f}. View: {app_url()}/invoices")
         await enqueue_for_apartment_owners(
             db, community_id=user.community_id, apartment_id=apt,
             event_type="invoice_adjusted",
             title="Invoice Adjusted",
             message=msg,
             payload={"cost_case_id": case_id, "delta": delta},
+            related_type="cost_case",
+            related_id=case_id,
             exclude_user_id=user.id, actor_user=user,
         )
 

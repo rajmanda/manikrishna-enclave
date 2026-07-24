@@ -69,3 +69,7 @@ async def ensure_indexes(db: Any) -> None:
         [("community_id", 1), ("created_at", -1)]
     )
     await db.notification_queue.create_index("notification_id", unique=True)
+    # Delivery-status lookups by source entity (failed-notification badges).
+    await db.notification_queue.create_index(
+        [("community_id", 1), ("related_type", 1), ("related_id", 1), ("status", 1)]
+    )

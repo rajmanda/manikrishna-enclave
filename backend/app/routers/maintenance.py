@@ -14,6 +14,7 @@ from app.models import (
     MaintenanceRequest,
     MaintenanceStatusUpdate,
 )
+from app.notification_service import app_url, enqueue_for_community_group
 from app.notify import notify_user
 
 router = APIRouter(prefix="/maintenance-requests", tags=["maintenance"])
@@ -93,6 +94,20 @@ async def create_request(
                 f"New maintenance request: {request.title}", "work_order",
                 href="/maintenance",
             )
+    # Community-visible requests are announced in the WhatsApp group chat.
+    # Private requests must NOT reach the group — they'd leak the complaint.
+    if request.visibility == "community":
+        await enqueue_for_community_group(
+            db,
+            community_id=user.community_id,
+            event_type="maintenance_request_created",
+            title="New Maintenance Request",
+            message=f"🔧 Maintenance request by {user.display_name}: {request.title}. View details: {app_url()}/maintenance",
+            payload={"maintenance_request_id": request.id},
+            related_type="maintenance_request",
+            related_id=request.id,
+            actor_user=user,
+        )
     return request
 
 

@@ -169,8 +169,10 @@ shows a separate fee section; manager dashboard gets a separate fee tile.
 | Method | Path | Access | Notes |
 |---|---|---|---|
 | POST | `/notification-queue` | manager/admin | Manually enqueue a notification (WhatsApp/email/in-app) |
-| GET | `/notification-queue` | manager/admin | List entries; query params: `status`, `channel`, `event_type`, `limit` |
-| POST | `/notification-queue/{id}/retry` | manager/admin | Reset failed/cancelled → pending (409 if not retryable) |
+| GET | `/notification-queue` | manager/admin | List entries; query params: `status`, `channel`, `event_type`, `related_type`, `related_id`, `limit` |
+| GET | `/notification-queue/delivery-summary` | manager/admin | Terminally failed deliveries grouped by `(relatedType, relatedId)` — `{failedCount, lastFailedAt, lastErrorMessage, notificationIds[]}`; query param: `related_type`. Drives the inline "not delivered" badges |
+| GET | `/notification-queue/health` | manager/admin | Delivery-agent liveness: `{agentLastPollAt, pendingCount, processingCount}` — drives the AppShell "delivery paused" banner. Both this and delivery-summary lazily expire stale entries (pending > 2h / processing > 1h → failed, audit-logged) |
+| POST | `/notification-queue/{id}/retry` | manager/admin | Reset failed/cancelled → pending (409 if not retryable). The frontend "Resend" loops this per notification |
 | POST | `/notification-queue/{id}/cancel` | manager/admin | Cancel pending/failed → cancelled (409 if already sent/cancelled) |
 
 Notifications are automatically enqueued by triggers on: invoice creation,
@@ -181,7 +183,7 @@ and announcements. All enqueues are audit-logged.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/openclaw/notifications/pending` | `X-API-Key` header | Fetch pending notifications (default: WhatsApp); atomically marks as `processing`; query params: `channel`, `limit` (max 50) |
+| GET | `/openclaw/notifications/pending` | `X-API-Key` header | Fetch pending notifications (default: WhatsApp); atomically marks as `processing`; query params: `channel`, `limit` (max 50). Every poll stamps a heartbeat in `agent_status` (read by `/notification-queue/health`) |
 | POST | `/openclaw/notifications/{id}/sent` | `X-API-Key` header | Mark as sent; body: `{sentAt?}` |
 | POST | `/openclaw/notifications/{id}/failed` | `X-API-Key` header | Mark as failed; body: `{errorMessage}`; auto-requeues if retries remain |
 

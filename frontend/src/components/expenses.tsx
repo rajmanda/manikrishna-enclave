@@ -5,11 +5,12 @@ import { AlertTriangle, ChevronDown, Paperclip, Pencil, Trash2, Upload } from "l
 import { api, ApiError, apiBlob } from "@/lib/api";
 import { uploadFileTo } from "@/lib/upload";
 import { useApi } from "@/hooks/useApi";
-import type { Expense, ReserveReconciliation, Vendor } from "@/lib/types";
+import type { DeliveryFailureSummary, Expense, ReserveReconciliation, Vendor } from "@/lib/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { ReceiptPicker } from "@/components/ReceiptPicker";
 import { Badge, Card } from "@/components/ui";
+import { DeliveryFailureBadge } from "@/components/DeliveryStatus";
 
 export const EXPENSE_CATEGORIES = [
   "Electricity", "Water", "Watchman", "Lift", "Generator",
@@ -241,6 +242,8 @@ export function ExpenseLedger({
   canWrite,
   view,
   onChanged,
+  deliveryFailures,
+  onDeliveryResent,
 }: {
   expenses: Expense[];
   vendors: Vendor[] | undefined;
@@ -248,6 +251,8 @@ export function ExpenseLedger({
   canWrite: boolean;
   view: "month" | "category";
   onChanged: () => void;
+  deliveryFailures?: Map<string, DeliveryFailureSummary>;
+  onDeliveryResent?: () => void;
 }) {
   // Keyed by view+label; unset = default (only the first group starts open).
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -319,6 +324,10 @@ export function ExpenseLedger({
                           )}
                           {e.reversalOf && <Badge tone="amber">reversal</Badge>}
                           {e.reversedBy && <Badge tone="slate">reversed</Badge>}
+                          <DeliveryFailureBadge
+                            failure={deliveryFailures?.get(`expense:${e.id}`)}
+                            onResent={onDeliveryResent ?? (() => {})}
+                          />
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
                           {vendor ? `${vendor.name} · ` : ""}

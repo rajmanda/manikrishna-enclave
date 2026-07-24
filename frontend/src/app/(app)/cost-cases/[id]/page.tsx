@@ -27,6 +27,7 @@ import { ReceiptPicker } from "@/components/ReceiptPicker";
 import { uploadEach, uploadFileTo } from "@/lib/upload";
 import { Modal, inputCls, labelCls, primaryBtnCls } from "@/components/Modal";
 import { Badge, Card, ErrorNote, PageLoading } from "@/components/ui";
+import { DeliveryFailurePanel } from "@/components/DeliveryStatus";
 
 const WRITER_ROLES = ["property_manager", "community_admin", "super_admin"];
 
@@ -115,6 +116,11 @@ export default function CostCaseDetailPage({
         </div>
         <h1 className="mt-2 text-xl font-bold sm:text-2xl">{c.title}</h1>
         {c.description && <p className="mt-1.5 text-sm text-slate-600">{c.description}</p>}
+        {canWrite && (
+          <div className="mt-3">
+            <DeliveryFailurePanel relatedType="cost_case" relatedId={id} />
+          </div>
+        )}
       </div>
 
       {s.awaitingVendorBill && (

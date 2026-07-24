@@ -19,6 +19,11 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def app_url(path: str = "") -> str:
+    """Absolute resident-app URL for links inside outbound messages."""
+    return get_settings().app_base_url.rstrip("/") + path
+
+
 async def enqueue_notification(
     db: Any,
     *,
@@ -33,6 +38,8 @@ async def enqueue_notification(
     recipient_user_id: str | None = None,
     recipient_account_id: str | None = None,
     payload: dict | None = None,
+    related_type: str | None = None,
+    related_id: str | None = None,
     scheduled_at: str | None = None,
     actor_user: User | None = None,
 ) -> dict:
@@ -58,6 +65,8 @@ async def enqueue_notification(
         title=title,
         message=message,
         payload=payload or {},
+        related_type=related_type,
+        related_id=related_id,
         environment=settings.environment,
         scheduled_at=scheduled_at,
         created_at=now,
@@ -79,6 +88,42 @@ async def enqueue_notification(
     return doc
 
 
+async def enqueue_for_community_group(
+    db: Any,
+    *,
+    community_id: str,
+    event_type: str,
+    title: str,
+    message: str,
+    payload: dict | None = None,
+    related_type: str | None = None,
+    related_id: str | None = None,
+    actor_user: User | None = None,
+) -> dict:
+    """Enqueue ONE WhatsApp message addressed to the community group chat.
+
+    `recipient_phone="group"` is the tag the OpenClaw poller resolves to the
+    community's WhatsApp group JID (prod vs dev group chosen by environment).
+    Community-wide events (work orders, maintenance, expenses, feed) go here —
+    never fan out community news to individual members.
+    """
+    return await enqueue_notification(
+        db,
+        community_id=community_id,
+        recipient_type="group",
+        recipient_name="Community Group",
+        recipient_phone="group",
+        channel="whatsapp",
+        event_type=event_type,
+        title=title,
+        message=message,
+        payload=payload,
+        related_type=related_type,
+        related_id=related_id,
+        actor_user=actor_user,
+    )
+
+
 async def enqueue_for_community_members(
     db: Any,
     *,
@@ -88,11 +133,16 @@ async def enqueue_for_community_members(
     message: str,
     channel: str = "whatsapp",
     payload: dict | None = None,
+    related_type: str | None = None,
+    related_id: str | None = None,
     exclude_user_id: str | None = None,
     actor_user: User | None = None,
 ) -> int:
     """Fan-out: enqueue one notification per community member who has a phone.
 
+    NOTE: community-wide events (work orders, maintenance, expenses, feed) go
+    to the group chat via enqueue_for_community_group — do NOT fan those out
+    here. Reserve this for messages that genuinely differ per recipient.
     Returns the number of notifications enqueued.
     """
     member_roles = ("owner", "tenant", "property_manager", "community_admin")
@@ -120,6 +170,8 @@ async def enqueue_for_community_members(
             title=title,
             message=message,
             payload=payload,
+            related_type=related_type,
+            related_id=related_id,
             actor_user=actor_user,
         )
         count += 1
@@ -136,6 +188,8 @@ async def enqueue_for_apartment_owners(
     message: str,
     channel: str = "whatsapp",
     payload: dict | None = None,
+    related_type: str | None = None,
+    related_id: str | None = None,
     exclude_user_id: str | None = None,
     actor_user: User | None = None,
 ) -> int:
@@ -175,6 +229,8 @@ async def enqueue_for_apartment_owners(
             title=title,
             message=message,
             payload=payload,
+            related_type=related_type,
+            related_id=related_id,
             actor_user=actor_user,
         )
         count += 1

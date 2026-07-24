@@ -3,6 +3,88 @@
 All notable changes. Format loosely follows Keep a Changelog; versions will
 begin at 0.1.0 with the first deployment (M1).
 
+## [Unreleased] — delivery-agent health banner + stale-queue sweep
+
+- **Managers now see when WhatsApp delivery is down (2026-07-23)** — the
+  failure badges only cover failures OpenClaw *reports*; a dead agent
+  reports nothing and messages sat `pending` invisibly. Now: every OpenClaw
+  poll stamps a heartbeat (`agent_status` collection, upserted in
+  `GET /openclaw/notifications/pending`); new manager-only
+  `GET /notification-queue/health` returns
+  `{agentLastPollAt, pendingCount, processingCount}`; and a shared
+  `DeliveryAgentBanner` (AppShell, above page content on every screen)
+  shows an amber "WhatsApp delivery is paused — agent hasn't checked in
+  for X min, N messages waiting" strip when the agent is silent > 5 min
+  with messages queued (poller cadence is 15s). Re-checks every 60s.
+  Backstop: the health + delivery-summary endpoints lazily sweep stale
+  entries (pending > 2h, processing > 1h) to `failed`
+  ("expired … delivery agent unavailable"), community-scoped and
+  audit-logged, so stuck messages — including the 7 zombie `processing`
+  rows from 2026-07-09 — surface as resendable red badges instead of
+  hiding in limbo. Residents/auditors: no banner, no health request.
+  4 new tests (251 total), build clean.
+
+## [Unreleased] — notification links → community.nivaasos.com + emoji prefixes
+
+- **Notification links now use community.nivaasos.com (2026-07-23)** — all 17
+  outbound WhatsApp/email message templates hardcoded the retired
+  `https://community.rajmanda.com` domain. New `app_base_url` setting in
+  `app/core/config.py` (default `https://community.nivaasos.com`, env
+  overridable) exposed via `app_url()` in `app/notification_service.py`;
+  every enqueue call site (work orders, maintenance, expenses, feed,
+  invoices, cost cases, credits, batches) now builds links from it. CORS
+  default likewise swaps the retired domain for community.nivaasos.com.
+- **Emoji prefixes on all notification types (2026-07-23)** — invoice/payment
+  messages had no visual marker (announcements 📢, work orders 🛠️,
+  maintenance 🔧, expenses 💰 already did). Added 🧾 invoices/assessments/
+  adjustments, ✅ payment confirmations, ⚠️ payment rejections, 💳 credits.
+  247 tests pass.
+
+## [Unreleased] — failed-notification badges + resend (manager-only)
+
+- **Delivery failures surface inline with a Resend action (2026-07-22)** —
+  when an outbound WhatsApp/email in `notification_queue` terminally fails
+  (OpenClaw exhausts its 3 auto-retries), managers/admins now see a subtle
+  red "Not delivered" badge on the entity that triggered it, with an inline
+  Resend (loops the existing `POST /notification-queue/{id}/retry`; 409s from
+  concurrent retries are skipped). Backend: first-class
+  `related_type`/`related_id` on `NotificationRecord`, threaded through all
+  `notification_service` helpers and populated at every enqueue call site
+  (work orders, maintenance, expenses, feed, invoices, cost cases, credits,
+  batches, leads); new `GET /notification-queue/delivery-summary` (manager
+  roles) grouping failed rows by entity; `related_type`/`related_id` filters
+  on the list endpoint; new compound index
+  `(community_id, related_type, related_id, status)`; migration 009 backfills
+  refs from historical payload ids (rows without one — bulk-period, batch
+  confirms, reason-only rejections — stay unlinked and never badge).
+  Frontend: shared `DeliveryStatus.tsx` (`useDeliveryFailures` one-fetch-per-
+  page hook — no request at all for residents/auditors — plus
+  `DeliveryFailureBadge` and detail-page `DeliveryFailurePanel`), wired into
+  work orders (list + detail), maintenance, expenses ledger, feed posts,
+  invoices (table + cards + one strip for row-less batch/credit failures),
+  and cost-case detail. Residents never see delivery internals (backend
+  enforces `WRITE_ROLES` on every endpoint). 7 new tests (247 total), build
+  clean.
+
+## [Unreleased] — community WhatsApp events go to the group chat
+
+- **Community events → WhatsApp group, not individuals (2026-07-21)** —
+  work-order created / stage-change / owner-approval notifications no longer
+  fan out one queue entry per member; they enqueue a single
+  `recipient_phone="group"` entry that the OpenClaw poller resolves to the
+  community WhatsApp group JID (same mechanism feed announcements and
+  common-expense messages already used). New shared helper
+  `enqueue_for_community_group` in `app/notification_service.py`; feed and
+  finance group sends refactored onto it. NEW: community-visible maintenance
+  requests now announce in the group too (`maintenance_request_created`
+  added to `NotificationEventType`); private maintenance requests
+  deliberately send nothing to the group. Per-apartment money messages
+  (assessments, invoice adjustments, credits, payment confirm/reject) remain
+  individual. Context: Vishnu's "Sewer line and manjeera water connection"
+  work order produced 25 individual queue entries, all failed on the Mac
+  mini poller (`Permission denied: 'openclaw'` — separate fix on the mini).
+  240 tests pass.
+
 ## [Unreleased] — marketing CTAs → Growth Center CRM
 
 - **Public lead capture into the Growth Center CRM (2026-07-21)** — every

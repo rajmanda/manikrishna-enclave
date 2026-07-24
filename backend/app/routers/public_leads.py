@@ -203,6 +203,8 @@ async def submit_public_lead(
                 f"💬 *Message*: {body.message.strip() or 'N/A'}"
             ),
             recipient_phone="+13158775699",
+            related_type="lead",
+            related_id=lead.id,
         )
     except Exception:
         logger.exception("Failed to enqueue WhatsApp notification for website lead")

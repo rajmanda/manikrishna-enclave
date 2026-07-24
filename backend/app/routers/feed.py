@@ -18,10 +18,7 @@ from app.models import (
     ReactRequest,
 )
 from app.notify import notify_members
-from app.notification_service import (
-    enqueue_for_community_members,
-    enqueue_notification,
-)
+from app.notification_service import app_url, enqueue_for_community_group
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -97,21 +94,19 @@ async def create_post(body: FeedPostCreate, db: DB, user: CurrentUser) -> FeedPo
     group_message = (
         f"{prefix} by {user.display_name}:\n"
         f"\"{excerpt}\"\n\n"
-        f"View/Reply: https://community.rajmanda.com/feed"
+        f"View/Reply: {app_url()}/feed"
     )
 
     # Enqueue a single WhatsApp notification for the community group
-    await enqueue_notification(
+    await enqueue_for_community_group(
         db,
         community_id=user.community_id,
-        recipient_type="group",
-        recipient_name="Community Group",
-        recipient_phone="group", # Tag for OpenClaw to send to the group chat
-        channel="whatsapp",
         event_type="announcement_posted",
         title=f"New {body.type.capitalize()}",
         message=group_message,
         payload={"post_id": post.id, "post_type": body.type},
+        related_type="feed_post",
+        related_id=post.id,
         actor_user=user,
     )
     return _to_out(post.model_dump(), user.id)
